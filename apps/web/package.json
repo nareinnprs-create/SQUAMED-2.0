@@ -1,0 +1,46 @@
+{
+  "name": "@squamed/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "clean": "rm -rf .next dist node_modules"
+  },
+  "dependencies": {
+    "@squamed/ui": "*",
+    "@squamed/design-system": "*",
+    "@squamed/auth": "*",
+    "@squamed/api-client": "*",
+    "@squamed/schemas": "*",
+    "@squamed/domain-types": "*",
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.0",
+    "swr": "^2.3.0",
+    "axios": "^1.7.0",
+    "date-fns": "^4.1.0",
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/node": "^22.0.0",
+    "tailwindcss": "^4.0.0",
+    "@tailwindcss/postcss": "^4.0.0",
+    "postcss": "^8.5.0",
+    "autoprefixer": "^10.4.0",
+    "vitest": "^3.1.0",
+    "@playwright/test": "^1.52.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^15.0.0"
+  }
+}

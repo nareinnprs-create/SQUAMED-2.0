@@ -1,0 +1,54 @@
+groups:
+  - name: squamed-core
+    rules:
+      - alert: SquamedBackendDown
+        expr: up{job="squamed-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: squamed-core
+        annotations:
+          summary: "SQUAMED backend is unreachable"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for 2 minutes."
+
+      - alert: SquamedHigh5xxRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) /
+          sum(rate(http_server_requests_seconds_count[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: squamed-core
+        annotations:
+          summary: "High 5xx error rate"
+          description: "More than 5% of HTTP requests failed with 5xx over the last 5 minutes."
+
+      - alert: SquamedErrorLogBurst
+        expr: increase(logback_events_total{level="ERROR"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: squamed-core
+        annotations:
+          summary: "Backend error log burst"
+          description: "{{ $value }} ERROR level log events in the last 5 minutes."
+
+      - alert: SquamedDbConnectionPoolExhausted
+        expr: hikaricp_connections_pending > 10
+        for: 5m
+        labels:
+          severity: critical
+          service: squamed-core
+        annotations:
+          summary: "Database connection pool saturated"
+          description: "{{ $value }} requests waiting for a database connection."
+
+      - alert: SquamedJvmHeapPressure
+        expr: (1 - jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) < 0.10
+        for: 10m
+        labels:
+          severity: warning
+          service: squamed-core
+        annotations:
+          summary: "JVM heap near capacity"
+          description: "Heap usage is above 90% of the max for 10 minutes."

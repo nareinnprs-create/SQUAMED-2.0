@@ -1,0 +1,75 @@
+# SQUAMED — Phase 1 Completion Report
+
+Repository verification report for Phase 1: Foundation MVP.
+Date: 2026-09-08 · Branch: master
+
+## 1. Verification summary
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Backend integration suite | PASS · 67 tests, 0 failures | `gradlew test` (external mode, live services) |
+| JaCoCo coverage gate | PASS · instruction ≥ 0.80 (actual 80.11%) | `gradlew jacocoTestCoverageVerification` |
+| LINE coverage | 85.21% (4,760 / 5,586) | `build/reports/jacoco/test` |
+| BRANCH coverage | 52.13% (1,552 / 2,977) | `build/reports/jacoco/test` |
+| ktlint | PASS · 0 violations | `gradlew ktlintCheck` (scoped to sources, reports JSON) |
+| Kotlin warnings-as-errors | PASS · 0 warnings | `compilerOptions.allWarningsAsErrors = true` |
+| Boot jar | 107.7 MB · `squamed-core-1.0.0.jar` | `gradlew bootJar` |
+| Prod compose manifest | VALID | `docker compose -f docker-compose.prod.yml config` |
+| Web E2E specs | 2 specs authored, run in CI | `tests/e2e/login.spec.ts`, `tests/e2e/api-smoke.spec.ts` |
+
+## 2. Bugs fixed by the Testing track
+
+Discovered and fixed through contract-first integration tests:
+
+1. **MFA secret never persisted** — `MfaService.beginMfaSetup` was `@Transactional(readOnly = true)`; the TOTP secret was generated but never saved. Fixed to read-write.
+2. **Login returned 200 for invalid credentials** — `AuthController.login` now returns 401 with `INVALID_CREDENTIALS`; `AuthService` guards missing username/password (`USERNAME_REQUIRED`, `PASSWORD_REQUIRED`) which previously crashed with a 500 (BCrypt NPE).
+3. **Malformed/missing JSON body → 500** — added `HttpMessageNotReadableException` handler returning 400 `MALFORMED_BODY`.
+4. **Garbage HL7 input accepted** — `Hl7Service.parse` now requires an `MSH` segment and returns 400 `INVALID_HL7_MESSAGE`.
+
+## 3. Production Ready
+
+- `ProductionHygiene` fail-fast guard (prod profile): rejects blank/short/development-values for `JWT_SECRET`, `DB_PASSWORD`, `BOOTSTRAP_ADMIN_*` at startup. 8 unit tests.
+- Hardened `application-prod.yml`: connection pool bounds, thread bounds, `flyway.clean-disabled`, health probes, no stack traces/messages in errors, `springdoc` disabled, structured JSON logging, TTL env vars.
+- `Dockerfile`: multi-stage (21-jdk → 21-jre), non-root `squamed` user, HEALTHCHECK on `/actuator/health`, `.dockerignore`.
+- `infrastructure/docker/docker-compose.prod.yml`: backend + postgres + redis + kafka + opensearch + prometheus + alertmanager; health-gated startup; `SQUAMED_IMAGE` override for CI rollouts; secrets via environment.
+- Security headers enforced on all responses via `SecurityHeadersFilter` (nosniff, DENY frame, CSP `frame-ancestors 'none'`, HSTS, `Referrer-Policy: no-referrer`) — covered by `hardenedSecurityHeadersArePresent`.
+
+## 4. Code Quality
+
+- ktlint wired into `check` (`ktlintCheck`) with `ktlintFormat` for automatic fixes; `.editorconfig` documents 2-space indent, 160 max line length, and the disabled `filename` rule (bundled DTO/entity files).
+- Compiler `allWarningsAsErrors` → zero-warning policy.
+- Whole backend formatted; gate green.
+
+## 5. Security track
+
+Covered by `SecurityTests` + integration journeys: unauthenticated/tampered/forged tokens rejected; role-less users denied (403); MFA lifecycle; account lockout after 5 failures; injection payloads neutralized (SQL and OpenSearch query); clean error contract; security headers.
+
+## 6. Wired audit
+
+`docs/wired-audit.md` maps all 22 Phase 1 controllers to contract-tested surfaces, and proves the event-driven pathway (patient create → Kafka → OpenSearch index → search returns the patient) plus audit-on-write, REST/WS/HL7/FHIR transports.
+
+## 7. CI/CD
+
+- `ci.yml`: typecheck, lint, unit tests, build, **backend quality gates** (test + jacoco coverage + ktlint, jacoco HTML artifact), **bootJar artifact**, and an **E2E job** that boots infrastructure + backend and runs Playwright.
+- `deploy-staging.yml`: GHCR build/push (`staging-<sha>`), SSH rollout of `docker-compose.prod.yml` with secrets, health wait, and post-deploy smoke via `scripts/phase1-e2e.ps1`.
+- `deploy-production.yml`: approval-gated (tag or `APPROVE` dispatch), the same pipeline against the production environment.
+
+## 8. Monitoring
+
+- Micrometer Prometheus registry (`/actuator/prometheus`) wired into the backend; `build-info` exposes version/stamp.
+- `prometheus.yml` (dev) + `prometheus.prod.yml` (in-network service-name targets) scrape backend, postgres-exporter, redis-exporter.
+- `alerts.yml`: 5 SLO-aligned alerts (backend down, 5xx rate, error-log burst, DB pool saturation, heap pressure) → Alertmanager (`config/alertmanager.yml`) with severity routing + inhibition (host webhook is the documented integration point).
+
+## 9. Evidence artifacts
+
+- Coverage: `backend/squamed-core/build/reports/jacoco/test/html`
+- Tests: `backend/squamed-core/build/reports/tests/test/index.html`
+- ktlint: `backend/squamed-core/build/reports/ktlint/ktlintCheck.json`
+- Wiring: `docs/wired-audit.md`
+- Smoke: `scripts/phase1-e2e.ps1`
+
+## 10. Known deferred items (by design)
+
+- Local/exploratory E2E runs need browsers (`npx playwright install`) and a running web dev server; CI installs them per job.
+- Alertmanager webhook URL is the deployment-defined integration point (`host.docker.internal:9095`) — point it at the real pager/chat endpoint.
+- MinIO + Temporal intentionally deferred to Phase 2 per blueprint architecture notes.

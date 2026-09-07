@@ -1,0 +1,78 @@
+package com.squamed.core.receptionqueue.api
+
+import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.identity.security.RequiresPermission
+import com.squamed.core.receptionqueue.service.VisitRegistrar
+import org.springframework.http.HttpStatus
+import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.ResponseStatus
+import org.springframework.web.bind.annotation.RestController
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.util.UUID
+
+@RestController
+@RequestMapping("/api/v1/reception")
+class ReceptionController(
+  private val visitRegistrar: VisitRegistrar,
+) {
+  @PostMapping("/visits")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("reception:write:visit")
+  @Transactional
+  fun createVisit(
+    @RequestBody dto: VisitCreateDto,
+  ): ApiResponse<VisitCreateResult> {
+    val patientId = dto.patientId ?: throw IllegalArgumentException("PATIENT_ID_REQUIRED")
+    return ApiResponse.ok(visitRegistrar.createVisit(patientId, dto))
+  }
+
+  @GetMapping("/visits/{id}")
+  @RequiresPermission("reception:read:visit")
+  @Transactional(readOnly = true)
+  fun getVisit(
+    @PathVariable id: UUID,
+  ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.getVisit(id))
+
+  @GetMapping("/visits")
+  @RequiresPermission("reception:read:visit")
+  @Transactional(readOnly = true)
+  fun listVisits(
+    @RequestParam(name = "status", required = false) status: String?,
+    @RequestParam(name = "patientId", required = false) patientId: UUID?,
+    @RequestParam(name = "from", required = false) from: Instant?,
+  ): ApiResponse<List<VisitDto>> {
+    val defaultFrom = LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant()
+    return ApiResponse.ok(visitRegistrar.listVisits(status, patientId, from ?: defaultFrom))
+  }
+
+  @PatchMapping("/visits/{id}/check-in")
+  @RequiresPermission("reception:write:visit")
+  @Transactional
+  fun checkIn(
+    @PathVariable id: UUID,
+  ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.checkIn(id))
+
+  @PatchMapping("/visits/{id}/complete")
+  @RequiresPermission("reception:write:visit")
+  @Transactional
+  fun complete(
+    @PathVariable id: UUID,
+  ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.complete(id))
+
+  @PatchMapping("/visits/{id}/cancel")
+  @RequiresPermission("reception:write:visit")
+  @Transactional
+  fun cancelVisit(
+    @PathVariable id: UUID,
+    @RequestBody dto: VisitCancelDto,
+  ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.cancelVisit(id, dto.reason))
+}

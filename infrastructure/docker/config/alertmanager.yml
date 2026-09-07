@@ -1,0 +1,33 @@
+global:
+  resolve_timeout: 5m
+  slack_api_url: "" # overridden by the deployment; see docker-compose.prod.yml
+
+route:
+  receiver: "squamed-ops"
+  group_by: ["alertname", "service"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: "squamed-ops-critical"
+      continue: false
+
+receivers:
+  - name: "squamed-ops"
+    webhook_configs:
+      - url: "http://host.docker.internal:9095/alerts"
+        send_resolved: true
+        max_alerts: 50
+
+  - name: "squamed-ops-critical"
+    webhook_configs:
+      - url: "http://host.docker.internal:9095/alerts/critical"
+        send_resolved: true
+        max_alerts: 50
+
+inhibit_rules:
+  - source_matchers: ["severity = critical"]
+    target_matchers: ["severity = warning"]
+    equal: ["alertname"]

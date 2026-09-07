@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "incremental": true,
+    "paths": {
+      "@squamed/ui": ["./packages/ui/dist"],
+      "@squamed/design-system": ["./packages/design-system/dist"],
+      "@squamed/auth": ["./packages/auth/dist"],
+      "@squamed/api-client": ["./packages/api-client/dist"],
+      "@squamed/schemas": ["./packages/schemas/dist"],
+      "@squamed/domain-types": ["./packages/domain-types/dist"]
+    }
+  },
+  "exclude": ["node_modules", "dist", ".next", "build"]
+}

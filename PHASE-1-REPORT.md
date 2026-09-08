@@ -108,3 +108,14 @@ Delivered with the same contract-first approach and gates:
 | Team assignment (role whitelist), instruments (count lifecycle), implants (lot/expiry/qty) | Covered by `surgicalWorkflowCoverage` |
 | Pre-op checklist with stamped checks, intra-op timeline, post-op record (validated destination) | Covered by `surgicalWorkflowCoverage` |
 | Suite | 72 tests, 0 failures, JaCoCo instruction 80.8% / LINE 85.9% / BRANCH 53.4%, ktlint clean |
+
+## 14. Phase 2d addendum — Anaesthesia
+
+| Item | State |
+| --- | --- |
+| Migrations V37 (anaesthesia schema) / V38 (ANAESTHESIOLOGIST role + permission seeds) | Applied, idempotent |
+| Pre-anaesthesia evaluation (ASA I–VI, draft→confirmed flow) + `evaluation_confirmed` event | Covered by `anaesthesiaWorkflowCoverage` |
+| Anaesthesia record phase machine (planned→…→completed, airway whitelist) + phase events | Covered by `anaesthesiaWorkflowCoverage` |
+| Intra-op monitoring (HR required) and medication log | Covered by `anaesthesiaWorkflowCoverage` |
+| Recovery (Aldrete 0–10, discharge gating) + recovery_completed event and PACU record | Covered by `anaesthesiaWorkflowCoverage` |
+| Suite | 73 tests, 0 failures, JaCoCo instruction 81.2% / LINE 86.3% / BRANCH 53.8%, ktlint clean |

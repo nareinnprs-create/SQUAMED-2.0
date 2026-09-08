@@ -91,3 +91,11 @@ Proven end to end: 22 controller modules, event→index→search, audit-on-write
 - Team assignment with role whitelist (surgeon/assistant/anaesthetist/nurse/scout/technician/perfusionist).
 - Pre-op checklist (checked-by/at stamps), instrument tracking with count lifecycle (booked → … → returned/decontaminated), implant registry with lot/expiry/quantity.
 - Intra-operative timeline (timeout, incision, closure, count) and post-op record with validated destination (ward/icu/observation/recovery/stepdown); single latest post-op read.
+
+## 9. Phase 2d additions (Anaesthesia)
+
+- Migrations V37 (anaesthesia schema: anaesthesia_evaluation, anaesthesia_record, intra_op_monitoring, anaesthesia_medication, recovery_record, pacu_record) and V38 (ANAESTHESIOLOGIST role + `anaesthesia` permissions to SYSTEM_ADMIN/HOSPITAL_ADMIN/DOCTOR/SURGEON/ANAESTHESIOLOGIST/NURSE).
+- Pre-anaesthesia evaluation (ASA class I–VI enforced, draft → confirmed with evaluated-by/at stamps) and `anaesthesia.evaluation_confirmed` event.
+- Anaesthesia record with validated airway devices (mask/lma/ett/double_lumen/tracheotomy/nasal_cannula), guarded phase machine (planned → induced → maintenance → emergence → completed; completed locks) and phase events.
+- Intra-op monitoring feed (heart rate required, vitals/EtCO2/temp/urine/depth) and medication administration log against the record.
+- Recovery/Aldrete scoring (0–10 enforced) with discharge-criteria gating (`anaesthesia.recovery_completed` event when met) and PACU nursing observations.

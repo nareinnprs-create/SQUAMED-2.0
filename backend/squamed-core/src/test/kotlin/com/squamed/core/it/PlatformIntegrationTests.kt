@@ -4148,7 +4148,8 @@ class PlatformIntegrationTests {
       assertEquals("operational", room["status"].asText())
       val noRoomName = api(HttpMethod.POST, "/api/v1/surgery/ot-rooms", json("hospitalId" to hospitalId, "code" to "X"), token)
       assertEquals(400, noRoomName.status, "ot room without name")
-      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/surgery/ot-rooms?hospitalId=$hospitalId", token = token)).size(), "ot rooms listed")
+      val otRooms = `data`(api(HttpMethod.GET, "/api/v1/surgery/ot-rooms?hospitalId=$hospitalId", token = token))
+      assertTrue(otRooms.any { it["id"].asText() == roomId }, "ot room visible in hospital listing")
 
       val noPatient = api(HttpMethod.POST, "/api/v1/surgery/schedules", json("hospitalId" to hospitalId, "procedureName" to "Appendectomy"), token)
       assertEquals(400, noPatient.status, "schedule without patient")
@@ -4383,6 +4384,222 @@ class PlatformIntegrationTests {
         403,
         api(HttpMethod.POST, "/api/v1/surgery/schedules", json("hospitalId" to hospitalId, "patientId" to patientId, "procedureName" to "X"), noPerm).status,
         "surgery write denied for role-less user",
+      )
+    }
+
+    @Test
+    fun anaesthesiaWorkflowCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = firstHospitalId(token)
+      val patientId = createPatient(token, "Anya", "Sedated", s)
+      val now = java.time.Instant.now()
+
+      val scheduleId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "procedureName" to "Laparoscopic cholecystectomy",
+              "scheduledStartAt" to now.plusSeconds(1800).toString(),
+            ),
+            token,
+          ),
+        )["id"].asText()
+
+      val badSchedule =
+        api(
+          HttpMethod.POST,
+          "/api/v1/anaesthesia/evaluations",
+          json("surgeryScheduleId" to "11111111-1111-1111-1111-111111111111", "patientId" to patientId, "asaStatus" to "II"),
+          token,
+        )
+      assertEquals(400, badSchedule.status, "evaluation for unknown schedule")
+      val noAsa = api(HttpMethod.POST, "/api/v1/anaesthesia/evaluations", json("surgeryScheduleId" to scheduleId, "patientId" to patientId), token)
+      assertEquals(400, noAsa.status, "evaluation without ASA class")
+      val badAsa =
+        api(
+          HttpMethod.POST,
+          "/api/v1/anaesthesia/evaluations",
+          json(
+            "surgeryScheduleId" to scheduleId,
+            "patientId" to patientId,
+            "asaStatus" to "VII",
+          ),
+          token,
+        )
+      assertEquals(400, badAsa.status, "invalid ASA class")
+
+      val evaluation =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/anaesthesia/evaluations",
+            json(
+              "hospitalId" to hospitalId,
+              "surgeryScheduleId" to scheduleId,
+              "patientId" to patientId,
+              "asaStatus" to "II",
+              "airwayAssessment" to "Mallampati II",
+              "allergies" to "Latex",
+              "medicalConditions" to "Hypertension",
+              "fastingHours" to 8,
+              "riskLevel" to "moderate",
+            ),
+            token,
+          ),
+        )
+      val evaluationId = evaluation["id"].asText()
+      assertEquals("draft", evaluation["status"].asText())
+      assertEquals(
+        1,
+        `data`(api(HttpMethod.GET, "/api/v1/anaesthesia/evaluations?surgeryScheduleId=$scheduleId", token = token)).size(),
+        "evaluation by schedule",
+      )
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/anaesthesia/evaluations?patientId=$patientId", token = token)).size(), "evaluation by patient")
+      val confirmed = `data`(api(HttpMethod.PATCH, "/api/v1/anaesthesia/evaluations/$evaluationId/confirm", token = token))
+      assertEquals("confirmed", confirmed["status"].asText(), "evaluation confirmed")
+      assertNotNull(confirmed["evaluatedAt"])
+      val dupConfirm = api(HttpMethod.PATCH, "/api/v1/anaesthesia/evaluations/$evaluationId/confirm", token = token)
+      assertEquals(400, dupConfirm.status, "double confirmation rejected")
+
+      val noRecordPatient = api(HttpMethod.POST, "/api/v1/anaesthesia/records", json("surgeryScheduleId" to scheduleId, "airwayDevice" to "ett"), token)
+      assertEquals(400, noRecordPatient.status, "record without patient")
+      val badAirway =
+        api(
+          HttpMethod.POST,
+          "/api/v1/anaesthesia/records",
+          json(
+            "surgeryScheduleId" to scheduleId,
+            "patientId" to patientId,
+            "airwayDevice" to "whale",
+          ),
+          token,
+        )
+      assertEquals(400, badAirway.status, "invalid airway device")
+
+      val record =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/anaesthesia/records",
+            json("hospitalId" to hospitalId, "surgeryScheduleId" to scheduleId, "patientId" to patientId, "airwayDevice" to "ett", "intubationGrade" to "1"),
+            token,
+          ),
+        )
+      val recordId = record["id"].asText()
+      assertEquals("planned", record["status"].asText())
+      val badRecordStatus = api(HttpMethod.PATCH, "/api/v1/anaesthesia/records/$recordId/status", json("status" to "suspended"), token)
+      assertEquals(400, badRecordStatus.status, "invalid record status")
+      val completeEarly = api(HttpMethod.PATCH, "/api/v1/anaesthesia/records/$recordId/status", json("status" to "completed"), token)
+      assertEquals(400, completeEarly.status, "cannot complete before induction")
+      val induced = `data`(api(HttpMethod.PATCH, "/api/v1/anaesthesia/records/$recordId/status", json("status" to "induced"), token))
+      assertEquals("induced", induced["status"].asText(), "record induced")
+      assertNotNull(induced["startedAt"])
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/anaesthesia/records/$recordId/status", json("status" to "maintenance"), token), "maintenance phase")
+      val completedRecord = `data`(api(HttpMethod.PATCH, "/api/v1/anaesthesia/records/$recordId/status", json("status" to "completed"), token))
+      assertEquals("completed", completedRecord["status"].asText(), "record completed")
+      assertNotNull(completedRecord["endedAt"])
+      val lockedRecord = api(HttpMethod.PATCH, "/api/v1/anaesthesia/records/$recordId/status", json("status" to "emergence"), token)
+      assertEquals(400, lockedRecord.status, "completed record locked")
+
+      val noHeartRate = api(HttpMethod.POST, "/api/v1/anaesthesia/records/$recordId/monitoring", json("systolic" to 120, "diastolic" to 80), token)
+      assertEquals(400, noHeartRate.status, "monitoring without heart rate")
+      val monitoring =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/anaesthesia/records/$recordId/monitoring",
+            json(
+              "systolic" to 122,
+              "diastolic" to 78,
+              "heartRate" to 68,
+              "oxygenSaturation" to 99,
+              "etco2" to 36,
+              "temperature" to 36.4,
+              "anaesthesiaDepth" to "adequate",
+            ),
+            token,
+          ),
+        )
+      assertNotNull(monitoring["id"])
+      assertEquals(
+        68,
+        `data`(api(HttpMethod.GET, "/api/v1/anaesthesia/records/$recordId/monitoring", token = token))[0]["heartRate"].asInt(),
+        "monitoring listed",
+      )
+
+      val noMedication = api(HttpMethod.POST, "/api/v1/anaesthesia/records/$recordId/medications", json("dose" to "2mg"), token)
+      assertEquals(400, noMedication.status, "medication without name")
+      val medication =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/anaesthesia/records/$recordId/medications",
+            json("medicationName" to "Propofol", "dose" to "120mg", "route" to "IV"),
+            token,
+          ),
+        )
+      assertNotNull(medication["id"])
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/anaesthesia/records/$recordId/medications", token = token)).size(), "medications listed")
+
+      val noScore = api(HttpMethod.POST, "/api/v1/anaesthesia/records/$recordId/recovery", json("observations" to "x"), token)
+      assertEquals(400, noScore.status, "recovery without aldrete score")
+      val badScore = api(HttpMethod.POST, "/api/v1/anaesthesia/records/$recordId/recovery", json("aldreteScore" to 11), token)
+      assertEquals(400, badScore.status, "invalid aldrete score")
+      val recovery =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/anaesthesia/records/$recordId/recovery",
+            json("aldreteScore" to 9, "dischargeCriteriaMet" to true, "observations" to "Awake, moving all limbs"),
+            token,
+          ),
+        )
+      assertEquals(9, recovery["aldreteScore"].asInt(), "aldrete score recorded")
+      assertEquals(true, recovery["dischargeCriteriaMet"].asBoolean())
+      assertNotNull(recovery["recoveryEndedAt"])
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/anaesthesia/records/$recordId/recovery", token = token)).size(), "recovery listed")
+
+      val pacu =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/anaesthesia/records/$recordId/pacu",
+            json(
+              "nurseAssignment" to "RN Omar",
+              "painScore" to 1,
+              "nauseaScore" to 0,
+              "oxygenSaturation" to 98,
+              "heartRate" to 74,
+              "systolic" to 120,
+              "diastolic" to 76,
+            ),
+            token,
+          ),
+        )
+      assertNotNull(pacu["id"])
+      assertEquals("RN Omar", pacu["nurseAssignment"].asText())
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/anaesthesia/records/$recordId/pacu", token = token)).size(), "pacu listed")
+
+      val noPerm = noRoleToken()
+      assertEquals(
+        403,
+        api(HttpMethod.GET, "/api/v1/anaesthesia/records/$recordId/monitoring", token = noPerm).status,
+        "anaesthesia read denied for role-less user",
+      )
+      assertEquals(
+        403,
+        api(
+          HttpMethod.POST,
+          "/api/v1/anaesthesia/evaluations",
+          json("surgeryScheduleId" to scheduleId, "patientId" to patientId, "asaStatus" to "I"),
+          noPerm,
+        ).status,
+        "anaesthesia write denied for role-less user",
       )
     }
 

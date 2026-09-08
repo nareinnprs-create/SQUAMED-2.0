@@ -99,3 +99,12 @@ Proven end to end: 22 controller modules, event→index→search, audit-on-write
 - Anaesthesia record with validated airway devices (mask/lma/ett/double_lumen/tracheotomy/nasal_cannula), guarded phase machine (planned → induced → maintenance → emergence → completed; completed locks) and phase events.
 - Intra-op monitoring feed (heart rate required, vitals/EtCO2/temp/urine/depth) and medication administration log against the record.
 - Recovery/Aldrete scoring (0–10 enforced) with discharge-criteria gating (`anaesthesia.recovery_completed` event when met) and PACU nursing observations.
+
+## 10. Phase 2e additions (Blood Bank)
+
+- Migrations V39 (bloodbank schema: blood_donor, blood_unit, blood_grouping, crossmatch, blood_reservation, blood_issue, transfusion_record, transfusion_reaction) and V40 (`bloodbank` permissions to SYSTEM_ADMIN/HOSPITAL_ADMIN/DOCTOR/NURSE/LAB_TECHNICIAN).
+- Donor registry with status lifecycle (active/deferred/retired) and validated blood groups (ABO+Rh whitelist).
+- Unit inventory: component whitelist, future-dated expiry enforcement, status machine that locks issued units, and `bloodbank.unit_received` event.
+- Serology: unique ABO/Rh grouping per unit with confirm stamp (double confirm rejected), crossmatch by technique (saline/antiglobulin/gel) with compatibility result update (incl. incompatible/equivocal).
+- Reservation with availability guard (double reservation rejected) and release-to-available flow; issue requires an issuable unit and emits `bloodbank.unit_issued`.
+- Transfusion lifecycle (start requires an issued unit → in_progress → completed/stopped, finished records locked) plus reaction reporting with type/severity whitelists (febrile/allergic/hemolytic/tac/taco/other; mild/moderate/severe) emitting `bloodbank.transfusion_reaction`.

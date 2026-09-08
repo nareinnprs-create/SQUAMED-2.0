@@ -4603,6 +4603,342 @@ class PlatformIntegrationTests {
       )
     }
 
+    @Test
+    fun bloodBankWorkflowCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = firstHospitalId(token)
+      val patientId = createPatient(token, "Bella", "Oblood", s)
+      val today = java.time.LocalDate.now()
+
+      val noName = api(HttpMethod.POST, "/api/v1/blood-bank/donors", json("hospitalId" to hospitalId, "bloodGroup" to "O+"), token)
+      assertEquals(400, noName.status, "donor without name")
+      val badGroup = api(HttpMethod.POST, "/api/v1/blood-bank/donors", json("hospitalId" to hospitalId, "fullName" to "Donor X", "bloodGroup" to "Z+"), token)
+      assertEquals(400, badGroup.status, "invalid donor blood group")
+      val donor =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/donors",
+            json(
+              "hospitalId" to hospitalId,
+              "donorNumber" to "D-$s",
+              "fullName" to "Donor Salim",
+              "bloodGroup" to "O+",
+              "gender" to "male",
+              "phone" to "551100",
+            ),
+            token,
+          ),
+        )
+      assertNotNull(donor["id"])
+      val deferred = `data`(api(HttpMethod.PATCH, "/api/v1/blood-bank/donors/${donor["id"].asText()}/status", json("status" to "deferred"), token))
+      assertEquals("deferred", deferred["status"].asText(), "donor deferred")
+      val badDonorStatus = api(HttpMethod.PATCH, "/api/v1/blood-bank/donors/${donor["id"].asText()}/status", json("status" to "frozen"), token)
+      assertEquals(400, badDonorStatus.status, "invalid donor status")
+      val deferredList = `data`(api(HttpMethod.GET, "/api/v1/blood-bank/donors?status=deferred", token = token))
+      assertTrue(deferredList.any { it["id"].asText() == donor["id"].asText() }, "donor listing by status")
+
+      val noUnitNumber =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/units",
+          json(
+            "hospitalId" to hospitalId,
+            "bloodGroup" to "O+",
+            "expiryDate" to today.plusDays(30).toString(),
+          ),
+          token,
+        )
+      assertEquals(400, noUnitNumber.status, "unit without number")
+      val badComponent =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/units",
+          json(
+            "hospitalId" to hospitalId,
+            "unitNumber" to "U-$s-bad",
+            "bloodGroup" to "O+",
+            "component" to "serum",
+            "expiryDate" to today.plusDays(30).toString(),
+          ),
+          token,
+        )
+      assertEquals(400, badComponent.status, "invalid component")
+      val expired =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/units",
+          json(
+            "hospitalId" to hospitalId,
+            "unitNumber" to "U-$s-exp",
+            "bloodGroup" to "O+",
+            "expiryDate" to today.minusDays(1).toString(),
+          ),
+          token,
+        )
+      assertEquals(400, expired.status, "expired unit rejected")
+
+      val unitA =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/units",
+            json(
+              "hospitalId" to hospitalId,
+              "unitNumber" to "U-$s-A",
+              "bloodGroup" to "O+",
+              "component" to "prbc",
+              "expiryDate" to today.plusDays(35).toString(),
+              "volumeMl" to 350,
+              "storageLocation" to "Fridge-2",
+            ),
+            token,
+          ),
+        )
+      val unitAId = unitA["id"].asText()
+      assertEquals("available", unitA["status"].asText())
+      val unitB =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/units",
+            json(
+              "hospitalId" to hospitalId,
+              "unitNumber" to "U-$s-B",
+              "bloodGroup" to "O-",
+              "component" to "ffp",
+              "expiryDate" to today.plusDays(20).toString(),
+            ),
+            token,
+          ),
+        )
+      val unitBId = unitB["id"].asText()
+      val badUnitStatus = api(HttpMethod.PATCH, "/api/v1/blood-bank/units/$unitBId/status", json("status" to "vampire"), token)
+      assertEquals(400, badUnitStatus.status, "invalid unit status")
+      val discarded = `data`(api(HttpMethod.PATCH, "/api/v1/blood-bank/units/$unitBId/status", json("status" to "discarded"), token))
+      assertEquals("discarded", discarded["status"].asText(), "unit discarded")
+      val unitC =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/units",
+            json(
+              "hospitalId" to hospitalId,
+              "unitNumber" to "U-$s-C",
+              "bloodGroup" to "O-",
+              "component" to "ffp",
+              "expiryDate" to today.plusDays(20).toString(),
+            ),
+            token,
+          ),
+        )
+      val unitCId = unitC["id"].asText()
+      val prbcUnits = `data`(api(HttpMethod.GET, "/api/v1/blood-bank/units?component=prbc", token = token))
+      assertTrue(prbcUnits.any { it["id"].asText() == unitAId }, "units listed by component")
+      assertTrue(
+        `data`(api(HttpMethod.GET, "/api/v1/blood-bank/units?status=available", token = token)).any {
+          it["id"].asText() == unitCId
+        },
+        "available units listed",
+      )
+
+      val badAbo =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/grouping",
+          json(
+            "hospitalId" to hospitalId,
+            "unitId" to unitCId,
+            "aboResult" to "X",
+            "rhResult" to "positive",
+          ),
+          token,
+        )
+      assertEquals(400, badAbo.status, "invalid ABO result")
+      val noAbo = api(HttpMethod.POST, "/api/v1/blood-bank/grouping", json("hospitalId" to hospitalId, "unitId" to unitCId, "rhResult" to "positive"), token)
+      assertEquals(400, noAbo.status, "grouping without ABO")
+      val grouping =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/grouping",
+            json("hospitalId" to hospitalId, "unitId" to unitAId, "aboResult" to "O", "rhResult" to "negative"),
+            token,
+          ),
+        )
+      val groupingId = grouping["id"].asText()
+      assertEquals(false, grouping["confirmed"].asBoolean())
+      val dupGrouping =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/grouping",
+          json(
+            "hospitalId" to hospitalId,
+            "unitId" to unitAId,
+            "aboResult" to "O",
+            "rhResult" to "negative",
+          ),
+          token,
+        )
+      assertEquals(400, dupGrouping.status, "duplicate grouping rejected")
+      val confirmedGrouping = `data`(api(HttpMethod.PATCH, "/api/v1/blood-bank/grouping/$groupingId/confirm", token = token))
+      assertEquals(true, confirmedGrouping["confirmed"].asBoolean(), "grouping confirmed")
+      val dupConfirmGrouping = api(HttpMethod.PATCH, "/api/v1/blood-bank/grouping/$groupingId/confirm", token = token)
+      assertEquals(400, dupConfirmGrouping.status, "grouping already confirmed")
+      assertEquals("O", `data`(api(HttpMethod.GET, "/api/v1/blood-bank/grouping?unitId=$unitAId", token = token))["aboResult"].asText(), "grouping by unit")
+
+      val noTechnique =
+        api(HttpMethod.POST, "/api/v1/blood-bank/crossmatch", json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitAId), token)
+      assertEquals(400, noTechnique.status, "crossmatch without technique")
+      val badTechnique =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/crossmatch",
+          json(
+            "hospitalId" to hospitalId,
+            "patientId" to patientId,
+            "unitId" to unitAId,
+            "technique" to "crystal",
+          ),
+          token,
+        )
+      assertEquals(400, badTechnique.status, "invalid crossmatch technique")
+      val crossmatch =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/crossmatch",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitAId, "technique" to "gel"),
+            token,
+          ),
+        )
+      val crossmatchId = crossmatch["id"].asText()
+      assertEquals("equivocal", crossmatch["compatibility"].asText())
+      val badCompatibility = api(HttpMethod.PATCH, "/api/v1/blood-bank/crossmatch/$crossmatchId/result", json("compatibility" to "maybe"), token)
+      assertEquals(400, badCompatibility.status, "invalid compatibility")
+      val compatible =
+        `data`(
+          api(
+            HttpMethod.PATCH,
+            "/api/v1/blood-bank/crossmatch/$crossmatchId/result",
+            json(
+              "compatibility" to "compatible",
+              "resultNote" to "2+, no agglutination",
+            ),
+            token,
+          ),
+        )
+      assertEquals("compatible", compatible["compatibility"].asText(), "crossmatch compatible")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/blood-bank/crossmatch?patientId=$patientId", token = token)).size(), "crossmatch by patient")
+
+      val reservation =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/reservations",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitCId),
+            token,
+          ),
+        )
+      assertNotNull(reservation["id"])
+      assertEquals("reserved", reservation["status"].asText())
+      val dupReserve =
+        api(HttpMethod.POST, "/api/v1/blood-bank/reservations", json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitCId), token)
+      assertEquals(400, dupReserve.status, "double reservation rejected")
+      val released = `data`(api(HttpMethod.POST, "/api/v1/blood-bank/reservations/$unitCId/release", token = token))
+      assertEquals("released", released["status"].asText(), "reservation released")
+
+      val issue =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/issues",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitAId),
+            token,
+          ),
+        )
+      assertNotNull(issue["id"])
+      val reissue = api(HttpMethod.POST, "/api/v1/blood-bank/issues", json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitAId), token)
+      assertEquals(400, reissue.status, "issued unit cannot be issued again")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/blood-bank/issues?patientId=$patientId", token = token)).size(), "issue by patient")
+
+      val unissuedTransfusion =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/transfusions",
+          json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitCId),
+          token,
+        )
+      assertEquals(400, unissuedTransfusion.status, "transfusion requires issued unit")
+      val transfusion =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/transfusions",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "unitId" to unitAId,
+              "volumeMl" to 300,
+              "startRateMlPerHour" to 120,
+              "observations" to "No initial reaction",
+            ),
+            token,
+          ),
+        )
+      val transfusionId = transfusion["id"].asText()
+      assertEquals("in_progress", transfusion["status"].asText())
+      val completedTransfusion = `data`(api(HttpMethod.PATCH, "/api/v1/blood-bank/transfusions/$transfusionId/status", json("status" to "completed"), token))
+      assertEquals("completed", completedTransfusion["status"].asText(), "transfusion completed")
+      assertNotNull(completedTransfusion["endedAt"])
+      val finishedStatus = api(HttpMethod.PATCH, "/api/v1/blood-bank/transfusions/$transfusionId/status", json("status" to "stopped"), token)
+      assertEquals(400, finishedStatus.status, "finished transfusion locked")
+
+      val noType = api(HttpMethod.POST, "/api/v1/blood-bank/transfusions/$transfusionId/reactions", json("severity" to "severe"), token)
+      assertEquals(400, noType.status, "reaction without type")
+      val badSeverity =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/transfusions/$transfusionId/reactions",
+          json(
+            "reactionType" to "hemolytic",
+            "severity" to "apocalyptic",
+          ),
+          token,
+        )
+      assertEquals(400, badSeverity.status, "invalid reaction severity")
+      val reaction =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/transfusions/$transfusionId/reactions",
+            json(
+              "reactionType" to "hemolytic",
+              "severity" to "severe",
+              "symptoms" to "Back pain, rigors",
+              "actions" to "Stopped transfusion, notified blood bank",
+            ),
+            token,
+          ),
+        )
+      assertNotNull(reaction["id"])
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/blood-bank/transfusions/$transfusionId/reactions", token = token)).size(), "reactions listed")
+
+      val noPerm = noRoleToken()
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/blood-bank/donors", token = noPerm).status, "blood bank read denied for role-less user")
+      assertEquals(
+        403,
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/units",
+          json("unitNumber" to "X", "bloodGroup" to "O+", "expiryDate" to today.plusDays(10).toString()),
+          noPerm,
+        ).status,
+        "blood bank write denied for role-less user",
+      )
+    }
+
     private fun firstHospitalId(token: String): String = `data`(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals", token = token))[0]["id"].asText()
 
     private fun createBed(

@@ -119,3 +119,14 @@ Delivered with the same contract-first approach and gates:
 | Intra-op monitoring (HR required) and medication log | Covered by `anaesthesiaWorkflowCoverage` |
 | Recovery (Aldrete 0–10, discharge gating) + recovery_completed event and PACU record | Covered by `anaesthesiaWorkflowCoverage` |
 | Suite | 73 tests, 0 failures, JaCoCo instruction 81.2% / LINE 86.3% / BRANCH 53.8%, ktlint clean |
+
+## 15. Phase 2e addendum — Blood Bank
+
+| Item | State |
+| --- | --- |
+| Migrations V39 (bloodbank schema, 8 tables) / V40 (permission seeds) | Applied, idempotent |
+| Donor registry (blood-group whitelist, status lifecycle) | Covered by `bloodBankWorkflowCoverage` |
+| Unit inventory (component whitelist, future expiry, status machine locking issued units) | Covered by `bloodBankWorkflowCoverage` |
+| Grouping (unique per unit, confirm stamps) + crossmatch (technique/compatibility) | Covered by `bloodBankWorkflowCoverage` |
+| Reservation → release, issue (issuable-only), transfusion lifecycle + reaction reporting | Covered by `bloodBankWorkflowCoverage` |
+| Suite | 74 tests, 0 failures, JaCoCo instruction 81.5% / LINE 86.7% / BRANCH 54.2%, ktlint clean |

@@ -82,3 +82,12 @@ All modules are exposed by `AuthController`-style `@RestController`s under
 - Escalation and `stat` priority align with the existing order entry queue (`clinical.order_entry.priority`).
 
 Proven end to end: 22 controller modules, event→index→search, audit-on-write, REST/WS/HL7/FHIR transports + IPD/Nursing/ICU clinical documentation + Emergency/Trauma.
+
+## 8. Phase 2c additions (OT / Surgery)
+
+- Migrations V35 (surgery schema: ot_room, surgery_schedule, ot_allocation, surgical_team, instrument_tracking, implant_record, pre_op_checklist, intra_op_record, post_op_record) and V36 (SURGEON role + `surgery` permissions to SYSTEM_ADMIN/HOSPITAL_ADMIN/DOCTOR/SURGEON/NURSE).
+- Surgical scheduling with booking metadata, ED-style lifecycle (`surgery.scheduled`/`surgery.started`/`surgery.completed` events), guarded state machine (completed/cancelled lock; start requires open status; complete requires started) with actual start/end stamps.
+- OT room registry and conflict-checked allocation (overlapping allocations on the same room are rejected); allocation auto-completes when surgery completes.
+- Team assignment with role whitelist (surgeon/assistant/anaesthetist/nurse/scout/technician/perfusionist).
+- Pre-op checklist (checked-by/at stamps), instrument tracking with count lifecycle (booked → … → returned/decontaminated), implant registry with lot/expiry/quantity.
+- Intra-operative timeline (timeout, incision, closure, count) and post-op record with validated destination (ward/icu/observation/recovery/stepdown); single latest post-op read.

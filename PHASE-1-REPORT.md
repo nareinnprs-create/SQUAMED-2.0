@@ -97,3 +97,14 @@ Delivered with the same contract-first approach and gates:
 | Trauma workflow (single active, primary→secondary→tertiary→completed ABCD survey) + activate/completed events | Covered by `emergencyWorkflowCoverage` |
 | Disposition state machine (admit requires admission link, discharge clears link + stamps time) | Covered by `emergencyWorkflowCoverage` |
 | Suite | 71 tests, 0 failures, JaCoCo instruction 80.3% / LINE 85.6% / BRANCH 52.8%, ktlint clean |
+
+## 13. Phase 2c addendum — OT / Surgery
+
+| Item | State |
+| --- | --- |
+| Migrations V35 (surgery schema, 9 tables incl. ot_room) / V36 (SURGEON role + surgery permission seeds) | Applied, idempotent |
+| Surgical scheduling lifecycle + `surgery.scheduled/started/completed` events | Covered by `surgicalWorkflowCoverage` |
+| OT room registry + conflict-checked allocation (overlap rejected) | Covered by `surgicalWorkflowCoverage` |
+| Team assignment (role whitelist), instruments (count lifecycle), implants (lot/expiry/qty) | Covered by `surgicalWorkflowCoverage` |
+| Pre-op checklist with stamped checks, intra-op timeline, post-op record (validated destination) | Covered by `surgicalWorkflowCoverage` |
+| Suite | 72 tests, 0 failures, JaCoCo instruction 80.8% / LINE 85.9% / BRANCH 53.4%, ktlint clean |

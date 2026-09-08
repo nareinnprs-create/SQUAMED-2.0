@@ -4127,6 +4127,265 @@ class PlatformIntegrationTests {
       )
     }
 
+    @Test
+    fun surgicalWorkflowCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = firstHospitalId(token)
+      val patientId = createPatient(token, "Harry", "Scalpel", s)
+      val now = java.time.Instant.now()
+
+      val room =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/ot-rooms",
+            json("hospitalId" to hospitalId, "name" to "OT Main $s", "code" to "OT1-$s"),
+            token,
+          ),
+        )
+      val roomId = room["id"].asText()
+      assertEquals("operational", room["status"].asText())
+      val noRoomName = api(HttpMethod.POST, "/api/v1/surgery/ot-rooms", json("hospitalId" to hospitalId, "code" to "X"), token)
+      assertEquals(400, noRoomName.status, "ot room without name")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/surgery/ot-rooms?hospitalId=$hospitalId", token = token)).size(), "ot rooms listed")
+
+      val noPatient = api(HttpMethod.POST, "/api/v1/surgery/schedules", json("hospitalId" to hospitalId, "procedureName" to "Appendectomy"), token)
+      assertEquals(400, noPatient.status, "schedule without patient")
+      val noProcedure = api(HttpMethod.POST, "/api/v1/surgery/schedules", json("hospitalId" to hospitalId, "patientId" to patientId), token)
+      assertEquals(400, noProcedure.status, "schedule without procedure")
+      val noStart =
+        api(
+          HttpMethod.POST,
+          "/api/v1/surgery/schedules",
+          json(
+            "hospitalId" to hospitalId,
+            "patientId" to patientId,
+            "procedureName" to "Appendectomy",
+          ),
+          token,
+        )
+      assertEquals(400, noStart.status, "schedule without start time")
+
+      val schedule =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "procedureName" to "Laparoscopic appendectomy",
+              "procedureCode" to "LA-01",
+              "specialty" to "General Surgery",
+              "scheduledStartAt" to now.plusSeconds(3600).toString(),
+              "scheduledEndAt" to now.plusSeconds(7200).toString(),
+              "notes" to "Third case of the day",
+            ),
+            token,
+          ),
+        )
+      val scheduleId = schedule["id"].asText()
+      assertEquals("scheduled", schedule["status"].asText())
+      assertEquals(
+        1,
+        `data`(api(HttpMethod.GET, "/api/v1/surgery/schedules?patientId=$patientId", token = token)).size(),
+        "schedule by patient",
+      )
+      val scheduledList = `data`(api(HttpMethod.GET, "/api/v1/surgery/schedules?status=scheduled", token = token))
+      assertTrue(scheduledList.any { it["id"].asText() == scheduleId }, "scheduled list contains booking")
+      assert2xx(api(HttpMethod.GET, "/api/v1/surgery/schedules/$scheduleId", token = token), "get schedule")
+
+      val badStatus = api(HttpMethod.PATCH, "/api/v1/surgery/schedules/$scheduleId/status", json("status" to "concluded"), token)
+      assertEquals(400, badStatus.status, "invalid schedule status")
+      val completeTooEarly = api(HttpMethod.PATCH, "/api/v1/surgery/schedules/$scheduleId/status", json("status" to "completed"), token)
+      assertEquals(400, completeTooEarly.status, "cannot complete before start")
+      val noRoom = api(HttpMethod.POST, "/api/v1/surgery/schedules/$scheduleId/ot-allocation", json("startTime" to now.plusSeconds(3600).toString()), token)
+      assertEquals(400, noRoom.status, "allocation without ot room")
+      val unknownRoom =
+        api(
+          HttpMethod.POST,
+          "/api/v1/surgery/schedules/$scheduleId/ot-allocation",
+          json(
+            "otRoomId" to "11111111-1111-1111-1111-111111111111",
+            "startTime" to now.plusSeconds(3600).toString(),
+            "endTime" to now.plusSeconds(7200).toString(),
+          ),
+          token,
+        )
+      assertEquals(400, unknownRoom.status, "allocation to unknown room")
+
+      val allocation =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules/$scheduleId/ot-allocation",
+            json("otRoomId" to roomId, "startTime" to now.plusSeconds(3600).toString(), "endTime" to now.plusSeconds(7200).toString()),
+            token,
+          ),
+        )
+      assertNotNull(allocation["id"])
+      assertEquals("allocated", allocation["status"].asText())
+      val secondSchedule =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "procedureName" to "Cholecystectomy",
+              "scheduledStartAt" to now.plusSeconds(3900).toString(),
+              "scheduledEndAt" to now.plusSeconds(4500).toString(),
+            ),
+            token,
+          ),
+        )
+      val secondScheduleId = secondSchedule["id"].asText()
+      val conflict =
+        api(
+          HttpMethod.POST,
+          "/api/v1/surgery/schedules/$secondScheduleId/ot-allocation",
+          json("otRoomId" to roomId, "startTime" to now.plusSeconds(3900).toString(), "endTime" to now.plusSeconds(4500).toString()),
+          token,
+        )
+      assertEquals(400, conflict.status, "overlapping allocation on the same OT room rejected")
+
+      val badRole = api(HttpMethod.POST, "/api/v1/surgery/schedules/$scheduleId/team", json("staffName" to "Dr. X", "role" to "clown"), token)
+      assertEquals(400, badRole.status, "invalid team role")
+      val noName = api(HttpMethod.POST, "/api/v1/surgery/schedules/$scheduleId/team", json("role" to "surgeon"), token)
+      assertEquals(400, noName.status, "team member without name")
+      val member =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules/$scheduleId/team",
+            json("staffName" to "Dr. Ayesha", "role" to "surgeon"),
+            token,
+          ),
+        )
+      assertNotNull(member["id"])
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/surgery/schedules/$scheduleId/team", token = token)).size(), "team listed")
+
+      val checklistItem =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules/$scheduleId/checklist",
+            json("checklistItem" to "Consent signed", "category" to "consent"),
+            token,
+          ),
+        )
+      val checklistItemId = checklistItem["id"].asText()
+      assertEquals(false, checklistItem["checked"].asBoolean())
+      val noItem = api(HttpMethod.POST, "/api/v1/surgery/schedules/$scheduleId/checklist", json("category" to "consent"), token)
+      assertEquals(400, noItem.status, "checklist without item")
+      val checked = `data`(api(HttpMethod.PATCH, "/api/v1/surgery/schedules/$scheduleId/checklist/$checklistItemId/check", token = token))
+      assertEquals(true, checked["checked"].asBoolean(), "checklist item marked")
+      assertNotNull(checked["checkedAt"])
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/surgery/schedules/$scheduleId/checklist", token = token)).size(), "checklist listed")
+
+      val instrument =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules/$scheduleId/instruments",
+            json("instrumentName" to "Titanium forceps", "setName" to "Lap set A"),
+            token,
+          ),
+        )
+      val instrumentId = instrument["id"].asText()
+      assertEquals("booked", instrument["status"].asText())
+      val badInstrumentStatus = api(HttpMethod.PATCH, "/api/v1/surgery/schedules/$scheduleId/instruments/$instrumentId/status", json("status" to "lost"), token)
+      assertEquals(400, badInstrumentStatus.status, "invalid instrument status")
+      val returned =
+        `data`(api(HttpMethod.PATCH, "/api/v1/surgery/schedules/$scheduleId/instruments/$instrumentId/status", json("status" to "returned"), token))
+      assertEquals("returned", returned["status"].asText(), "instrument returned")
+      assertNotNull(returned["countedBy"])
+      val noInstrument = api(HttpMethod.POST, "/api/v1/surgery/schedules/$scheduleId/instruments", json("setName" to "Lap set A"), token)
+      assertEquals(400, noInstrument.status, "instrument without name")
+
+      val implant =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules/$scheduleId/implants",
+            json("implantName" to "Titanium mesh", "catalogNumber" to "TM-100", "lotNumber" to "LOT-9", "quantity" to 2, "notes" to "15x10cm"),
+            token,
+          ),
+        )
+      assertNotNull(implant["id"])
+      assertEquals(2, implant["quantity"].asInt())
+      val noImplant = api(HttpMethod.POST, "/api/v1/surgery/schedules/$scheduleId/implants", json("lotNumber" to "LOT-9"), token)
+      assertEquals(400, noImplant.status, "implant without name")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/surgery/schedules/$scheduleId/implants", token = token)).size(), "implants listed")
+
+      val timeout =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules/$scheduleId/intra-op",
+            json("eventName" to "timeout", "notes" to "Patient, procedure, site confirmed"),
+            token,
+          ),
+        )
+      assertNotNull(timeout["id"])
+      val noEvent = api(HttpMethod.POST, "/api/v1/surgery/schedules/$scheduleId/intra-op", json("notes" to "x"), token)
+      assertEquals(400, noEvent.status, "intra-op without event name")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/surgery/schedules/$scheduleId/intra-op", token = token)).size(), "intra-op entries listed")
+
+      val missingPostOp = api(HttpMethod.GET, "/api/v1/surgery/schedules/$scheduleId/post-op", token = token)
+      assertEquals(400, missingPostOp.status, "post-op record missing before completion")
+      val badDestination =
+        api(HttpMethod.POST, "/api/v1/surgery/schedules/$scheduleId/post-op", json("patientCondition" to "Stable", "destination" to "moon"), token)
+      assertEquals(400, badDestination.status, "invalid post-op destination")
+      val postOp =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules/$scheduleId/post-op",
+            json("patientCondition" to "Stable, awake", "destination" to "ward", "painScore" to 2, "drainOutputMl" to 25),
+            token,
+          ),
+        )
+      assertNotNull(postOp["id"])
+      val fetchedPostOp = `data`(api(HttpMethod.GET, "/api/v1/surgery/schedules/$scheduleId/post-op", token = token))
+      assertEquals("ward", fetchedPostOp["destination"].asText(), "post-op destination")
+
+      val started =
+        `data`(
+          api(
+            HttpMethod.PATCH,
+            "/api/v1/surgery/schedules/$scheduleId/status",
+            json("status" to "started"),
+            token,
+          ),
+        )
+      assertEquals("started", started["status"].asText(), "surgery started")
+      assertNotNull(started["actualStartAt"])
+      val completed =
+        `data`(
+          api(
+            HttpMethod.PATCH,
+            "/api/v1/surgery/schedules/$scheduleId/status",
+            json("status" to "completed"),
+            token,
+          ),
+        )
+      assertEquals("completed", completed["status"].asText(), "surgery completed")
+      assertNotNull(completed["actualEndAt"])
+      val locked = api(HttpMethod.PATCH, "/api/v1/surgery/schedules/$scheduleId/status", json("status" to "cancelled"), token)
+      assertEquals(400, locked.status, "completed schedule is locked")
+
+      val noPerm = noRoleToken()
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/surgery/schedules", token = noPerm).status, "surgery read denied for role-less user")
+      assertEquals(
+        403,
+        api(HttpMethod.POST, "/api/v1/surgery/schedules", json("hospitalId" to hospitalId, "patientId" to patientId, "procedureName" to "X"), noPerm).status,
+        "surgery write denied for role-less user",
+      )
+    }
+
     private fun firstHospitalId(token: String): String = `data`(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals", token = token))[0]["id"].asText()
 
     private fun createBed(

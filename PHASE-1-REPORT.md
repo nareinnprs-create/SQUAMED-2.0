@@ -86,3 +86,14 @@ Delivered with the same contract-first approach and gates:
 | ICU (high-frequency vitals, fluid balance, ventilation, infusion, critical alerts w/ acknowledge/resolve) + icu.* events | Covered by `icuMonitoringCoverage` |
 | Permissions (`ipd`/`nursing`/`icu` read+write) to SYSTEM_ADMIN, DOCTOR (ipd read), NURSE | Seeded |
 | Suite | 70 tests, 0 failures, JaCoCo instruction 80.1% / LINE 85.66% / BRANCH 52.53%, ktlint clean |
+
+## 12. Phase 2b addendum — Emergency and Trauma
+
+| Item | State |
+| --- | --- |
+| Migrations V33 (emergency schema) / V34 (emergency permission seeds) | Applied, idempotent |
+| Registration (arrival modes, ED queue by status/patient, complaint) + `emergency.registered` | Covered by `emergencyWorkflowCoverage` |
+| ESI triage (1–5, stat escalation for ESI ≤ 2, idempotency) + `emergency.triaged` | Covered by `emergencyWorkflowCoverage` |
+| Trauma workflow (single active, primary→secondary→tertiary→completed ABCD survey) + activate/completed events | Covered by `emergencyWorkflowCoverage` |
+| Disposition state machine (admit requires admission link, discharge clears link + stamps time) | Covered by `emergencyWorkflowCoverage` |
+| Suite | 71 tests, 0 failures, JaCoCo instruction 80.3% / LINE 85.6% / BRANCH 52.8%, ktlint clean |

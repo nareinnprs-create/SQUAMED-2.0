@@ -73,4 +73,12 @@ All modules are exposed by `AuthController`-style `@RestController`s under
 - ICU covers high-frequency vitals (incl. MAP/EtCO2), fluid balance, ventilation records, infusion lifecycle and critical alerts with acknowledge/resolve workflow and `icu.critical_alert` events.
 - Does not yet emit Kafka domain topics beyond `squamed.domain-events` (the default Phase 1 topic) — Phase 2 wiring extension tracked in the Phase 2 report.
 
-Proven end to end: 22 controller modules, event→index→search, audit-on-write, REST/WS/HL7/FHIR transports + IPD/Nursing/ICU clinical documentation.
+## 7. Phase 2b additions (Emergency and Trauma)
+
+- Migrations V33 (emergency schema: registration, triage, trauma workflow) and V34 (seed `emergency` permissions to SYSTEM_ADMIN, DOCTOR, NURSE).
+- Emergency registration with arrival mode (walk_in/ambulance/transfer), ED queue filters by status/patient, ESI based triage (1–5, illegal 400, idempotency guard) that escalates priority to `stat` for ESI ≤ 2; `emergency.registered`/`emergency.triaged` events.
+- Trauma workflow: single active workflow per registration, primary → secondary → tertiary → completed survey (ABCDE fields), completion timestamps, `emergency.trauma_activated`/`emergency.trauma_completed` events.
+- Disposition state machine: registered → triaged → in_treatment → admitted/discharged; `admitted` requires an admission link, discharge stamps `dischargedAt` and clears the link; `emergency.disposition_changed` event.
+- Escalation and `stat` priority align with the existing order entry queue (`clinical.order_entry.priority`).
+
+Proven end to end: 22 controller modules, event→index→search, audit-on-write, REST/WS/HL7/FHIR transports + IPD/Nursing/ICU clinical documentation + Emergency/Trauma.

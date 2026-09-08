@@ -3953,6 +3953,180 @@ class PlatformIntegrationTests {
       assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge", json("dischargeType" to "home"), token), "cleanup icu admission")
     }
 
+    @Test
+    fun emergencyWorkflowCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = firstHospitalId(token)
+      val patientId = createPatient(token, "Erica", "Trauma", s)
+
+      val noPatient = api(HttpMethod.POST, "/api/v1/emergency/registrations", json("hospitalId" to hospitalId), token)
+      assertEquals(400, noPatient.status, "registration without patient -> ${noPatient.body.take(200)}")
+      val badArrival =
+        api(
+          HttpMethod.POST,
+          "/api/v1/emergency/registrations",
+          json(
+            "hospitalId" to hospitalId,
+            "patientId" to patientId,
+            "arrivalMode" to "drone",
+          ),
+          token,
+        )
+      assertEquals(400, badArrival.status, "invalid arrival mode -> ${badArrival.body.take(200)}")
+
+      val registration =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/emergency/registrations",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "arrivalMode" to "ambulance",
+              "presentingComplaint" to "MVC, unrestrained driver",
+            ),
+            token,
+          ),
+        )
+      val registrationId = registration["id"].asText()
+      assertEquals("registered", registration["status"].asText())
+      assertEquals("ambulance", registration["arrivalMode"].asText())
+
+      val registeredList = `data`(api(HttpMethod.GET, "/api/v1/emergency/registrations?status=registered", token = token))
+      assertTrue(registeredList.any { it["id"].asText() == registrationId }, "registered list contains registration")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/emergency/registrations?patientId=$patientId", token = token)).size(), "registration by patient")
+      assert2xx(api(HttpMethod.GET, "/api/v1/emergency/registrations/$registrationId", token = token), "get registration")
+
+      val badEsi = api(HttpMethod.POST, "/api/v1/emergency/registrations/$registrationId/triage", json("esiLevel" to 6), token)
+      assertEquals(400, badEsi.status, "ESI out of range -> ${badEsi.body.take(200)}")
+      val noEsi = api(HttpMethod.POST, "/api/v1/emergency/registrations/$registrationId/triage", json("painScale" to 4), token)
+      assertEquals(400, noEsi.status, "triage without ESI")
+
+      val triage =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/emergency/registrations/$registrationId/triage",
+            json(
+              "esiLevel" to 2,
+              "triageCategory" to "emergent",
+              "painScale" to 7,
+              "vitalTriggers" to true,
+              "acuityNotes" to "SBP 82, HR 118",
+            ),
+            token,
+          ),
+        )
+      assertEquals(2, triage["esiLevel"].asInt())
+      val triaged = `data`(api(HttpMethod.GET, "/api/v1/emergency/registrations/$registrationId", token = token))
+      assertEquals("triaged", triaged["status"].asText(), "registration moved to triaged")
+      assertEquals("stat", triaged["priority"].asText(), "ESI<=2 escalates priority to stat")
+      assertEquals(2, triaged["triageEsi"].asInt())
+      val dupTriage = api(HttpMethod.POST, "/api/v1/emergency/registrations/$registrationId/triage", json("esiLevel" to 3), token)
+      assertEquals(400, dupTriage.status, "double triage rejected")
+
+      val trauma =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/emergency/registrations/$registrationId/trauma/activate",
+            token = token,
+          ),
+        )
+      assertNotNull(trauma["id"])
+      assertEquals("primary", trauma["surveyPhase"].asText())
+      val dupTrauma = api(HttpMethod.POST, "/api/v1/emergency/registrations/$registrationId/trauma/activate", token = token)
+      assertEquals(400, dupTrauma.status, "trauma workflow already active")
+
+      val badPhase =
+        api(
+          HttpMethod.PUT,
+          "/api/v1/emergency/registrations/$registrationId/trauma",
+          json("surveyPhase" to "golden-hour", "airway" to "clear"),
+          token,
+        )
+      assertEquals(400, badPhase.status, "invalid trauma phase -> ${badPhase.body.take(200)}")
+      val survey =
+        `data`(
+          api(
+            HttpMethod.PUT,
+            "/api/v1/emergency/registrations/$registrationId/trauma",
+            json(
+              "surveyPhase" to "completed",
+              "airway" to "Intact, Guedel No.4",
+              "breathing" to "Bilateral air entry, CXR done",
+              "circulation" to "IV x2, saline 1L bolus",
+              "disability" to "GCS 14, pupils equal",
+              "exposure" to "Pelvic binder applied",
+              "surveyNotes" to "Booked for OR",
+            ),
+            token,
+          ),
+        )
+      assertEquals("completed", survey["surveyPhase"].asText())
+      assertEquals("GCS 14, pupils equal", survey["disability"].asText())
+      assertNotNull(survey["completedAt"])
+
+      val noStatus = api(HttpMethod.PATCH, "/api/v1/emergency/registrations/$registrationId/status", json("admittedAdmissionId" to "x"), token)
+      assertEquals(400, noStatus.status, "status required")
+      val badStatus = api(HttpMethod.PATCH, "/api/v1/emergency/registrations/$registrationId/status", json("status" to "evacuated"), token)
+      assertEquals(400, badStatus.status, "invalid status")
+      val admitNoLink = api(HttpMethod.PATCH, "/api/v1/emergency/registrations/$registrationId/status", json("status" to "admitted"), token)
+      assertEquals(400, admitNoLink.status, "admit requires admission id")
+
+      val wardId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json("name" to "ER Ward $s", "code" to "ER-$s", "type" to "General"),
+            token,
+          ),
+        )["id"].asText()
+      createBed(token, hospitalId, "er-bed-$s", wardId)
+      val admissionId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "wardId" to wardId),
+            token,
+          ),
+        )["id"].asText()
+      val admitted =
+        `data`(
+          api(
+            HttpMethod.PATCH,
+            "/api/v1/emergency/registrations/$registrationId/status",
+            json("status" to "admitted", "admittedAdmissionId" to admissionId),
+            token,
+          ),
+        )
+      assertEquals("admitted", admitted["status"].asText(), "registration admitted")
+      assertEquals(admissionId, admitted["admittedAdmissionId"].asText(), "admitting admission linked")
+      val discharged =
+        `data`(
+          api(
+            HttpMethod.PATCH,
+            "/api/v1/emergency/registrations/$registrationId/status",
+            json("status" to "discharged"),
+            token,
+          ),
+        )
+      assertEquals("discharged", discharged["status"].asText(), "registration discharged")
+      assertNotNull(discharged["dischargedAt"])
+      assertTrue(discharged["admittedAdmissionId"].isNull, "discharge clears admission link")
+
+      val noPerm = noRoleToken()
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/emergency/registrations", token = noPerm).status, "emergency read denied for role-less user")
+      assertEquals(
+        403,
+        api(HttpMethod.POST, "/api/v1/emergency/registrations", json("hospitalId" to hospitalId, "patientId" to patientId), noPerm).status,
+        "emergency write denied for role-less user",
+      )
+    }
+
     private fun firstHospitalId(token: String): String = `data`(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals", token = token))[0]["id"].asText()
 
     private fun createBed(

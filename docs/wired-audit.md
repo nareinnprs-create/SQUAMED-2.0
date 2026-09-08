@@ -31,6 +31,9 @@ All modules are exposed by `AuthController`-style `@RestController`s under
 | AI gateway + scribe | AiController, ScribeController | `/ai/intents`, `/ai/models`, `/ai/scribe/...` | `aiGatewayAndScribeCoverage` (echo provider) |
 | Analytics | AnalyticsController | `/analytics/...` | `analyticsSnapshotCoverage` |
 | Encounter | EncounterController | `/encounters/...` | `encounterAndVitalsCoverage` |
+| IPD (Phase 2a) | AdmissionController | `/admissions` admit/transfer/discharge, attendants, discharge summary | `inpatientAdmissionLifecycleCoverage` |
+| Nursing (Phase 2a) | NursingController | `/nursing/assessments|careplans|notes|handovers|vitals|mar|risk-assessments` | `nursingDocumentationCoverage` |
+| ICU (Phase 2a) | IcuController | `/icu/vitals|fluid-balance|ventilation|infusions|alerts` | `icuMonitoringCoverage` |
 
 ## 2. Event-driven wiring (Kafka → OpenSearch)
 
@@ -62,4 +65,12 @@ All modules are exposed by `AuthController`-style `@RestController`s under
 - MinIO/Temporal are Phase 2 concepts; Phase 1 uses Postgres-backed state and the in-process workflow engine (`WorkflowService`) — documented in `docs/architecture.md` (workflow engine column).
 - Frontend live E2E depends on a running web dev server; specs live in `tests/e2e` and run in CI.
 
-Proven end to end: 22 controller modules, event→index→search, audit-on-write, REST/WS/HL7/FHIR transports.
+## 6. Phase 2a additions (IPD / Nursing / ICU)
+
+- Migrations V29 (ipd), V30 (nursing), V31 (icu), V32 (permission seeds for `ipd`/`nursing`/`icu` domains to SYSTEM_ADMIN, DOCTOR, NURSE).
+- Admission lifecycle incl. deterministic bed allocation and release: `PatientAdmitted`/`PatientTransferred`/`PatientDischarged` events published on every transition; transfers recorded as audit-history rows; discharge generates a discharge summary.
+- Nursing covers SBAR handovers, care plans + status transitions, progress notes, vitals, eMAR (scheduled → administered/omitted) and risk assessments with events (`nursing.vitals_recorded`, `nursing.medication_administered`).
+- ICU covers high-frequency vitals (incl. MAP/EtCO2), fluid balance, ventilation records, infusion lifecycle and critical alerts with acknowledge/resolve workflow and `icu.critical_alert` events.
+- Does not yet emit Kafka domain topics beyond `squamed.domain-events` (the default Phase 1 topic) — Phase 2 wiring extension tracked in the Phase 2 report.
+
+Proven end to end: 22 controller modules, event→index→search, audit-on-write, REST/WS/HL7/FHIR transports + IPD/Nursing/ICU clinical documentation.

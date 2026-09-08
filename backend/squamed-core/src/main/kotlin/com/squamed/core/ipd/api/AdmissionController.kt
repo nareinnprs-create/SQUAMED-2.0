@@ -1,0 +1,108 @@
+package com.squamed.core.ipd.api
+
+import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.identity.security.RequiresPermission
+import com.squamed.core.identity.security.SquamedPrincipal
+import com.squamed.core.ipd.service.AdmissionService
+import org.springframework.http.HttpStatus
+import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.ResponseStatus
+import org.springframework.web.bind.annotation.RestController
+import java.util.UUID
+
+@RestController
+@RequestMapping("/api/v1/admissions")
+class AdmissionController(
+  private val admissionService: AdmissionService,
+) {
+  @PostMapping
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("ipd:write:admission")
+  @Transactional
+  fun admit(
+    @RequestBody dto: AdmissionCreateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AdmissionView> = ApiResponse.ok(admissionService.admit(dto, principal.userId))
+
+  @GetMapping
+  @RequiresPermission("ipd:read:admission")
+  @Transactional(readOnly = true)
+  fun listAdmissions(
+    @RequestParam(name = "patientId", required = false) patientId: UUID?,
+    @RequestParam(name = "status", required = false) status: String?,
+    @RequestParam(name = "wardId", required = false) wardId: UUID?,
+  ): ApiResponse<List<AdmissionView>> = ApiResponse.ok(admissionService.listAdmissions(patientId, status, wardId))
+
+  @GetMapping("/{id}")
+  @RequiresPermission("ipd:read:admission")
+  @Transactional(readOnly = true)
+  fun getAdmission(
+    @PathVariable id: UUID,
+  ): ApiResponse<AdmissionView> = ApiResponse.ok(admissionService.getAdmission(id))
+
+  @GetMapping("/{id}/transfers")
+  @RequiresPermission("ipd:read:admission")
+  @Transactional(readOnly = true)
+  fun listTransfers(
+    @PathVariable id: UUID,
+  ): ApiResponse<List<AdmissionTransferView>> = ApiResponse.ok(admissionService.listTransfers(id))
+
+  @PostMapping("/{id}/transfer")
+  @RequiresPermission("ipd:write:admission")
+  @Transactional
+  fun transfer(
+    @PathVariable id: UUID,
+    @RequestBody dto: AdmissionTransferDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AdmissionView> = ApiResponse.ok(admissionService.transfer(id, dto, principal.userId))
+
+  @PostMapping("/{id}/discharge")
+  @RequiresPermission("ipd:write:admission")
+  @Transactional
+  fun discharge(
+    @PathVariable id: UUID,
+    @RequestBody dto: AdmissionDischargeDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AdmissionView> = ApiResponse.ok(admissionService.discharge(id, dto, principal.userId))
+
+  @GetMapping("/{id}/discharge-summary")
+  @RequiresPermission("ipd:read:admission")
+  @Transactional(readOnly = true)
+  fun getDischargeSummary(
+    @PathVariable id: UUID,
+  ): ApiResponse<DischargeSummaryView> = ApiResponse.ok(admissionService.getDischargeSummary(id))
+
+  @PutMapping("/{id}/discharge-summary")
+  @RequiresPermission("ipd:write:admission")
+  @Transactional
+  fun upsertDischargeSummary(
+    @PathVariable id: UUID,
+    @RequestBody dto: DischargeSummaryUpsertDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DischargeSummaryView> = ApiResponse.ok(admissionService.upsertDischargeSummary(id, dto, principal.userId))
+
+  @GetMapping("/{id}/attendants")
+  @RequiresPermission("ipd:read:admission")
+  @Transactional(readOnly = true)
+  fun listAttendants(
+    @PathVariable id: UUID,
+  ): ApiResponse<List<AttendantView>> = ApiResponse.ok(admissionService.listAttendants(id))
+
+  @PostMapping("/{id}/attendants")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("ipd:write:admission")
+  @Transactional
+  fun addAttendant(
+    @PathVariable id: UUID,
+    @RequestBody dto: AttendantCreateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AttendantView> = ApiResponse.ok(admissionService.addAttendant(id, dto, principal.userId))
+}

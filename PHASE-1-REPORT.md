@@ -73,3 +73,16 @@ Covered by `SecurityTests` + integration journeys: unauthenticated/tampered/forg
 - Local/exploratory E2E runs need browsers (`npx playwright install`) and a running web dev server; CI installs them per job.
 - Alertmanager webhook URL is the deployment-defined integration point (`host.docker.internal:9095`) — point it at the real pager/chat endpoint.
 - MinIO + Temporal intentionally deferred to Phase 2 per blueprint architecture notes.
+
+## 11. Phase 2a addendum — IPD / Nursing / ICU
+
+Delivered with the same contract-first approach and gates:
+
+| Item | State |
+| --- | --- |
+| Migrations V29 (ipd) / V30 (nursing) / V31 (icu) / V32 (permission seeds) | Applied, idempotent |
+| Admission lifecycle (admit, bed allocation/release, transfer, discharge, discharge summary, attendants) + admission.* events | Covered by `inpatientAdmissionLifecycleCoverage` |
+| Nursing (assessments, care plans, SBAR handovers, notes, vitals, eMAR, risk assessments) + nursing.* events | Covered by `nursingDocumentationCoverage` |
+| ICU (high-frequency vitals, fluid balance, ventilation, infusion, critical alerts w/ acknowledge/resolve) + icu.* events | Covered by `icuMonitoringCoverage` |
+| Permissions (`ipd`/`nursing`/`icu` read+write) to SYSTEM_ADMIN, DOCTOR (ipd read), NURSE | Seeded |
+| Suite | 70 tests, 0 failures, JaCoCo instruction 80.1% / LINE 85.66% / BRANCH 52.53%, ktlint clean |

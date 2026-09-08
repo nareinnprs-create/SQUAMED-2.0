@@ -97,6 +97,18 @@ class PlatformIntegrationTests {
     return token
   }
 
+  private fun noRoleToken(): String {
+    val s = suffix()
+    val email = "noperm-$s@test.local"
+    assert2xx(
+      api(HttpMethod.POST, "/api/v1/auth/register", json("email" to email, "password" to "Passw0rd!123", "firstName" to "No", "lastName" to "Perms")),
+      "register no-role user: $email",
+    )
+    val login = api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123"))
+    assert2xx(login, "login no-role user")
+    return `data`(login)["accessToken"].asText()
+  }
+
   @BeforeEach
   fun noopSetUp() {
   }
@@ -3441,5 +3453,545 @@ class PlatformIntegrationTests {
         assertFalse(anonSession.isOpen, "anonymous ws must be closed with policy violation")
       }
     }
+  }
+
+  @Nested
+  inner class Phase2InpatientTests {
+    @Test
+    fun inpatientAdmissionLifecycleCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = firstHospitalId(token)
+      val wardId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json(
+              "name" to "Ward P2 $s",
+              "code" to "W2-$s",
+              "type" to "ICU",
+            ),
+            token,
+          ),
+        )["id"].asText()
+      val bed1Id = createBed(token, hospitalId, "ipd-bed1-$s", wardId)["id"].asText()
+      val bed2Id = createBed(token, hospitalId, "ipd-bed2-$s", wardId)["id"].asText()
+      val bed3Id = createBed(token, hospitalId, "ipd-bed3-$s", wardId)["id"].asText()
+      val patientId = createPatient(token, "Luke", "Inpatient", s)
+
+      val noPatient = api(HttpMethod.POST, "/api/v1/admissions", json("hospitalId" to hospitalId), token)
+      assertEquals(400, noPatient.status, "admit without patient -> ${noPatient.body.take(200)}")
+      val badType = api(HttpMethod.POST, "/api/v1/admissions", json("hospitalId" to hospitalId, "patientId" to patientId, "admissionType" to "walk-in"), token)
+      assertEquals(400, badType.status, "invalid admission type -> ${badType.body.take(200)}")
+      val noBeds =
+        api(
+          HttpMethod.POST,
+          "/api/v1/admissions",
+          json(
+            "hospitalId" to hospitalId,
+            "patientId" to patientId,
+            "wardId" to "11111111-1111-1111-1111-111111111111",
+          ),
+          token,
+        )
+      assertEquals(400, noBeds.status, "no bed available in unknown ward -> ${noBeds.body.take(200)}")
+
+      val admission =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionType" to "emergency",
+              "source" to "er",
+              "admissionDiagnosis" to "Chest pain",
+              "bedId" to bed1Id,
+            ),
+            token,
+          ),
+        )
+      val admissionId = admission["id"].asText()
+      assertEquals("admitted", admission["status"].asText(), "admission status")
+      assertEquals(bed1Id, admission["bedId"].asText(), "allocated bed")
+
+      assert2xx(api(HttpMethod.GET, "/api/v1/admissions/$admissionId", token = token), "get admission")
+      val admitted = `data`(api(HttpMethod.GET, "/api/v1/admissions?status=admitted", token = token))
+      assertTrue(admitted.any { it["id"].asText() == admissionId }, "admitted list contains admission")
+      assert2xx(api(HttpMethod.GET, "/api/v1/admissions?patientId=$patientId", token = token), "admission by patient")
+
+      val attendant =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions/$admissionId/attendants",
+            json(
+              "name" to "Mary",
+              "relationship" to "Spouse",
+              "phone" to "+9745555",
+            ),
+            token,
+          ),
+        )
+      assertNotNull(attendant["id"])
+      val noAttendantName = api(HttpMethod.POST, "/api/v1/admissions/$admissionId/attendants", json("phone" to "1"), token)
+      assertEquals(400, noAttendantName.status, "attendant without name")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/admissions/$admissionId/attendants", token = token)).size(), "attendant count")
+
+      val missingSummary = api(HttpMethod.GET, "/api/v1/admissions/$admissionId/discharge-summary", token = token)
+      assertEquals(400, missingSummary.status, "summary missing before discharge")
+
+      val sameBed = api(HttpMethod.POST, "/api/v1/admissions/$admissionId/transfer", json("toBedId" to bed1Id, "reason" to "same"), token)
+      assertEquals(400, sameBed.status, "transfer to same bed")
+      val occupiedBed =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "bedId" to bed3Id),
+            token,
+          ),
+        )
+      assertNotNull(occupiedBed["id"], "second admission to spare bed")
+      val busyTransfer = api(HttpMethod.POST, "/api/v1/admissions/$admissionId/transfer", json("toBedId" to bed3Id, "reason" to "busy"), token)
+      assertEquals(400, busyTransfer.status, "transfer to occupied bed")
+
+      val transferred =
+        `data`(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/transfer", json("toBedId" to bed2Id, "reason" to "clinical escalation"), token))
+      assertEquals(bed2Id, transferred["bedId"].asText(), "bed after transfer")
+      val transfers = `data`(api(HttpMethod.GET, "/api/v1/admissions/$admissionId/transfers", token = token))
+      assertEquals(1, transfers.size(), "transfer history count")
+
+      val discharge =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions/$admissionId/discharge",
+            json(
+              "dischargeType" to "home",
+              "dischargeNotes" to "Stable",
+              "summaryText" to "Chest pain resolved",
+              "followUpPlan" to "Cardiology clinic in 2 weeks",
+              "medicationsAtDischarge" to "Aspirin 75mg od",
+            ),
+            token,
+          ),
+        )
+      assertEquals("discharged", discharge["status"].asText(), "admission discharged")
+      assertNotNull(discharge["dischargedAt"])
+
+      val summary = `data`(api(HttpMethod.GET, "/api/v1/admissions/$admissionId/discharge-summary", token = token))
+      assertEquals("Chest pain resolved", summary["summaryText"].asText(), "discharge summary text")
+
+      val dupDischarge = api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge", json("dischargeType" to "home"), token)
+      assertEquals(400, dupDischarge.status, "discharge already discharged")
+
+      val readmit = `data`(api(HttpMethod.POST, "/api/v1/admissions", json("hospitalId" to hospitalId, "patientId" to patientId, "bedId" to bed2Id), token))
+      assertNotNull(readmit["id"], "discharged bed is reusable")
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/admissions/${readmit["id"].asText()}/discharge", json("dischargeType" to "home"), token),
+        "cleanup second admission",
+      )
+    }
+
+    @Test
+    fun nursingDocumentationCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = firstHospitalId(token)
+      val wardId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json(
+              "name" to "Nursing Ward $s",
+              "code" to "NW-$s",
+              "type" to "General",
+            ),
+            token,
+          ),
+        )["id"].asText()
+      val patientId = createPatient(token, "Nina", "Florence", s)
+      createBed(token, hospitalId, "nurse-bed-$s", wardId)
+      val admission =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionType" to "elective",
+              "wardId" to wardId,
+            ),
+            token,
+          ),
+        )
+      val admissionId = admission["id"].asText()
+      assertNotNull(admission["bedId"], "auto allocation picked a ward bed")
+
+      val assessment =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/assessments",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionId" to admissionId,
+              "assessmentType" to "admission",
+              "findings" to "Awake, alert, oriented",
+              "riskLevel" to "low",
+            ),
+            token,
+          ),
+        )
+      assertNotNull(assessment["id"])
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/nursing/assessments?patientId=$patientId", token = token)).size(), "assessments listed")
+      val badAssessment = api(HttpMethod.POST, "/api/v1/nursing/assessments", json("hospitalId" to hospitalId, "patientId" to patientId), token)
+      assertEquals(400, badAssessment.status, "assessment without type")
+
+      val plan =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/careplans",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionId" to admissionId,
+              "title" to "Mobility",
+              "goal" to "Ambulates independently",
+              "interventions" to "Physio twice daily",
+            ),
+            token,
+          ),
+        )
+      assertNotNull(plan["id"])
+      val completedPlan = `data`(api(HttpMethod.PATCH, "/api/v1/nursing/careplans/${plan["id"].asText()}/status", json("status" to "completed"), token))
+      assertEquals("completed", completedPlan["status"].asText(), "careplan completed")
+      val badPlanStatus = api(HttpMethod.PATCH, "/api/v1/nursing/careplans/${plan["id"].asText()}/status", json("status" to "on-hold"), token)
+      assertEquals(400, badPlanStatus.status, "invalid careplan status")
+
+      val note =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/notes",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionId" to admissionId,
+              "noteType" to "progress",
+              "content" to "Wound reviewed, clean and dry",
+            ),
+            token,
+          ),
+        )
+      assertNotNull(note["id"])
+      val noContent = api(HttpMethod.POST, "/api/v1/nursing/notes", json("hospitalId" to hospitalId, "patientId" to patientId), token)
+      assertEquals(400, noContent.status, "note without content")
+
+      val handover =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/handovers",
+            json(
+              "hospitalId" to hospitalId,
+              "wardId" to wardId,
+              "shift" to "night",
+              "situation" to "Stable",
+              "background" to "Day 2 post-op",
+              "assessment" to "Pain controlled",
+              "recommendation" to "Continue plan",
+            ),
+            token,
+          ),
+        )
+      assertNotNull(handover["id"])
+      val badShift = api(HttpMethod.POST, "/api/v1/nursing/handovers", json("hospitalId" to hospitalId, "shift" to "graveyard"), token)
+      assertEquals(400, badShift.status, "invalid handover shift")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/nursing/handovers?wardId=$wardId", token = token)).size(), "handover by ward")
+
+      val vitals =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/vitals",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionId" to admissionId,
+              "systolic" to 118,
+              "diastolic" to 76,
+              "heartRate" to 72,
+              "respiratoryRate" to 16,
+              "temperature" to 36.6,
+              "oxygenSaturation" to 98,
+              "gcs" to 15,
+            ),
+            token,
+          ),
+        )
+      assertNotNull(vitals["id"])
+      assertEquals(98, `data`(api(HttpMethod.GET, "/api/v1/nursing/vitals?patientId=$patientId", token = token))[0]["oxygenSaturation"].asInt(), "latest sat")
+
+      val mar =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/mar",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionId" to admissionId,
+              "medicationName" to "Paracetamol",
+              "dose" to "500mg",
+              "route" to "PO",
+              "scheduledAt" to
+                java.time.Instant
+                  .now()
+                  .plusSeconds(3600)
+                  .toString(),
+            ),
+            token,
+          ),
+        )
+      assertNotNull(mar["id"])
+      assertEquals("scheduled", mar["status"].asText())
+      val noSchedule = api(HttpMethod.POST, "/api/v1/nursing/mar", json("hospitalId" to hospitalId, "patientId" to patientId, "medicationName" to "X"), token)
+      assertEquals(400, noSchedule.status, "mar without scheduledAt")
+      val administered = `data`(api(HttpMethod.PATCH, "/api/v1/nursing/mar/${mar["id"].asText()}/status", json("status" to "administered"), token))
+      assertEquals("administered", administered["status"].asText(), "mar administered")
+      assertNotNull(administered["administeredAt"])
+      val badMarStatus = api(HttpMethod.PATCH, "/api/v1/nursing/mar/${mar["id"].asText()}/status", json("status" to "lost"), token)
+      assertEquals(400, badMarStatus.status, "invalid mar status")
+
+      val risk =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/risk-assessments",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionId" to admissionId,
+              "riskType" to "falls",
+              "score" to 8,
+              "level" to "high",
+            ),
+            token,
+          ),
+        )
+      assertNotNull(risk["id"])
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/nursing/risk-assessments?patientId=$patientId", token = token)).size(), "risk assessments listed")
+
+      val noPerm = noRoleToken()
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/nursing/vitals", token = noPerm).status, "nursing read denied for role-less user")
+      assertEquals(
+        403,
+        api(HttpMethod.POST, "/api/v1/nursing/vitals", json("patientId" to patientId), noPerm).status,
+        "nursing write denied for role-less user",
+      )
+
+      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge", json("dischargeType" to "home"), token), "cleanup nursing admission")
+    }
+
+    @Test
+    fun icuMonitoringCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = firstHospitalId(token)
+      val patientId = createPatient(token, "Ivana", "Critical", s)
+      val admission =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionType" to "emergency",
+              "bedId" to createBed(token, hospitalId, "icu-bed-$s", null)["id"].asText(),
+            ),
+            token,
+          ),
+        )
+      val admissionId = admission["id"].asText()
+
+      val vitals =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/icu/vitals",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionId" to admissionId,
+              "systolic" to 82,
+              "diastolic" to 54,
+              "heartRate" to 118,
+              "respiratoryRate" to 24,
+              "temperature" to 38.2,
+              "oxygenSaturation" to 91,
+              "map" to 63,
+              "etco2" to 35,
+              "gcs" to 13,
+            ),
+            token,
+          ),
+        )
+      assertNotNull(vitals["id"])
+      assertEquals(63, `data`(api(HttpMethod.GET, "/api/v1/icu/vitals?patientId=$patientId", token = token))[0]["map"].asInt(), "MAP recorded")
+
+      val fluid =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/icu/fluid-balance",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionId" to admissionId,
+              "inputMl" to 1000.0,
+              "outputMl" to 600.0,
+              "inputType" to "iv",
+              "outputType" to "urine",
+            ),
+            token,
+          ),
+        )
+      assertNotNull(fluid["id"])
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/icu/fluid-balance?patientId=$patientId", token = token)).size(), "fluid balance listed")
+
+      val vent =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/icu/ventilation",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionId" to admissionId,
+              "mode" to "SIMV",
+              "fio2Percent" to 40,
+              "peep" to 5.0,
+              "tidalVolumeMl" to 450,
+              "respiratoryRateSet" to 14,
+            ),
+            token,
+          ),
+        )
+      assertNotNull(vent["id"])
+      val noMode = api(HttpMethod.POST, "/api/v1/icu/ventilation", json("hospitalId" to hospitalId, "patientId" to patientId), token)
+      assertEquals(400, noMode.status, "ventilation without mode")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/icu/ventilation?patientId=$patientId", token = token)).size(), "ventilation listed")
+
+      val infusion =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/icu/infusions",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionId" to admissionId,
+              "drugName" to "Norepinephrine",
+              "dose" to "0.05 mcg/kg/min",
+              "rateMlPerHour" to 12.5,
+              "route" to "IV",
+            ),
+            token,
+          ),
+        )
+      assertNotNull(infusion["id"])
+      assertEquals("active", infusion["status"].asText())
+      val stopped = `data`(api(HttpMethod.PATCH, "/api/v1/icu/infusions/${infusion["id"].asText()}/status", json("status" to "stopped"), token))
+      assertEquals("stopped", stopped["status"].asText(), "infusion stopped")
+      val noDrug = api(HttpMethod.POST, "/api/v1/icu/infusions", json("hospitalId" to hospitalId, "patientId" to patientId), token)
+      assertEquals(400, noDrug.status, "infusion without drug")
+
+      val alert =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/icu/alerts",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "admissionId" to admissionId,
+              "alertType" to "desaturation",
+              "severity" to "critical",
+              "message" to "SpO2 dropped to 88%",
+            ),
+            token,
+          ),
+        )
+      val alertId = alert["id"].asText()
+      assertNotNull(alertId)
+      assertEquals("open", alert["status"].asText())
+      val openAlerts = `data`(api(HttpMethod.GET, "/api/v1/icu/alerts?patientId=$patientId&status=open", token = token))
+      assertTrue(openAlerts.any { it["id"].asText() == alertId }, "open alert visible")
+      val noAlertType = api(HttpMethod.POST, "/api/v1/icu/alerts", json("hospitalId" to hospitalId, "patientId" to patientId), token)
+      assertEquals(400, noAlertType.status, "alert without type")
+      val ack = `data`(api(HttpMethod.PATCH, "/api/v1/icu/alerts/$alertId/acknowledge", token = token))
+      assertEquals("acknowledged", ack["status"].asText(), "alert acknowledged")
+      assertNotNull(ack["acknowledgedBy"])
+      val resolved = `data`(api(HttpMethod.PATCH, "/api/v1/icu/alerts/$alertId/status", json("status" to "resolved"), token))
+      assertEquals("resolved", resolved["status"].asText(), "alert resolved")
+      val resolvedList = `data`(api(HttpMethod.GET, "/api/v1/icu/alerts?patientId=$patientId&status=resolved", token = token))
+      assertTrue(resolvedList.any { it["id"].asText() == alertId }, "resolved alert listed")
+
+      val noPerm = noRoleToken()
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/icu/vitals", token = noPerm).status, "icu read denied for role-less user")
+      assertEquals(403, api(HttpMethod.POST, "/api/v1/icu/alerts", json("patientId" to patientId), noPerm).status, "icu write denied for role-less user")
+
+      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge", json("dischargeType" to "home"), token), "cleanup icu admission")
+    }
+
+    private fun firstHospitalId(token: String): String = `data`(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals", token = token))[0]["id"].asText()
+
+    private fun createBed(
+      token: String,
+      hospitalId: String,
+      label: String,
+      wardId: String?,
+    ): JsonNode =
+      `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+          json("label" to label, "type" to "ICU", "status" to "available", "wardId" to wardId),
+          token,
+        ),
+      )
+
+    private fun createPatient(
+      token: String,
+      firstName: String,
+      lastName: String,
+      s: String,
+    ): String =
+      `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json(
+            "firstName" to firstName,
+            "lastName" to "$lastName$s",
+            "gender" to "female",
+            "dateOfBirth" to "1985-05-10",
+            "phone" to "5511$s".take(12),
+            "qid" to "P2$s".take(11),
+            "nationality" to "Qatar",
+            "city" to "Doha",
+          ),
+          token,
+        ),
+      )["patient"]["id"].asText()
   }
 }

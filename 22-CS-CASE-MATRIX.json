@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "source": "22-CS-CASE-MATRIX.md",
+  "catalog": "08-TEST-STRATEGY.md#3",
+  "rules": {
+    "mandatory_scope": "section fails gate 8 without green runs of bound cases",
+    "regression": "bound cases re-run at every subsequent chunk exit",
+    "new_cases": "append to 08 §3 + this file before implementation",
+    "ci_parity": "chunk 0 CI job validates this JSON matches the markdown table (17-22-CS matrix parity)"
+  },
+  "cases": [
+    { "id": "CS-01", "title": "Wrong-patient write blocked by two-identifier rule + audit", "sections": ["01.04", "02.06", "04.07", "07.02"], "first_exit": "01.12" },
+    { "id": "CS-02", "title": "Allergy BLOCK, no override path", "sections": ["01.04", "02.07"], "first_exit": "01.12" },
+    { "id": "CS-03", "title": "Allergy WARN override requires typed reason + KPI", "sections": ["01.04", "02.07"], "first_exit": "01.12" },
+    { "id": "CS-04", "title": "High-alert medication second authorized user", "sections": ["02.06", "04.02"], "first_exit": "02.09" },
+    { "id": "CS-05", "title": "Critical result SLA escalation chain", "sections": ["02.03", "02.05", "04.05"], "consumers": ["05.04"], "first_exit": "02.09" },
+    { "id": "CS-06", "title": "eMAR barcode mismatch hard block", "sections": ["04.02"], "first_exit": "04.09" },
+    { "id": "CS-07", "title": "Merge error reversal restores byte-identical state", "sections": ["00.08", "06.01"], "first_exit": "00.17" },
+    { "id": "CS-08", "title": "Offline replay exactly-once under chaos simulation", "sections": ["00.13", "06.08"], "first_exit": "00.17" },
+    { "id": "CS-09", "title": "Downtime paper mode + re-entry tool", "sections": ["01.09", "06.08"], "first_exit": "01.12" },
+    { "id": "CS-10", "title": "Blood bedside wristband mismatch = BLOCK", "sections": ["04.07"], "first_exit": "04.09" },
+    { "id": "CS-11", "title": "Discharge blocked without med-rec task cleared", "sections": ["04.08"], "first_exit": "04.09" },
+    { "id": "CS-12", "title": "Unsigned note produces no bill line / rejected claim", "sections": ["01.04", "03.04"], "first_exit": "01.12" },
+    { "id": "CS-13", "title": "Mass-casualty mode + drill in test hospital", "sections": ["07.05"], "first_exit": "07.11" },
+    { "id": "CS-14", "title": "No AI write path to signed legal records (architecture test)", "sections": ["05.01", "05.05", "07.01", "08.02"], "first_exit": "05.08" },
+    { "id": "CS-15", "title": "Audit chain tamper detected at verify + pages", "sections": ["00.10", "08.04"], "first_exit": "00.17" }
+  ]
+}

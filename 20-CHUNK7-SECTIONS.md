@@ -1,0 +1,18 @@
+# CHUNK 7 — SECTION GRAPH (full depth completion)
+Ledger source for wave 8. Est. in **agent-plan weeks** (~8 wk total). Contract: `chunk-07-full-depth.md`. **Purpose: nothing remains "lite" after this wave.**
+
+| # | Section | Contents | Depends on | Est. | Notes |
+|---|---|---|---|---|---|
+| 07.01 ⛔ | Six new agents + orchestrator | Clinical, Pharmacy, Facilities, Procurement, Security, Executive agents added to chunk-5's three; orchestrator decomposes cross-domain questions into agent queries → synthesized blocker/owner/impact/action; per-agent eval suites (unauthorized-action = 0) | chunk 6 exit | 1.5 | Dual review (AI) |
+| 07.02 | Voice operating interface | Governed voice task execution (approve-by-voice low-risk only; **high-risk categories hard-excluded** → approval UI), multilingual intent layer, screen-aware context, human escalation; dictation-only limitation removed | 07.01 | 1.0 | §8 rule 4 |
+| 07.03 | Digital twin + capacity intelligence | Materialized operational views over event fabric (no new DB), constraint analysis ("can we take 18 more admissions tonight?") with evidence; 30-day replay reconciles with actuals | 06.06 | 1.0 | |
+| 07.04 ⛔ | Full financials | GL, AP, AR, cash/bank recon, cost centres, budget vs actual, forecast, asset accounting, financial reporting, GST return filing packs, audit integration; month-close simulation ties trial balance to ledger | 03 | 1.5 | Dual review (money) |
+| 07.05 | Full ED & trauma | ATS/ESI-configurable triage, resus bay workflows, trauma team activation, mass-casualty mode (+ drill in test hospital), ED dashboards; replaces chunk-1 triage-lite completely | 06.05 | 1.0 | CS-13 |
+| 07.06 | Full kiosk + wayfinding | Payment kiosk, report-collection kiosk, indoor navigation with live routing (per-campus map config), multi-language | 01.08 | 1.0 | ⛔ external: indoor mapping vendor/format |
+| 07.07 | Allied health + patient-experience depth | Physio/diet/OT/speech/rehab/social-work/psychology documentation + appointments + care-plan integration; contact centre (§43); international patient desk (§44); patient-experience/CRM full (§42) with agent-assist | chunk 6 exit | 1.5 | |
+| 07.08 | QMS + IPC + legal | Complete QMS (indicators, accreditation evidence packs, CAPA, audit program); full IPC (surveillance, outbreak, device-associated, hand hygiene); legal/risk (litigation hold, risk registers, evidence preservation) | chunk 6 exit | 1.0 | |
+| 07.09 | Lab & support depth | Microbiology full ID/AST (organism ID, AST panels, antibiogram); cytology/histopathology full slide workflow; blood-bank NAT screening integration; full food-service ops (kitchen production, tray delivery) — binds chunk-2/4 deferrals (SC-1/2/3) | 06.05, 02, 04 | 1.0 | |
+| 07.10 | Specialty packs + migration studio + benchmarking/ESG | 22 specialty packs install config-only in <1 day; migration studio (extract→map→clean→transform→validate→import→reconcile, rollback, legacy dry-run); anonymized consent-gated benchmarking; ESG reporting | 06, content per `11` | 1.0 | ⛔ external: 22 packs clinical review (human-paced) |
+| 07.11 ⛔ | **Chunk exit** | Demo scenario (orchestration→twin→mass-casualty→GL close→cardiology pack→migration→benchmark), 50-question orchestration eval ≥90%, month-close sim, drills, dual review | all | 0.5 | ⛔ external: prescriptive-CDS counsel opinion (gate documented, not crossed) |
+
+**Lanes (≈8 wk):** (07.01→07.02) · (07.04) · (07.05→07.06) · (07.07) · (07.03, 07.08) · (07.09) · (07.10) · exit last. Raw sum 12.0 wk over 7 lanes — heaviest wave; 22-pack content deadline is −4 wk per `11-CLINICAL-CONTENT-PLAN.md`.

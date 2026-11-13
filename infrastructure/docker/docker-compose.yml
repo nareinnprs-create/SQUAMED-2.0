@@ -84,7 +84,9 @@ services:
       start_period: 30s
 
   minio:
-    image: minio/minio:latest
+    # minio/minio images were deleted from Docker Hub and quay.io by MinIO (2025-2026); pgsty/silo
+    # is the maintained AGPL MinIO fork that honors the same MINIO_* env and S3 API.
+    image: pgsty/silo:RELEASE.2026-11-12T00-00-00Z
     container_name: squamed-minio
     command: server /data --console-address ":9001"
     environment:

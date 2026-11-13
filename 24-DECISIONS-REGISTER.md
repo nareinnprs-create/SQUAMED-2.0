@@ -19,6 +19,10 @@
 | D13 | Indoor mapping vendor/format | chunk-07 OPEN | Chunk 7 wk 1 | E12 | OPEN |
 | D14 | Market #2 selection | chunk-08 OPEN | Chunk 8 kickoff | B8 | OPEN |
 | D15 | Marketplace commercial model (rev-share %, listing fees) | chunk-08 OPEN | Chunk 8 wk 1 | B7 | OPEN |
+| D16 | Identity: planned Keycloak vs adopted build's own JWT+TOTP auth module | SC-6 adoption | Chunk 0 wk 1 (00.03) | Master baseline audit | OPEN |
+| D17 | FHIR: planned HAPI FHIR buy vs adopted build's hand-rolled `FhirService` (403 lines) | SC-6 adoption | Chunk 0 wk 1 (00.07 ABHA rides on it) | Master baseline audit, E1 | OPEN |
+| D18 | Tenancy: planned Postgres RLS vs adopted build's `hospital_id` column scoping | SC-6 adoption | Chunk 0 wk 1 (00.04) | Master baseline audit | OPEN |
+| D19 | Interop engine: planned Mirth Connect vs adopted build's built-in HL7 v2 module | SC-6 adoption | Chunk 2 wk 1 (02.01) | Master baseline audit, E6 | OPEN |
 
 ## Already-decided (for the record — don't re-open without protocol §5.2)
 | ID | Decision | Where |

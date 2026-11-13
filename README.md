@@ -1,6 +1,8 @@
 # SQUAMED 2.0 — BUILD TRACKER
 
-Vision reference: `SQUAMED — Master Blueprint 2026–2030.md` (Downloads)
+Vision reference: `SQUAMED - Master Blueprint 2026-2030.md` (Downloads)
+
+**Code baseline:** `master` branch — prior verified build (Phase 1 MVP + Phase 2a–2e, Sep 2026), adopted 2026-11-13 (SC-6); baseline audit is first action of chunk 0 kickoff (`13` §9).
 
 ## Document index
 | Doc | Role |

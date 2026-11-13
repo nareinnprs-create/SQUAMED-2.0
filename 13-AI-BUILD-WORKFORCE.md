@@ -94,6 +94,10 @@ Denominated in sessions; $ re-priced at gateway account creation, then tracked w
 Context-cost controls (unchanged): section-scoped sessions (§4), report handoffs, ledger as cross-session memory. Per-session token cost varies by provider — the weekly report carries cost-per-section actuals from the first gate run onward.
 
 ## 9. FIRST ACTIONS WHEN BUILD STARTS (chunk 0 kickoff)
-1. Scaffold repo + worktree lanes + CI gates (00.01) — gates before feature code, per protocol.
-2. Initialize `reports/LEDGER.md` from `04-CHUNK0-SECTIONS.md`.
-3. Request list issued to you: ABDM sandbox, WhatsApp BSP/DLT, SMS provider, payment gateway, pilot hospital contact — the external track starts day 1 in parallel.
+1. **Baseline audit (read-only):** map adopted `master` build (prior Phase 1 + 2a–2e, verified Sep 2026) module-by-module onto the 89 sections — what exists, what passes a gate dry-run, which ADR conflicts (D16–D19) are live. Output: baseline-audit report + updated ledger notes. No code merged before gates exist.
+2. Scaffold repo + worktree lanes + CI gates (00.01) — gates before feature code, per protocol.
+3. Merge `master` into the gated `main` (or re-root into the planned monorepo layout), then run every overlapped section through the 12 gates: pass → evidence cited; fail/conflict → rebuild.
+4. Verify `reports/LEDGER.md` (pre-initialized at planning — all 89 sections PLANNED).
+5. Request list issued to you: ABDM sandbox, WhatsApp BSP/DLT, SMS provider, payment gateway, pilot hospital contact — the external track starts day 1 in parallel.
+
+Session budget note (§8): overlap with the adopted baseline shrinks the ~200–270 build-session estimate; actuals re-baselined after the audit — not before.

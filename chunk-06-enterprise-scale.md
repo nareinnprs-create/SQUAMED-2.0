@@ -1,6 +1,7 @@
 # CHUNK 06 — ENTERPRISE, SCALE & RESILIENCE
 **Status:** PLANNED · **Window:** Jun → Oct 2028 (16 wk) · **Depends on:** chunk 05 exit
 **Stack entering:** ClickHouse (BI), Temporal (long workflows, only if discharge/claim state machines justify), HAPI FHIR server (outbound interop), Tauri shell + React Native decision point
+**Baseline (SC-6):** `master` prior build has an interop module (HL7 v2, FHIR stub, integration connections) and Next.js web app with real-time SSE — partial overlap only; group/telemedicine/BI/resilience have no prior code; FHIR direction decided by D17 before 06.07.
 
 ## GOAL
 One hospital becomes many: **multi-hospital group, telemedicine, patient apps, ops modules, BI, hardened DR** — the platform survives losing a datacenter and gains a second hospital without a code change (blueprint §117 north stars).

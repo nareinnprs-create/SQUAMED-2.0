@@ -1,6 +1,7 @@
 # CHUNK 05 — AI INTELLIGENCE (governed)
 **Status:** PLANNED · **Window:** Mar → Jun 2028 (14 wk) · **Depends on:** chunk 04 exit
 **Stack entering:** `services/ai-gateway`, model provider contracts (India-region/zero-retention), STT provider, eval harness
+**Baseline (SC-6):** `master` prior build has a scribe module (pipeline, STT providers, entities, tests) and an `ai/` module (intent service, providers) — enter gates on existing code after the chunk-0 baseline audit; §8 rule 8 (custom providers) and eval-gating still apply in full.
 
 ## GOAL
 The AI layer of blueprint §56–63 **with contracts**: scribe, command bar, intelligence rail, 3 production agents — every capability eval-gated, permission-bound, kill-switched.

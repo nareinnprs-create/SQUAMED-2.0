@@ -1,6 +1,7 @@
 # CHUNK 04 — INPATIENT, SURGERY & CRITICAL CARE
 **Status:** PLANNED · **Window:** Nov 2027 → Mar 2028 (16 wk) · **Depends on:** chunks 1–3 exit
 **Stack entering:** Device gateway layer (vendor monitors via vendor gateways/HL7), blood bank module
+**Baseline (SC-6):** `master` prior build has IPD, nursing, ICU, surgery/OT, anaesthesia, emergency, blood-bank modules (Phase 2a–2e) — sections enter gates on existing code after the chunk-0 baseline audit; device integration (04.04) has no prior code.
 
 ## GOAL
 **Full hospital live:** the IPD + OT + ICU spine — admission to discharge — on the same platform, same patient context, same billing engine.

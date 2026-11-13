@@ -1,6 +1,7 @@
 # CHUNK 01 — OPD & FRONT OFFICE
 **Status:** PLANNED · **Window:** Mar → May 2027 (12 wk) · **Depends on:** chunk 00 exit
 **Stack entering:** OpenSearch already in; TV/kiosk PWA targets; eSign integration
+**Baseline (SC-6):** `master` prior build covers much of this chunk (scheduling, reception queue/visit registration, encounter EMR, Patient 360) — sections may enter gates on existing code after the chunk-0 baseline audit.
 
 ## GOAL
 **A real OPD day runs end-to-end on Squamed** — the first moment the product touches live hospital operations.

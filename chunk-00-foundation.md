@@ -1,6 +1,7 @@
 # CHUNK 00 — FOUNDATION & GOVERNED PLATFORM
 **Status:** PLANNED · **Window:** Dec 2026 → Feb 2027 (12 wk) · **Depends on:** —
 **Stack entering:** Kotlin/Spring monolith, React PWA shell, Postgres, Redis, Keycloak, OpenTelemetry/Grafana, OpenSearch
+**Baseline (SC-6):** `master` prior build covers much of this chunk (identity/JWT+TOTP, hospital config, master data, patient+EMPI, audit, tasks, notifications, search, workflow) — sections may enter gates on existing code after the chunk-0 baseline audit; conflicts → D16–D18.
 
 ## GOAL
 A governed, configurable, audited platform on which every later domain is "add, not rebuild" (blueprint §104 honored in code, not slides).

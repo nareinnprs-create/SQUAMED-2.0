@@ -20,6 +20,7 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 | SC-3 | 2026-11-13 | Full food-service ops (beyond "Dietary-lite") → chunk 7 item 13 | chunk-04 pointer, chunk-07 §13 | Product owner (same) |
 | SC-4 | 2026-11-13 | AI report drafting (structured radiology/lab draft from findings dictation) → chunk 5 item 9 (was OUT-OF-SCOPE unbound) | chunk-05 §9, chunk-02 pointer, `06` catalog | Product owner (same) |
 | SC-5 | 2026-11-13 | Web Push live retires chunk-0 push stub → chunk 6 §3 | chunk-06 §3, graph `19` | Product owner (same) |
+| SC-6 | 2026-11-13 | Prior build `master` (Phase 1 MVP + Phase 2a–2e, Sep 2026, 6 commits, self-verified: 67 tests, JaCoCo 80.11%) **adopted as code baseline** — chunks 0–6 sections may enter gates on existing code after baseline audit; ADR conflicts re-opened as D16–D19 | chunk-00…06 baseline notes, `13` §9, `24` D16–D19 | Product owner (adopt-as-baseline choice) |
 
 ## Wave 1 — chunk 0 Foundation
 | Date | Chunk | Section | Status | Gates 1-12 | Tests | Coverage | Blocked | Scope changes | Report |

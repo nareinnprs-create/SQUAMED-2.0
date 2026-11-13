@@ -1,6 +1,7 @@
 # CHUNK 03 — REVENUE CYCLE
 **Status:** PLANNED · **Window:** Aug → Nov 2027 (12 wk) · **Depends on:** chunk 01 exit (can overlap chunk 2 by one sprint with team of 8)
 **Stack entering:** Tax engine config, TPA payer adapters
+**Baseline (SC-6):** `master` prior build has a billing module (charges/invoices/payments/tariffs) — thinner than this contract (no tax engine, no TPA/claims, no coding); sections enter gates on existing code only after the chunk-0 baseline audit.
 
 ## GOAL
 **Clinical activity becomes compliant money:** bill → tax → claim → settlement, with leakage detection live.

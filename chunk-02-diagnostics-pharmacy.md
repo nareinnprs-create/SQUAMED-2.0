@@ -1,6 +1,7 @@
 # CHUNK 02 — DIAGNOSTICS & PHARMACY
 **Status:** PLANNED · **Window:** May → Aug 2027 (14 wk) · **Depends on:** chunk 01 exit
 **Stack entering:** Mirth Connect (HL7 v2), Orthanc (DICOM) + OHIF viewer, drug interaction dataset
+**Baseline (SC-6):** `master` prior build has a lab module (orders/results/permissions) and pharmacy module (stock/dispensation) — thinner than this contract; sections enter gates on existing code only after the chunk-0 baseline audit; analyzer intake vs D19 (Mirth vs built-in HL7) decided before 02.01.
 
 ## GOAL
 Orders written in chunk 1 become real: **order → sample → result → validated report** and **prescribe → dispense → administer-ready medication record** with safety checking.

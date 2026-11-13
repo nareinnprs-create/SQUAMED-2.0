@@ -1,0 +1,73 @@
+:root,
+[data-theme='clinical'] {
+  color-scheme: light;
+  --sq-bg: #f7f8f6;
+  --sq-surface: #ffffff;
+  --sq-secondary: #eef1ef;
+  --sq-fg: #15191a;
+  --sq-fg-muted: #596267;
+  --sq-border: #dde2df;
+  --sq-primary: #087f7a;
+  --sq-primary-fg: #ffffff;
+  --sq-primary-soft: rgba(8, 127, 122, 0.12);
+  --sq-success: #2e7d32;
+  --sq-warning: #f57c00;
+  --sq-critical: #c62828;
+  --sq-information: #1565c0;
+  --sq-focus-ring: #087f7a;
+  --sq-disabled: #b7bcba;
+  --sq-shadow-sm: 0 1px 2px rgba(21, 25, 26, 0.05);
+  --sq-shadow-md: 0 2px 4px rgba(21, 25, 26, 0.08);
+  --sq-shadow-lg: 0 4px 8px rgba(21, 25, 26, 0.12);
+  --sq-shadow-xl: 0 8px 16px rgba(21, 25, 26, 0.16);
+}
+
+[data-theme='enterprise'] {
+  color-scheme: light;
+  --sq-bg: #fafaf8;
+  --sq-surface: #ffffff;
+  --sq-secondary: #f0f1ec;
+  --sq-fg: #17191a;
+  --sq-fg-muted: #5a6264;
+  --sq-border: #d9deda;
+  --sq-primary: #0b6f8a;
+  --sq-primary-fg: #ffffff;
+  --sq-primary-soft: rgba(11, 111, 138, 0.12);
+  --sq-success: #2f7d4f;
+  --sq-warning: #b96a00;
+  --sq-critical: #b0303a;
+  --sq-information: #12548f;
+  --sq-focus-ring: #0b6f8a;
+  --sq-disabled: #b4bab6;
+  --sq-shadow-sm: 0 1px 2px rgba(23, 25, 26, 0.06);
+  --sq-shadow-md: 0 2px 4px rgba(23, 25, 26, 0.10);
+  --sq-shadow-lg: 0 4px 8px rgba(23, 25, 26, 0.14);
+  --sq-shadow-xl: 0 8px 16px rgba(23, 25, 26, 0.18);
+}
+
+[data-theme='command'] {
+  color-scheme: dark;
+  --sq-bg: #101414;
+  --sq-surface: #171c1d;
+  --sq-secondary: #22292a;
+  --sq-fg: #e8eceb;
+  --sq-fg-muted: #9aa5a4;
+  --sq-border: #2e3839;
+  --sq-primary: #2bb0a8;
+  --sq-primary-fg: #101414;
+  --sq-primary-soft: rgba(43, 176, 168, 0.16);
+  --sq-success: #66bb6a;
+  --sq-warning: #ffa726;
+  --sq-critical: #ef5350;
+  --sq-information: #42a5f5;
+  --sq-focus-ring: #2bb0a8;
+  --sq-disabled: #4a5253;
+  --sq-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sq-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.5);
+  --sq-shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.6);
+  --sq-shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.7);
+}
+
+.theme-command-scrim {
+  background: var(--sq-bg);
+}

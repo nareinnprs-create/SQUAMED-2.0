@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: squamed
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: squamed-config
+  namespace: squamed
+data:
+  SPRING_PROFILES_ACTIVE: "staging"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5433/squamed"
+  SPRING_DATA_REDIS_HOST: "redis"
+  SPRING_DATA_REDIS_PORT: "6380"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  OPENSEARCH_URI: "http://opensearch:9200"
+  SQUAMED_HL7_MLLP_PORT: "2575"
+  NEXT_PUBLIC_API_BASE_URL: "http://squamed-backend:8080/api/v1"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: squamed-secrets
+  namespace: squamed
+type: Opaque
+stringData:
+  SPRING_DATASOURCE_USERNAME: "squamed"
+  SPRING_DATASOURCE_PASSWORD: "change-me"
+  JWT_SECRET: "change-me-jwt-secret-at-least-32-chars"
+  SQUAMED_AI_API_KEY: ""

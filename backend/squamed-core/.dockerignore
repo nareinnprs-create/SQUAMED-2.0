@@ -1,0 +1,8 @@
+.gradle
+.kotlin
+build
+*.log
+.env
+hs_err_pid*.log
+.idea
+.vscode

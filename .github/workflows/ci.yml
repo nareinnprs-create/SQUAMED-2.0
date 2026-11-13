@@ -40,10 +40,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Scan source paths for banned markers
         run: |
-          hits="$(rg -i --no-heading -n \
-            --glob '{backend,apps,packages,services,scripts}/**' \
-            --glob '!**/*.md' \
-            'TODO|FIXME|stub|placeholder|mock|not implemented|for now' \
+          # git ls-files = tracked files only (immune to build artifacts); -0 for
+          # path safety; no rg dependency (rg is NOT preinstalled on runners — a
+          # missing scanner must fail loudly, never read as "zero hits").
+          set -o pipefail
+          hits="$(git ls-files -z backend apps packages services scripts ':(exclude)*.md' \
+            | xargs -0 -r grep -I -i -n -E 'TODO|FIXME|stub|placeholder|mock|not implemented|for now' \
             | grep -v 'test-fixture' || true)"
           if [ -n "$hits" ]; then
             echo "Zero-stub gate failed — remove the markers or tag genuine test fixtures:" >&2
@@ -152,7 +154,7 @@ jobs:
       - name: Install Playwright browsers (drives axe + visual regression)
         run: npx playwright install --with-deps chromium
       - name: Build web app
-        run: npx turbo build --filter=web
+        run: npx turbo build --filter=@squamed/web
       - name: axe-core scan
         run: npm run axe --workspace apps/web
       - name: Lighthouse budget check

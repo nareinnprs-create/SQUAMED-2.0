@@ -1,0 +1,22 @@
+{
+  "name": "@squamed-service-analytics",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "uvicorn src.main:app --reload --port 8005",
+    "start": "uvicorn src.main:app --port 8005",
+    "lint": "ruff check src/",
+    "test": "pytest",
+    "clean": "rm -rf __pycache__ .pytest_cache dist node_modules"
+  },
+  "dependencies": {
+    "fastapi": "^0.115.0",
+    "uvicorn": "^0.34.0",
+    "pydantic": "^2.10.0",
+    "clickhouse-connect": "^0.8.0"
+  },
+  "devDependencies": {
+    "ruff": "^0.9.0",
+    "pytest": "^8.0.0"
+  }
+}

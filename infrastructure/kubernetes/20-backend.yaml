@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squamed-backend
+  namespace: squamed
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: squamed-backend
+  template:
+    metadata:
+      labels:
+        app: squamed-backend
+    spec:
+      containers:
+        - name: backend
+          image: squamed/backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: mllp
+              containerPort: 2575
+          envFrom:
+            - configMapRef:
+                name: squamed-config
+            - secretRef:
+                name: squamed-secrets
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 500m
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: squamed-backend
+  namespace: squamed
+spec:
+  selector:
+    app: squamed-backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: mllp
+      port: 2575
+      targetPort: mllp
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: squamed-backend
+  namespace: squamed
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: squamed-backend
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

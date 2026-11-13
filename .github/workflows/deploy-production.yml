@@ -1,0 +1,120 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type APPROVE to deploy to production'
+        required: true
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}-backend
+  IMAGE_TAG: latest
+
+jobs:
+  gate:
+    name: Production Approval Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require explicit confirmation
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm != 'APPROVE'
+        run: |
+          echo "::error::Deployment requires the 'APPROVE' confirmation input."
+          exit 1
+
+  build-and-push:
+    name: Build and Push Image
+    needs: [gate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend/squamed-core
+          file: backend/squamed-core/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }},${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Production Host
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload compose manifest
+        uses: appleboy/scp-action@v0.1.8
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          source: infrastructure/docker/docker-compose.prod.yml
+          target: /opt/squamed/production
+
+      - name: Roll out the new image
+        uses: appleboy/ssh-action@v1.2.1
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/squamed/production
+            export SQUAMED_IMAGE=${{ env.IMAGE }}:${{ github.sha }}
+            export SQUAMED_ENV=production
+            export JWT_SECRET=${{ secrets.PRODUCTION_JWT_SECRET }}
+            export DB_PASSWORD=${{ secrets.PRODUCTION_DB_PASSWORD }}
+            export BOOTSTRAP_ADMIN_PASSWORD=${{ secrets.PRODUCTION_ADMIN_PASSWORD }}
+            export BOOTSTRAP_ADMIN_EMAIL=${{ vars.PRODUCTION_ADMIN_EMAIL }}
+            docker compose -f docker-compose.prod.yml pull backend -q
+            docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate backend
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:8080/actuator/health > /dev/null; then echo "production healthy"; exit 0; fi
+              sleep 10
+            done
+            echo "production did not become healthy" >&2
+            exit 1
+
+  smoke:
+    name: Smoke Test Production
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run smoke checks
+        env:
+          BASE_URL: ${{ vars.PRODUCTION_URL }}
+          SMOKE_USER: ${{ vars.SMOKE_USERNAME }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+        shell: pwsh
+        run: |
+          if ($env:BASE_URL) {
+            powershell -ExecutionPolicy Bypass -File scripts/phase1-e2e.ps1 -baseUrl $env:BASE_URL -username $env:SMOKE_USER -password $env:SMOKE_PASSWORD
+          } else {
+            Write-Host "PRODUCTION_URL not configured; smoke skipped"
+          }

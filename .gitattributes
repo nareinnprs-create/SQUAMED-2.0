@@ -1,0 +1,6 @@
+# Hash-verified and CI-consumed files must stay LF so Windows checkouts cannot
+# corrupt sha256sum -c verification (§7.3).
+.gate/** text eol=lf
+.github/** text eol=lf
+scripts/** text eol=lf
+CODEOWNERS text eol=lf

@@ -21,6 +21,20 @@ repositories {
     mavenCentral()
 }
 
+// Infra-dependent tests (Testcontainers or the compose dev stack) live outside :test so the
+// backend-gates job (ktlintCheck + test + coverage) never needs Docker. The integration-gates
+// job starts the compose stack and runs the "integrationTest" task by exact name.
+val integrationTestSourceSet = sourceSets.create("integrationTest")
+
+configurations {
+    named("integrationTestImplementation") { extendsFrom(configurations.testImplementation.get()) }
+    named("integrationTestRuntimeOnly") { extendsFrom(configurations.testRuntimeOnly.get()) }
+}
+
+dependencies {
+    "integrationTestImplementation"(sourceSets.main.get().output)
+}
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
@@ -106,8 +120,16 @@ fun jacocoClassDirectories(): FileTree = sourceSets.main.get().output.asFileTree
     exclude(jacocoExcludes)
 }
 
+// Explicit exec-data source: a fileTree over build/jacoco/*.exec so the report/verification tasks
+// merge test.exec and integrationTest.exec when both exist, WITHOUT depending on the integrationTest
+// task (the backend-gates job runs only `test`; withType(Test)-based defaults would force it to run).
+val jacocoExecFiles: FileTree = fileTree("${layout.buildDirectory.get()}/jacoco") {
+    include("*.exec")
+}
+
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
+    executionData.setFrom(jacocoExecFiles)
     reports {
         xml.required.set(true)
         html.required.set(true)
@@ -118,6 +140,7 @@ tasks.jacocoTestReport {
 
 tasks.jacocoTestCoverageVerification {
     dependsOn(tasks.test)
+    executionData.setFrom(jacocoExecFiles)
     classDirectories.setFrom(jacocoClassDirectories())
     violationRules {
         rule {
@@ -138,6 +161,16 @@ val ktlintCli by configurations.creating
 
 dependencies {
     ktlintCli("com.pinterest.ktlint:ktlint-cli:1.8.0")
+}
+
+// Task name "integrationTest" is load-bearing: ci.yml integration-gates runs `./gradlew integrationTest`.
+tasks.register<Test>("integrationTest") {
+    group = "verification"
+    description = "Infra-dependent integration tests; defaults to the compose dev stack (override with SQUAMED_IT_EXTERNAL=false for Testcontainers)"
+    testClassesDirs = integrationTestSourceSet.output.classesDirs
+    classpath = integrationTestSourceSet.runtimeClasspath
+    shouldRunAfter(tasks.test)
+    environment("SQUAMED_IT_EXTERNAL", System.getenv("SQUAMED_IT_EXTERNAL") ?: "true")
 }
 
 val ktlintCheck = tasks.register<JavaExec>("ktlintCheck") {

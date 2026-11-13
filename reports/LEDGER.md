@@ -23,7 +23,7 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 | SC-6 | 2026-11-13 | Prior build `master` (Phase 1 MVP + Phase 2a–2e, Sep 2026, 6 commits, self-verified: 67 tests, JaCoCo 80.11%) **adopted as code baseline** — chunks 0–6 sections may enter gates on existing code after baseline audit; ADR conflicts re-opened as D16–D19 | chunk-00…06 baseline notes, `13` §9, `24` D16–D19 | Product owner (adopt-as-baseline choice) |
 | SC-7 | 2026-11-13 | Package manager: plan said pnpm workspace; adopted baseline uses npm workspaces (npm 12 + package-lock.json) — consequence of SC-6, zero-value churn to convert | chunk-00 item 1 | Product owner via SC-6 (baseline adoption is intrinsic) |
 | SC-8 | 2026-11-13 | Landing protocol on `main`: ruleset 27190834 requires status checks BEFORE push and the fine-grained PAT cannot PATCH/DELETE rulesets (404) → all landings go through PRs; during the post-merge wiring window, when intentionally-red gates (a11y-perf, integration) block a merge, merge with `--admin` and log each such merge here | ruleset 27190834, `reports/00.01-INFRASTRUCTURE-SCAFFOLD.md` | Product owner (autonomy mandate; first application = baseline merge PR) |
-| SC-9 **PROPOSED** | 2026-11-13 | §7 amendment — Gate 2 (zero-stub) false-positive allowlist: (a) `todo` collides with `toDouble()`/`toDoubleOrNull()` — allowlist `\.toDouble(OrNull)?\(` (11 hits, all this form); (b) TSX/HTML input attribute `placeholder="…"`, `placeholder={…}`, prop declaration `placeholder?:` — allowlist those forms (55 hits, all UI text hints); (c) `mockk` dependency line in `backend/squamed-core/build.gradle.kts` + existing `test-fixture` tags stay allowlisted. NOT allowlisted: identifiers like `PlaceholderPage` — the 3 real stubs stay gate-red until rebuilt. Blocking semantics unchanged: gate still fails on every real unimplemented-work marker. Evidence: `reports/BASELINE-AUDIT.md` §stub census + CI run 43422284179 hit list. | .gate/GATES.md gate 2 row, .gate/README.md §7.1 path | **Awaiting product owner** — gate stays red on these hits until approved; approved text goes into GATES.md row + ci.yml pattern |
+| SC-9 | 2026-11-13 | §7 amendment — Gate 2 (zero-stub) false-positive allowlist, **APPROVED**: (a) `\.toDouble(OrNull)?\(` — 11 hits, "todo" substring collision with Kotlin numeric conversions; (b) lowercase `placeholder` token — UI attr/prop plumbing (`Placeholder*` CamelCase identifiers stay banned); (c) `mockk` token — 5 test-library hits. Verified locally before landing: 74 hits → filters → **exactly 3 residual real-stub hits** (master-data, orders, settings `PlaceholderPage`). Implemented in ci.yml stub-grep + GATES.md gate-2 row | .gate/GATES.md gate-2 row, .github/workflows/ci.yml | Product owner ("approve all", 2026-11-13) |
 
 ## Wave 1 — chunk 0 Foundation
 | Date | Chunk | Section | Status | Gates 1-12 | Tests | Coverage | Blocked | Scope changes | Report |
@@ -153,7 +153,7 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 
 ## Totals
 - **89 sections: 1 COMPLETE (00.01), 88 PLANNED, 0 EXTERNAL-BLOCKED** — 00.01 closed 2026-11-13 (12-gate CI live, PR #1 green).
-- Session resume note (protocol §5.4): baseline merged into gated main (8c4fbf4). Wiring window active — 3 background agents on branches fix/backend-gate-wiring (integrationTest source-set split + minio tag pin), fix/web-gates (@squamed/web vitest fixes + real axe/lighthouse/visual-regression scripts), fix/stub-pages (rebuild the 3 PlaceholderPage pages per chunk contracts). On landing: review each PR, merge sequentially with `--admin` (logged below), then gate-run every overlapped chunk 0–6 section → D16–D19 to product owner → 00.02+.
+- Session resume note (protocol §5.4): baseline merged (8c4fbf4); **D16–D19 + SC-9 approved 2026-11-13** (ADRs 11–14 in 00-MASTER-PLAN.md, chunk contracts annotated, gate-2 allowlist live). Wiring window active — 3 background agents (fix/backend-gate-wiring: integrationTest split + minio pin; fix/web-gates: vitest fixes + axe/lighthouse/visual scripts; fix/stub-pages: 3 PlaceholderPage rebuilds — master-data, orders, settings). On landing: review, merge sequentially with `--admin` (logged below), gate-run every overlapped chunk 0–6 section, then 00.02+ (00.03 per ADR-11; 00.04 + new item 15 per ADR-13).
 - Branch protection reality: ruleset **27199747** active (deletion, non-fast-forward, 6 required status checks, bypass_actors = repo admin role) — replaces 27190834 whose lack of bypass blocked `--admin` merges; PAT still cannot PATCH rulesets (404), DELETE+POST works.
 - Request list issued (day 1): E1 ABDM sandbox, E2 DLT/WABA + BSP, E3 SMS/email provider, E4 payment gateway; reminder B2 (clinical lead) is the hard pre-build human gate; E10 hardware purchase list flagged early (TV box, thermal printer, kiosk tablet, barcode scanner).
 
@@ -161,16 +161,18 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 | Date | PR | Commit | Gates at merge | Reason |
 |---|---|---|---|---|
 | 2026-11-13 | #2 (baseline/merge-master) | 8c4fbf4 | parity ✓ · stub-grep ✗ (3 real stubs + false positives, SC-9 pending) · backend ✗ (37 PIT need infra) · frontend ✗ (web vitest debt) · a11y ✗ (scripts unwired) · integration ✗ (minio:latest unpullable) | SC-6 baseline adoption; all reds root-caused in run 43424947702 and dispatched as wiring work |
+| 2026-11-13 | #3 (ledger/wiring-window) | d694d21 | parity ✓ · stub-grep ✗ (3 real stubs) · code gates ✗ (pre-wiring, known) | Merge-log + resume-note bookkeeping (docs-only) |
 
 ## Gate baseline hash (§7.3 — re-verified every CI run via `sha256sum -c .gate/BASELINE.sha256`)
 ```
-650ee5fde5bb5ca259f2c53a8685839460e4d51dea32d081305f18d27522f249  .gate/GATES.md
-680cb626f1aaadf7a802869fcb665038f912014433eac6eb1586ba47585cb8c4  .github/workflows/ci.yml
+1c7e95bc8fb7a6b182a61467b63753d9cfed81675c403760cc928c64d256c36d  .gate/GATES.md
+f4cd8268102d7fad68dad9c0043c8eafa80abb1875b7d7259c295478da612921  .github/workflows/ci.yml
 9489bcdf466467b5c9a617fd53815c0ad2dcd3b11fd66d38f129be034f04ba57  scripts/gate-parity.mjs
 ace1785b27999d4fb273563af7f4f5bb02f87702930de7c3ca7fc288a837fb88  CODEOWNERS
 ```
 (Drift = S1 incident unless a human-approved §7 amendment row exists in the scope log above.)
 - **2026-11-13 drift note:** ci.yml + gate-parity.mjs hashes regenerated after fixing first-CI-run startup failure (job-level `hashFiles` in `if:` is not allowed by Actions — replaced with `detect` job + step-level tree detection; no gate condition changed). Happened before any green run, so no verified baseline existed yet. Parity re-verified: 12 gates ↔ 7 jobs.
+- **2026-11-13 drift note 3:** GATES.md + ci.yml changed under **human-approved** §7 amendment SC-9 (gate-2 false-positive allowlist — toDouble/placeholder/mockk; real stubs stay banned). Hashes regenerated post-approval: GATES.md 1c7e95bc…, ci.yml f4cd8268….
 - **2026-11-13 drift note 2:** hash procedure hardened — hashes MUST be computed on repository (LF) bytes, never on a CRLF working copy (autocrlf made every re-hash since the master merge record CRLF bytes → sha256sum -c failed on CI 3×). `.gitattributes` (eol=lf on `.gate/**`, `.github/**`, `scripts/**`, `CODEOWNERS`) now forces LF checkouts; verified working==blob for all 4 gate files before regen. stub-grep scanner also rewritten rg→git-ls-files+grep (rg absent on runners silently read as "zero hits" — caught before merge).
 - Scope changes to date: SC-1…SC-5 (2026-11-13, product-owner approved) — all bind previously unbound deferrals into chunk 7 / chunk 5 / chunk 6.
 - Update rules: row updated at every section state change; session ends with IN-PROGRESS resume note (protocol §5.4); scope change without chunk-file edit = violation.

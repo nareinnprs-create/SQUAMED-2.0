@@ -1,7 +1,7 @@
 # CHUNK 00 — FOUNDATION & GOVERNED PLATFORM
 **Status:** PLANNED · **Window:** Dec 2026 → Feb 2027 (12 wk) · **Depends on:** —
 **Stack entering:** Kotlin/Spring monolith, React PWA shell, Postgres, Redis, Keycloak, OpenTelemetry/Grafana, OpenSearch. **Note (SC-7):** workspace manager is npm (not pnpm) — adopted with the baseline build
-**Baseline (SC-6):** `master` prior build covers much of this chunk (identity/JWT+TOTP, hospital config, master data, patient+EMPI, audit, tasks, notifications, search, workflow) — sections may enter gates on existing code after the chunk-0 baseline audit; conflicts → D16–D18.
+**Baseline (SC-6):** `master` prior build covers much of this chunk (identity/JWT+TOTP, hospital config, master data, patient+EMPI, audit, tasks, notifications, search, workflow) — sections may enter gates on existing code after the chunk-0 baseline audit; conflicts resolved 2026-11-13: D16 → ADR-11 (item 4), D18 → ADR-13 (item 15).
 
 ## GOAL
 A governed, configurable, audited platform on which every later domain is "add, not rebuild" (blueprint §104 honored in code, not slides).
@@ -10,7 +10,7 @@ A governed, configurable, audited platform on which every later domain is "add, 
 1. **Monorepo + CI/CD:** pnpm workspace + Gradle, GitHub Actions (lint, test, ArchUnit boundary check, migration check, image build), environments: dev (compose) → staging (k8s) → prod. Branching: trunk-based, release = tagged immutable build.
 2. **Design system v1:** tokens per blueprint §86 (canvas `#F7F8F6`, identity `#087F7A`, semantic colors reserved for status), core components (data table, form, patient header, task card), light clinical mode only; i18n (en, hi) + RTL-ready from day 1; WCAG 2.2 AA baseline.
 3. **App shell:** nav, hospital selector, universal search (OpenSearch), notifications center, task inbox, patient-context bar, user/security state. Command bar = **UI placeholder only** (AI is chunk 5).
-4. **Identity & auth:** Keycloak OIDC; staff roles (super-admin, hospital-admin, doctor, nurse, reception, lab, pharmacy, billing, auditor, agent-service); RBAC + ABAC hooks (location/department scoping); MFA for admin/auditor; device sessions.
+4. **Identity & auth (D16 → ADR-11): baseline JWT+TOTP+RBAC stack retained — Keycloak/OIDC deferred until an SSO-federation requirement lands;** staff roles (super-admin, hospital-admin, doctor, nurse, reception, lab, pharmacy, billing, auditor, agent-service); RBAC + ABAC hooks (location/department scoping); MFA for admin/auditor; device sessions.
 5. **Hospital configuration engine:** tenant → hospital → campus → building → floor → department → room → bed; working hours, holidays, shifts; service catalog; workflow/queue/approval config stubs with typed config schema (this is where "configure, don't fork" becomes real — versioned config documents, validated).
 6. **Master data:** patient, staff/employee, department, location, bed, service, price list, vendor (stub), insurance/TPA registry, equipment (registry only).
 7. **Patient master + EMPI:** registration (full demographics + ABHA linkage via ABDM sandbox), identifiers (MRN per hospital, ABHA, mobile, national ID), guardian/dependent relations, unknown-patient flow, merge/unmerge (versioned, reversible), duplicate detection per ADR-8 with manual review queue.
@@ -21,6 +21,7 @@ A governed, configurable, audited platform on which every later domain is "add, 
 12. **Notification service:** channel adapters (SMS via provider, WhatsApp Business API with template approval, email, in-app, push stub); per-channel consent check; DND hours config.
 13. **Offline groundwork:** offline client cache (PWA service worker), write-whitelist framework (empty v1), store-and-forward queue with idempotency keys.
 14. **Observability:** OpenTelemetry traces/metrics/logs, Grafana dashboards, error budget for core NFRs.
+15. **Tenancy enforcement (D18 → ADR-13):** stage 1 — `hospital_id` NOT NULL, server-side tenant resolution from the principal (client-supplied hospitalId ignored), cross-tenant denial test suite over every tenant-scoped API; stage 2 — Postgres RLS per ADR-2 before chunk 6.
 
 ## OUT OF SCOPE (explicit)
 Kafka, ClickHouse, Temporal, HAPI FHIR, AI anything (beyond audit of agents identity), billing, clinical documentation, display/TV.

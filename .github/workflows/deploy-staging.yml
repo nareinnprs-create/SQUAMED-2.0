@@ -1,0 +1,104 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [develop]
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}-backend
+  IMAGE_TAG: staging-${{ github.sha }}
+
+jobs:
+  build-and-push:
+    name: Build and Push Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend/squamed-core
+          file: backend/squamed-core/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE }}:${{ env.IMAGE_TAG }},${{ env.IMAGE }}:staging-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Staging Host
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy with docker compose over SSH
+        uses: appleboy/scp-action@v0.1.8
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          source: infrastructure/docker/docker-compose.prod.yml
+          target: /opt/squamed
+
+      - name: Roll out the new image
+        uses: appleboy/ssh-action@v1.2.1
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/squamed
+            export SQUAMED_IMAGE=${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
+            export SQUAMED_ENV=staging
+            export JWT_SECRET=${{ secrets.STAGING_JWT_SECRET }}
+            export DB_PASSWORD=${{ secrets.STAGING_DB_PASSWORD }}
+            export BOOTSTRAP_ADMIN_PASSWORD=${{ secrets.STAGING_ADMIN_PASSWORD }}
+            export BOOTSTRAP_ADMIN_EMAIL=${{ vars.STAGING_ADMIN_EMAIL }}
+            docker compose -f docker-compose.prod.yml pull backend -q
+            docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate backend
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:8080/actuator/health > /dev/null; then echo "staging healthy"; exit 0; fi
+              sleep 10
+            done
+            echo "staging did not become healthy" >&2
+            exit 1
+
+  smoke:
+    name: Smoke Test Staging
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run smoke checks
+        env:
+          BASE_URL: ${{ vars.STAGING_URL }}
+          SMOKE_USER: ${{ vars.SMOKE_USERNAME }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+        shell: pwsh
+        run: |
+          if ($env:BASE_URL) {
+            powershell -ExecutionPolicy Bypass -File scripts/phase1-e2e.ps1 -baseUrl $env:BASE_URL -username $env:SMOKE_USER -password $env:SMOKE_PASSWORD
+          } else {
+            Write-Host "STAGING_URL not configured; smoke skipped"
+          }

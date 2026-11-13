@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squamed-web
+  namespace: squamed
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: squamed-web
+  template:
+    metadata:
+      labels:
+        app: squamed-web
+    spec:
+      containers:
+        - name: web
+          image: squamed/web:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: squamed-config
+          readinessProbe:
+            httpGet:
+              path: /dashboard
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 200m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: squamed-web
+  namespace: squamed
+spec:
+  selector:
+    app: squamed-web
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: squamed-ingress
+  namespace: squamed
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "8k"
+spec:
+  rules:
+    - host: squamed.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: squamed-backend
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: squamed-web
+                port:
+                  name: http

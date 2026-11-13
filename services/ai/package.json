@@ -1,0 +1,28 @@
+{
+  "name": "@squamed/service-ai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "uvicorn src.main:app --reload --port 8001",
+    "start": "uvicorn src.main:app --port 8001",
+    "lint": "ruff check src/",
+    "typecheck": "pyright src/",
+    "test": "pytest",
+    "clean": "rm -rf __pycache__ .pytest_cache dist node_modules"
+  },
+  "dependencies": {
+    "fastapi": "^0.115.0",
+    "uvicorn": "^0.34.0",
+    "pydantic": "^2.10.0",
+    "sqlalchemy": "^2.0.0",
+    "httpx": "^0.28.0",
+    "kafka-python": "^2.1.0",
+    "openai": "^1.60.0",
+    "anthropic": "^0.40.0"
+  },
+  "devDependencies": {
+    "ruff": "^0.9.0",
+    "pyright": "^1.1.0",
+    "pytest": "^8.0.0"
+  }
+}

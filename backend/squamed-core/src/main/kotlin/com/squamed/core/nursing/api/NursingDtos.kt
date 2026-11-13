@@ -1,0 +1,294 @@
+package com.squamed.core.nursing.api
+
+import com.squamed.core.nursing.domain.MedicationAdministrationRecord
+import com.squamed.core.nursing.domain.NursingAssessment
+import com.squamed.core.nursing.domain.NursingCarePlan
+import com.squamed.core.nursing.domain.NursingHandover
+import com.squamed.core.nursing.domain.NursingNote
+import com.squamed.core.nursing.domain.RiskAssessment
+import com.squamed.core.nursing.domain.VitalsEntry
+import java.time.Instant
+import java.util.UUID
+
+data class NursingAssessmentCreateDto(
+  val hospitalId: UUID? = null,
+  val patientId: UUID? = null,
+  val admissionId: UUID? = null,
+  val assessmentType: String? = null,
+  val findings: String? = null,
+  val riskLevel: String? = null,
+)
+
+data class NursingCarePlanCreateDto(
+  val hospitalId: UUID? = null,
+  val patientId: UUID? = null,
+  val admissionId: UUID? = null,
+  val title: String? = null,
+  val goal: String? = null,
+  val interventions: String? = null,
+)
+
+data class NursingCarePlanStatusDto(
+  val status: String? = null,
+)
+
+data class NursingNoteCreateDto(
+  val hospitalId: UUID? = null,
+  val patientId: UUID? = null,
+  val admissionId: UUID? = null,
+  val noteType: String? = null,
+  val content: String? = null,
+)
+
+data class NursingHandoverCreateDto(
+  val hospitalId: UUID? = null,
+  val wardId: UUID? = null,
+  val shift: String? = null,
+  val situation: String? = null,
+  val background: String? = null,
+  val assessment: String? = null,
+  val recommendation: String? = null,
+)
+
+data class VitalsCreateDto(
+  val hospitalId: UUID? = null,
+  val patientId: UUID? = null,
+  val admissionId: UUID? = null,
+  val systolic: Int? = null,
+  val diastolic: Int? = null,
+  val heartRate: Int? = null,
+  val respiratoryRate: Int? = null,
+  val temperature: Double? = null,
+  val oxygenSaturation: Int? = null,
+  val gcs: Int? = null,
+  val recordedAt: Instant? = null,
+)
+
+data class MarCreateDto(
+  val hospitalId: UUID? = null,
+  val patientId: UUID? = null,
+  val admissionId: UUID? = null,
+  val medicationName: String? = null,
+  val dose: String? = null,
+  val route: String? = null,
+  val scheduledAt: Instant? = null,
+)
+
+data class MarStatusDto(
+  val status: String? = null,
+  val omittedReason: String? = null,
+)
+
+data class RiskAssessmentCreateDto(
+  val hospitalId: UUID? = null,
+  val patientId: UUID? = null,
+  val admissionId: UUID? = null,
+  val riskType: String? = null,
+  val score: Int? = null,
+  val level: String? = null,
+)
+
+data class NursingAssessmentView(
+  val id: UUID?,
+  val hospitalId: UUID?,
+  val patientId: UUID?,
+  val admissionId: UUID?,
+  val assessmentType: String,
+  val findings: String?,
+  val riskLevel: String?,
+  val assessedBy: UUID?,
+  val assessedAt: Instant?,
+) {
+  companion object {
+    fun from(entity: NursingAssessment) =
+      NursingAssessmentView(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        patientId = entity.patientId,
+        admissionId = entity.admissionId,
+        assessmentType = entity.assessmentType,
+        findings = entity.findings,
+        riskLevel = entity.riskLevel,
+        assessedBy = entity.assessedBy,
+        assessedAt = entity.assessedAt,
+      )
+  }
+}
+
+data class NursingCarePlanView(
+  val id: UUID?,
+  val hospitalId: UUID?,
+  val patientId: UUID?,
+  val admissionId: UUID?,
+  val title: String,
+  val goal: String?,
+  val interventions: String?,
+  val status: String,
+  val completedAt: Instant?,
+  val createdAt: Instant?,
+) {
+  companion object {
+    fun from(entity: NursingCarePlan) =
+      NursingCarePlanView(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        patientId = entity.patientId,
+        admissionId = entity.admissionId,
+        title = entity.title,
+        goal = entity.goal,
+        interventions = entity.interventions,
+        status = entity.status,
+        completedAt = entity.completedAt,
+        createdAt = entity.createdAt,
+      )
+  }
+}
+
+data class NursingNoteView(
+  val id: UUID?,
+  val hospitalId: UUID?,
+  val patientId: UUID?,
+  val admissionId: UUID?,
+  val noteType: String,
+  val content: String,
+  val authoredBy: UUID?,
+  val authoredAt: Instant?,
+) {
+  companion object {
+    fun from(entity: NursingNote) =
+      NursingNoteView(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        patientId = entity.patientId,
+        admissionId = entity.admissionId,
+        noteType = entity.noteType,
+        content = entity.content,
+        authoredBy = entity.authoredBy,
+        authoredAt = entity.authoredAt,
+      )
+  }
+}
+
+data class NursingHandoverView(
+  val id: UUID?,
+  val hospitalId: UUID?,
+  val wardId: UUID?,
+  val shift: String,
+  val situation: String?,
+  val background: String?,
+  val assessment: String?,
+  val recommendation: String?,
+  val authoredBy: UUID?,
+  val authoredAt: Instant?,
+) {
+  companion object {
+    fun from(entity: NursingHandover) =
+      NursingHandoverView(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        wardId = entity.wardId,
+        shift = entity.shift,
+        situation = entity.situation,
+        background = entity.background,
+        assessment = entity.assessment,
+        recommendation = entity.recommendation,
+        authoredBy = entity.authoredBy,
+        authoredAt = entity.authoredAt,
+      )
+  }
+}
+
+data class VitalsView(
+  val id: UUID?,
+  val hospitalId: UUID?,
+  val patientId: UUID?,
+  val admissionId: UUID?,
+  val systolic: Int?,
+  val diastolic: Int?,
+  val heartRate: Int?,
+  val respiratoryRate: Int?,
+  val temperature: Double?,
+  val oxygenSaturation: Int?,
+  val gcs: Int?,
+  val recordedBy: UUID?,
+  val recordedAt: Instant?,
+) {
+  companion object {
+    fun from(entity: VitalsEntry) =
+      VitalsView(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        patientId = entity.patientId,
+        admissionId = entity.admissionId,
+        systolic = entity.systolic,
+        diastolic = entity.diastolic,
+        heartRate = entity.heartRate,
+        respiratoryRate = entity.respiratoryRate,
+        temperature = entity.temperature,
+        oxygenSaturation = entity.oxygenSaturation,
+        gcs = entity.gcs,
+        recordedBy = entity.recordedBy,
+        recordedAt = entity.recordedAt,
+      )
+  }
+}
+
+data class MarView(
+  val id: UUID?,
+  val hospitalId: UUID?,
+  val patientId: UUID?,
+  val admissionId: UUID?,
+  val medicationName: String,
+  val dose: String?,
+  val route: String?,
+  val scheduledAt: Instant?,
+  val administeredAt: Instant?,
+  val administeredBy: UUID?,
+  val omittedReason: String?,
+  val status: String,
+) {
+  companion object {
+    fun from(entity: MedicationAdministrationRecord) =
+      MarView(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        patientId = entity.patientId,
+        admissionId = entity.admissionId,
+        medicationName = entity.medicationName,
+        dose = entity.dose,
+        route = entity.route,
+        scheduledAt = entity.scheduledAt,
+        administeredAt = entity.administeredAt,
+        administeredBy = entity.administeredBy,
+        omittedReason = entity.omittedReason,
+        status = entity.status,
+      )
+  }
+}
+
+data class RiskAssessmentView(
+  val id: UUID?,
+  val hospitalId: UUID?,
+  val patientId: UUID?,
+  val admissionId: UUID?,
+  val riskType: String,
+  val score: Int?,
+  val level: String?,
+  val assessedBy: UUID?,
+  val assessedAt: Instant?,
+) {
+  companion object {
+    fun from(entity: RiskAssessment) =
+      RiskAssessmentView(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        patientId = entity.patientId,
+        admissionId = entity.admissionId,
+        riskType = entity.riskType,
+        score = entity.score,
+        level = entity.level,
+        assessedBy = entity.assessedBy,
+        assessedAt = entity.assessedAt,
+      )
+  }
+}

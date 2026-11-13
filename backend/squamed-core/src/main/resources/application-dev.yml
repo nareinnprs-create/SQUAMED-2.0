@@ -1,0 +1,15 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+  flyway:
+    enabled: true
+
+swagger:
+  ui:
+    display-request-duration: true
+
+logging:
+  level:
+    com.squamed: DEBUG

@@ -1,0 +1,27 @@
+{
+  "name": "@squamed/design-system",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./tokens": "./dist/tokens/index.js",
+    "./themes": "./dist/themes/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist node_modules"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "eslint": "^9.0.0"
+  }
+}

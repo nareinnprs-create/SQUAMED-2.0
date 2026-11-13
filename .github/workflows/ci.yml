@@ -1,7 +1,9 @@
-# CI for SQUAMED main. Docs-only state: every code gate is conditioned on hashFiles and skips
-# cleanly until the master baseline merges. Gate IDs match .gate/GATES.md; scripts/gate-parity.mjs
-# fails the build if the two drift. Gate changes require a protocol 03 §7 amendment
-# (see .gate/README.md) — never edit thresholds/steps here to unblock a build.
+# CI for SQUAMED main. Docs-only state: every code gate is conditioned on the `detect`
+# job's outputs (hashFiles is not allowed in job-level `if`, so tree detection happens
+# in a step — the documented-safe location) and skips cleanly until the master baseline
+# merges. Gate IDs match .gate/GATES.md; scripts/gate-parity.mjs fails the build if the
+# two drift. Gate changes require a protocol 03 §7 amendment (see .gate/README.md) —
+# never edit thresholds/steps here to unblock a build.
 name: CI
 
 on:
@@ -50,6 +52,25 @@ jobs:
           fi
           echo "zero hits — gate passed"
 
+  # Detects which source trees exist post-merge. Outputs feed the `if:` of the four
+  # code jobs (job-level hashFiles is not allowed; step-level shell tests are).
+  detect:
+    name: Detect source trees
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.paths.outputs.backend }}
+      frontend: ${{ steps.paths.outputs.frontend }}
+      web: ${{ steps.paths.outputs.web }}
+      compose: ${{ steps.paths.outputs.compose }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: paths
+        run: |
+          echo "backend=$(test -d backend && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "frontend=$(test -d apps || test -d packages && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "web=$(test -d apps/web && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "compose=$(test -f infrastructure/docker/docker-compose.yml && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   # Gates 3/4/5/8/9/10 (backend side) · Kotlin compile (warnings-as-errors), ktlint,
   # tests incl. ArchUnit boundary suite, contract/schema-registry + Flyway/RLS + audit
   # interceptor tests (all named tests in the Gradle suite per 01-ENGINEERING-STANDARDS §4),
@@ -57,7 +78,8 @@ jobs:
   backend-gates:
     name: Backend gates (ktlint + test + coverage + ArchUnit)
     runs-on: ubuntu-latest
-    if: hashFiles('backend/**') != ''
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
     defaults:
       run:
         working-directory: backend/squamed-core
@@ -87,7 +109,8 @@ jobs:
   frontend-gates:
     name: Frontend gates (typecheck + lint + test)
     runs-on: ubuntu-latest
-    if: hashFiles('apps/**', 'packages/**') != ''
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -108,11 +131,12 @@ jobs:
   # steps call canonical script names in apps/web/package.json (`axe`, `lighthouse`,
   # `visual-regression`, run against a built preview). If the merged web app lacks them,
   # the npm run fails and the gate is red until scripts exist. Pre-merge: skipped via
-  # hashFiles (no apps/web on docs-only main).
+  # detect output (no apps/web on docs-only main).
   a11y-perf-gates:
     name: Accessibility + performance gates (axe + Lighthouse + visual)
     runs-on: ubuntu-latest
-    if: hashFiles('apps/web/**') != ''
+    needs: detect
+    if: needs.detect.outputs.web == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -138,11 +162,12 @@ jobs:
 
   # Gates 1/12 · functional completeness + exit-item E2E. Boots the compose dev stack
   # (merged from master) and runs backend integration tests. Skips pre-merge via
-  # hashFiles (no compose file / backend on docs-only main). Blocking post-merge.
+  # detect output (no compose file / backend on docs-only main). Blocking post-merge.
   integration-gates:
     name: Integration gates (compose stack + integration tests)
     runs-on: ubuntu-latest
-    if: hashFiles('infrastructure/docker/docker-compose.yml') != ''
+    needs: detect
+    if: needs.detect.outputs.compose == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

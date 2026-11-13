@@ -55,8 +55,10 @@ for (let i = 1; i <= 12; i++) {
 }
 
 const mapped = new Set([...gateJobs.values()].flat());
+// Enabler jobs that run no gate themselves (detect feeds other jobs' `if:`).
+const NON_GATE_JOBS = new Set(["detect"]);
 for (const id of jobs) {
-  if (!mapped.has(id)) problems.push(`CI job "${id}" is not mapped to any gate row in GATES.md`);
+  if (!mapped.has(id) && !NON_GATE_JOBS.has(id)) problems.push(`CI job "${id}" is not mapped to any gate row in GATES.md`);
 }
 
 if (problems.length > 0) {

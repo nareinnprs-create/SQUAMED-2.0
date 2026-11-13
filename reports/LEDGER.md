@@ -160,12 +160,13 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 ## Gate baseline hash (§7.3 — re-verified every CI run via `sha256sum -c .gate/BASELINE.sha256`)
 ```
 650ee5fde5bb5ca259f2c53a8685839460e4d51dea32d081305f18d27522f249  .gate/GATES.md
-40b79f9749470e3e242bb41d02f9a229033ef66392702aa0c7fb6de6d9a9a730  .github/workflows/ci.yml
+680cb626f1aaadf7a802869fcb665038f912014433eac6eb1586ba47585cb8c4  .github/workflows/ci.yml
 9489bcdf466467b5c9a617fd53815c0ad2dcd3b11fd66d38f129be034f04ba57  scripts/gate-parity.mjs
 ace1785b27999d4fb273563af7f4f5bb02f87702930de7c3ca7fc288a837fb88  CODEOWNERS
 ```
 (Drift = S1 incident unless a human-approved §7 amendment row exists in the scope log above.)
 - **2026-11-13 drift note:** ci.yml + gate-parity.mjs hashes regenerated after fixing first-CI-run startup failure (job-level `hashFiles` in `if:` is not allowed by Actions — replaced with `detect` job + step-level tree detection; no gate condition changed). Happened before any green run, so no verified baseline existed yet. Parity re-verified: 12 gates ↔ 7 jobs.
+- **2026-11-13 drift note 2:** hash procedure hardened — hashes MUST be computed on repository (LF) bytes, never on a CRLF working copy (autocrlf made every re-hash since the master merge record CRLF bytes → sha256sum -c failed on CI 3×). `.gitattributes` (eol=lf on `.gate/**`, `.github/**`, `scripts/**`, `CODEOWNERS`) now forces LF checkouts; verified working==blob for all 4 gate files before regen. stub-grep scanner also rewritten rg→git-ls-files+grep (rg absent on runners silently read as "zero hits" — caught before merge).
 - Scope changes to date: SC-1…SC-5 (2026-11-13, product-owner approved) — all bind previously unbound deferrals into chunk 7 / chunk 5 / chunk 6.
 - Update rules: row updated at every section state change; session ends with IN-PROGRESS resume note (protocol §5.4); scope change without chunk-file edit = violation.
 

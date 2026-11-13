@@ -157,11 +157,12 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 ## Gate baseline hash (§7.3 — re-verified every CI run via `sha256sum -c .gate/BASELINE.sha256`)
 ```
 650ee5fde5bb5ca259f2c53a8685839460e4d51dea32d081305f18d27522f249  .gate/GATES.md
-2087d54e012f9d9a04613f52062f75c59bc004a2686648e2fb0c389e3834ed74  .github/workflows/ci.yml
-257f625093bba473e6ffa202b16564bf8bb7841e7ebf34e929daeee93e2f0b60  scripts/gate-parity.mjs
+123d31bb9f91f5e6fdd4d60a72014ec2d46f23aa5fc05fd3acf65f8e7beb6e90  .github/workflows/ci.yml
+9489bcdf466467b5c9a617fd53815c0ad2dcd3b11fd66d38f129be034f04ba57  scripts/gate-parity.mjs
 ace1785b27999d4fb273563af7f4f5bb02f87702930de7c3ca7fc288a837fb88  CODEOWNERS
 ```
 (Drift = S1 incident unless a human-approved §7 amendment row exists in the scope log above.)
+- **2026-11-13 drift note:** ci.yml + gate-parity.mjs hashes regenerated after fixing first-CI-run startup failure (job-level `hashFiles` in `if:` is not allowed by Actions — replaced with `detect` job + step-level tree detection; no gate condition changed). Happened before any green run, so no verified baseline existed yet. Parity re-verified: 12 gates ↔ 7 jobs.
 - Scope changes to date: SC-1…SC-5 (2026-11-13, product-owner approved) — all bind previously unbound deferrals into chunk 7 / chunk 5 / chunk 6.
 - Update rules: row updated at every section state change; session ends with IN-PROGRESS resume note (protocol §5.4); scope change without chunk-file edit = violation.
 

@@ -153,7 +153,7 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 
 ## Totals
 - **89 sections: 1 COMPLETE (00.01), 88 PLANNED, 0 EXTERNAL-BLOCKED** — 00.01 closed 2026-11-13 (12-gate CI live, PR #1 green).
-- Session resume note (protocol §5.4): baseline merged (8c4fbf4); **D16–D19 + SC-9 approved 2026-11-13** (ADRs 11–14 in 00-MASTER-PLAN.md, chunk contracts annotated, gate-2 allowlist live). Wiring window active — 3 background agents (fix/backend-gate-wiring: integrationTest split + minio pin; fix/web-gates: vitest fixes + axe/lighthouse/visual scripts; fix/stub-pages: 3 PlaceholderPage rebuilds — master-data, orders, settings). On landing: review, merge sequentially with `--admin` (logged below), gate-run every overlapped chunk 0–6 section, then 00.02+ (00.03 per ADR-11; 00.04 + new item 15 per ADR-13).
+- Session resume note (protocol §5.4): baseline merged (8c4fbf4); **D16–D19 + SC-9 approved 2026-11-13** (ADRs 11–14 in 00-MASTER-PLAN.md, chunk contracts annotated, gate-2 allowlist live). Wiring PRs **#4 (b4fb1d0) and #5 (75e51b7) merged** — integrationTest split live, compose stack boots, PIT run in CI. **Open: coverage verdict (backend-gates 0.06 vs 0.80 unit-only) = SC-10 proposal to product owner; agents B (web gates) + C (stub pages) in flight.** On landing: merge sequentially with `--admin` (logged below), gate-run every overlapped chunk 0–6 section, then 00.02+ (00.03 per ADR-11; 00.04 + new item 15 per ADR-13).
 - Branch protection reality: ruleset **27199747** active (deletion, non-fast-forward, 6 required status checks, bypass_actors = repo admin role) — replaces 27190834 whose lack of bypass blocked `--admin` merges; PAT still cannot PATCH rulesets (404), DELETE+POST works.
 - Request list issued (day 1): E1 ABDM sandbox, E2 DLT/WABA + BSP, E3 SMS/email provider, E4 payment gateway; reminder B2 (clinical lead) is the hard pre-build human gate; E10 hardware purchase list flagged early (TV box, thermal printer, kiosk tablet, barcode scanner).
 
@@ -162,6 +162,8 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 |---|---|---|---|---|
 | 2026-11-13 | #2 (baseline/merge-master) | 8c4fbf4 | parity ✓ · stub-grep ✗ (3 real stubs + false positives, SC-9 pending) · backend ✗ (37 PIT need infra) · frontend ✗ (web vitest debt) · a11y ✗ (scripts unwired) · integration ✗ (minio:latest unpullable) | SC-6 baseline adoption; all reds root-caused in run 43424947702 and dispatched as wiring work |
 | 2026-11-13 | #3 (ledger/wiring-window) | d694d21 | parity ✓ · stub-grep ✗ (3 real stubs) · code gates ✗ (pre-wiring, known) | Merge-log + resume-note bookkeeping (docs-only) |
+| 2026-11-13 | #4 (decisions/d16-d19-sc9) | b4fb1d0 | parity ✓ · stub-grep ✗ (exactly 3 real stubs — allowlist proven in run 43430631735) · other code gates ✗ (pre-wiring, known) | D16–D19 → ADR-11..14 + SC-9 gate-2 allowlist, all product-owner approved ("approve all") |
+| 2026-11-13 | #5 (fix/backend-gate-wiring) | 75e51b7 | backend-gates ✗ **new evidence**: ktlint ✓ · :test ✓ · coverage 0.06 vs 0.80 (unit-only exec) · integration-gates ✗ **stack boots (pgsty/silo pin works), 37 PIT ran, 24✓/13✗ (baseline test debt)** · stub-grep ✗ (same 3 real stubs) | Wiring PR — integrationTest source-set split (37 PIT default EXTERNAL/compose), jacoco exec-file tree merge, minio→pgsty/silo pin. Failures are pre-existing debt EXPOSED by the wiring, not caused by it |
 
 ## Gate baseline hash (§7.3 — re-verified every CI run via `sha256sum -c .gate/BASELINE.sha256`)
 ```

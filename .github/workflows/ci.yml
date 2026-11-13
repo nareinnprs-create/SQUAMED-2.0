@@ -83,10 +83,12 @@ jobs:
 
   # Gates 3/4/5/8/9/10 (backend side) · Kotlin compile (warnings-as-errors), ktlint,
   # tests incl. ArchUnit boundary suite, contract/schema-registry + Flyway/RLS + audit
-  # interceptor tests (all named tests in the Gradle suite per 01-ENGINEERING-STANDARDS §4),
-  # JaCoCo >= 80% instruction. Skips pre-merge (no backend/); blocking post-merge.
+  # interceptor tests (all named tests in the Gradle suite per 01-ENGINEERING-STANDARDS §4).
+  # Coverage moved to integration-gates (SC-10, 2026-11-13): the 0.80 JaCoCo rule
+  # verifies merged unit+PIT exec there, since the PIT live in the integrationTest
+  # source set. Skips pre-merge (no backend/); blocking post-merge.
   backend-gates:
-    name: Backend gates (ktlint + test + coverage + ArchUnit)
+    name: Backend gates (ktlint + test + ArchUnit)
     runs-on: ubuntu-latest
     needs: detect
     if: needs.detect.outputs.backend == 'true'
@@ -103,14 +105,7 @@ jobs:
       - name: Run backend gate suite
         run: |
           if [ -x ./gradlew ]; then GRADLE=./gradlew; else GRADLE=gradle; fi
-          $GRADLE ktlintCheck test jacocoTestCoverageVerification --no-daemon --console=plain
-      - name: Upload JaCoCo report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jacoco-report
-          path: backend/squamed-core/build/reports/jacoco/test/html
-          retention-days: 14
+          $GRADLE ktlintCheck test --no-daemon --console=plain
 
   # Gates 3/4/5 (frontend side) · TypeScript strict typecheck, lint (incl. no-hardcoded
   # strings once 00.14/00.15 land), unit tests. Install honors pnpm when a pnpm lockfile
@@ -170,11 +165,12 @@ jobs:
       - name: Visual regression
         run: npm run visual-regression --workspace apps/web
 
-  # Gates 1/12 · functional completeness + exit-item E2E. Boots the compose dev stack
-  # (merged from master) and runs backend integration tests. Skips pre-merge via
-  # detect output (no compose file / backend on docs-only main). Blocking post-merge.
+  # Gates 1/12 + gate-5 backend coverage (SC-10, 2026-11-13) · boots the compose dev
+  # stack (merged from master), runs the unit + PIT suites, then verifies JaCoCo
+  # >= 80% instruction on the merged exec data and uploads the merged report.
+  # Skips pre-merge via detect output; blocking post-merge.
   integration-gates:
-    name: Integration gates (compose stack + integration tests)
+    name: Integration gates (compose + integration tests + coverage)
     runs-on: ubuntu-latest
     needs: detect
     if: needs.detect.outputs.compose == 'true'
@@ -191,8 +187,15 @@ jobs:
       - name: Start dev stack
         working-directory: infrastructure/docker
         run: docker compose up -d
-      - name: Run backend integration tests
+      - name: Run backend unit + integration suites and coverage verification
         working-directory: backend/squamed-core
         run: |
           if [ -x ./gradlew ]; then GRADLE=./gradlew; else GRADLE=gradle; fi
-          $GRADLE integrationTest --no-daemon --console=plain
+          $GRADLE integrationTest test jacocoTestReport jacocoTestCoverageVerification --no-daemon --console=plain
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: backend/squamed-core/build/reports/jacoco/test/html
+          retention-days: 14

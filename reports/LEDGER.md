@@ -21,11 +21,12 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 | SC-4 | 2026-11-13 | AI report drafting (structured radiology/lab draft from findings dictation) → chunk 5 item 9 (was OUT-OF-SCOPE unbound) | chunk-05 §9, chunk-02 pointer, `06` catalog | Product owner (same) |
 | SC-5 | 2026-11-13 | Web Push live retires chunk-0 push stub → chunk 6 §3 | chunk-06 §3, graph `19` | Product owner (same) |
 | SC-6 | 2026-11-13 | Prior build `master` (Phase 1 MVP + Phase 2a–2e, Sep 2026, 6 commits, self-verified: 67 tests, JaCoCo 80.11%) **adopted as code baseline** — chunks 0–6 sections may enter gates on existing code after baseline audit; ADR conflicts re-opened as D16–D19 | chunk-00…06 baseline notes, `13` §9, `24` D16–D19 | Product owner (adopt-as-baseline choice) |
+| SC-7 | 2026-11-13 | Package manager: plan said pnpm workspace; adopted baseline uses npm workspaces (npm 12 + package-lock.json) — consequence of SC-6, zero-value churn to convert | chunk-00 item 1 | Product owner via SC-6 (baseline adoption is intrinsic) |
 
 ## Wave 1 — chunk 0 Foundation
 | Date | Chunk | Section | Status | Gates 1-12 | Tests | Coverage | Blocked | Scope changes | Report |
 |---|---|---|---|---|---|---|---|---|---|
-| — | 0 | 00.01 Infrastructure scaffold | PLANNED | — | — | — | — | — | — |
+| 2026-11-13 | 0 | 00.01 Infrastructure scaffold | SECTION REVIEW | CI pending | scaffold verified locally | — | — | — | `reports/00.01-INFRASTRUCTURE-SCAFFOLD.md` |
 | — | 0 | 00.02 Contract foundation | PLANNED | — | — | — | — | — | — |
 | — | 0 | 00.03 Identity & access | PLANNED | — | — | — | — | — | — |
 | — | 0 | 00.04 Tenancy & RLS | PLANNED | — | — | — | — | — | — |
@@ -149,7 +150,18 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 | — | 8 | 08.08 Chunk exit (platform-complete audit §1–117) | PLANNED | — | — | — | — | — | — |
 
 ## Totals
-- **89 sections across 9 waves; 0 COMPLETE, 0 EXTERNAL-BLOCKED, 89 PLANNED** (build not started).
+- **89 sections: 1 SECTION REVIEW (00.01), 88 PLANNED, 0 COMPLETE, 0 EXTERNAL-BLOCKED** — kickoff 2026-11-13.
+- Session resume note (protocol §5.4): kickoff session — baseline audit DONE (`reports/BASELINE-AUDIT.md`, D16–D19 evidence ready), 00.01 scaffold DONE pending CI-green + branch protection + baseline merge; next: product-owner D16–D19 decisions, then merge, then 00.02+.
+- Request list issued (day 1): E1 ABDM sandbox, E2 DLT/WABA + BSP, E3 SMS/email provider, E4 payment gateway; reminder B2 (clinical lead) is the hard pre-build human gate; E10 hardware purchase list flagged early (TV box, thermal printer, kiosk tablet, barcode scanner).
+
+## Gate baseline hash (§7.3 — re-verified every CI run via `sha256sum -c .gate/BASELINE.sha256`)
+```
+650ee5fde5bb5ca259f2c53a8685839460e4d51dea32d081305f18d27522f249  .gate/GATES.md
+2087d54e012f9d9a04613f52062f75c59bc004a2686648e2fb0c389e3834ed74  .github/workflows/ci.yml
+257f625093bba473e6ffa202b16564bf8bb7841e7ebf34e929daeee93e2f0b60  scripts/gate-parity.mjs
+ace1785b27999d4fb273563af7f4f5bb02f87702930de7c3ca7fc288a837fb88  CODEOWNERS
+```
+(Drift = S1 incident unless a human-approved §7 amendment row exists in the scope log above.)
 - Scope changes to date: SC-1…SC-5 (2026-11-13, product-owner approved) — all bind previously unbound deferrals into chunk 7 / chunk 5 / chunk 6.
 - Update rules: row updated at every section state change; session ends with IN-PROGRESS resume note (protocol §5.4); scope change without chunk-file edit = violation.
 

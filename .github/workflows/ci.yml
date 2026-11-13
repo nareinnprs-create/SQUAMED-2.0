@@ -1,0 +1,163 @@
+# CI for SQUAMED main. Docs-only state: every code gate is conditioned on hashFiles and skips
+# cleanly until the master baseline merges. Gate IDs match .gate/GATES.md; scripts/gate-parity.mjs
+# fails the build if the two drift. Gate changes require a protocol 03 §7 amendment
+# (see .gate/README.md) — never edit thresholds/steps here to unblock a build.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Gate 11 · docs sync (protocol §7.2 meta-gate). Always runs.
+  gate-parity:
+    name: Gate parity (GATES.md vs ci.yml)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/gate-parity.mjs
+      - name: Verify gate baseline hash (§7.3 — drift without human-approved amendment fails)
+        run: sha256sum -c .gate/BASELINE.sha256
+
+  # Gate 2 · zero-stub scan over source paths only. Always runs; trivially green
+  # pre-merge (source dirs absent). Allowlist: lines tagged `// test-fixture` or
+  # `# test-fixture`; .md files excluded entirely.
+  stub-grep:
+    name: Zero-stub grep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan source paths for banned markers
+        run: |
+          hits="$(rg -i --no-heading -n \
+            --glob '{backend,apps,packages,services,scripts}/**' \
+            --glob '!**/*.md' \
+            'TODO|FIXME|stub|placeholder|mock|not implemented|for now' \
+            | grep -v 'test-fixture' || true)"
+          if [ -n "$hits" ]; then
+            echo "Zero-stub gate failed — remove the markers or tag genuine test fixtures:" >&2
+            printf '%s\n' "$hits" >&2
+            exit 1
+          fi
+          echo "zero hits — gate passed"
+
+  # Gates 3/4/5/8/9/10 (backend side) · Kotlin compile (warnings-as-errors), ktlint,
+  # tests incl. ArchUnit boundary suite, contract/schema-registry + Flyway/RLS + audit
+  # interceptor tests (all named tests in the Gradle suite per 01-ENGINEERING-STANDARDS §4),
+  # JaCoCo >= 80% instruction. Skips pre-merge (no backend/); blocking post-merge.
+  backend-gates:
+    name: Backend gates (ktlint + test + coverage + ArchUnit)
+    runs-on: ubuntu-latest
+    if: hashFiles('backend/**') != ''
+    defaults:
+      run:
+        working-directory: backend/squamed-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - name: Run backend gate suite
+        run: |
+          if [ -x ./gradlew ]; then GRADLE=./gradlew; else GRADLE=gradle; fi
+          $GRADLE ktlintCheck test jacocoTestCoverageVerification --no-daemon --console=plain
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: backend/squamed-core/build/reports/jacoco/test/html
+          retention-days: 14
+
+  # Gates 3/4/5 (frontend side) · TypeScript strict typecheck, lint (incl. no-hardcoded
+  # strings once 00.14/00.15 land), unit tests. Install honors pnpm when a pnpm lockfile
+  # exists, else npm ci (master baseline ships package-lock.json). Skips pre-merge;
+  # blocking post-merge.
+  frontend-gates:
+    name: Frontend gates (typecheck + lint + test)
+    runs-on: ubuntu-latest
+    if: hashFiles('apps/**', 'packages/**') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable && pnpm install --frozen-lockfile
+          else
+            npm ci
+          fi
+      - name: Run frontend gate suite
+        run: npx turbo typecheck lint test
+
+  # Gates 6/7 · axe-core (zero critical/serious), Lighthouse budget, visual regression.
+  # INTENDED TO FAIL POST-MERGE until wired (protocol §5.3 — gates force wiring): these
+  # steps call canonical script names in apps/web/package.json (`axe`, `lighthouse`,
+  # `visual-regression`, run against a built preview). If the merged web app lacks them,
+  # the npm run fails and the gate is red until scripts exist. Pre-merge: skipped via
+  # hashFiles (no apps/web on docs-only main).
+  a11y-perf-gates:
+    name: Accessibility + performance gates (axe + Lighthouse + visual)
+    runs-on: ubuntu-latest
+    if: hashFiles('apps/web/**') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable && pnpm install --frozen-lockfile
+          else
+            npm ci
+          fi
+      - name: Install Playwright browsers (drives axe + visual regression)
+        run: npx playwright install --with-deps chromium
+      - name: Build web app
+        run: npx turbo build --filter=web
+      - name: axe-core scan
+        run: npm run axe --workspace apps/web
+      - name: Lighthouse budget check
+        run: npm run lighthouse --workspace apps/web
+      - name: Visual regression
+        run: npm run visual-regression --workspace apps/web
+
+  # Gates 1/12 · functional completeness + exit-item E2E. Boots the compose dev stack
+  # (merged from master) and runs backend integration tests. Skips pre-merge via
+  # hashFiles (no compose file / backend on docs-only main). Blocking post-merge.
+  integration-gates:
+    name: Integration gates (compose stack + integration tests)
+    runs-on: ubuntu-latest
+    if: hashFiles('infrastructure/docker/docker-compose.yml') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Start dev stack
+        working-directory: infrastructure/docker
+        run: docker compose up -d
+      - name: Run backend integration tests
+        working-directory: backend/squamed-core
+        run: |
+          if [ -x ./gradlew ]; then GRADLE=./gradlew; else GRADLE=gradle; fi
+          $GRADLE integrationTest --no-daemon --console=plain

@@ -28,6 +28,8 @@ class SessionRecord(
   var ipAddress: String? = null,
   @Column(name = "user_agent", columnDefinition = "text")
   var userAgent: String? = null,
+  @Column(name = "device_id")
+  var deviceId: UUID? = null,
   @Column(name = "hospital_id")
   var hospitalId: UUID? = null,
   @Column(name = "expires_at", nullable = false)

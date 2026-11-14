@@ -1,24 +1,33 @@
 package com.squamed.core.identity.security
 
+import dev.samstevens.totp.code.DefaultCodeGenerator
+import dev.samstevens.totp.code.DefaultCodeVerifier
+import dev.samstevens.totp.code.HashingAlgorithm
+import dev.samstevens.totp.time.SystemTimeProvider
+import dev.samstevens.totp.time.TimeProvider
 import org.springframework.stereotype.Component
-import java.security.GeneralSecurityException
-import java.security.InvalidKeyException
-import java.security.NoSuchAlgorithmException
+import java.security.SecureRandom
 import java.util.Base64
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
 
+/**
+ * 00.03 hardening (chunk-00 item 4): delegates RFC 6238 code math to the vetted
+ * samstevens totp library instead of the hand-rolled HMAC implementation.
+ * Stored secrets stay base64 (UserAccount.mfaSecret); the boundary re-encodes to base32.
+ */
 @Component
-class TotpService {
+class TotpService(
+  private val timeProvider: TimeProvider = SystemTimeProvider(),
+) {
   companion object {
     private const val SECRET_BYTES = 20
     private const val DIGITS = 6
     private const val PERIOD_SECONDS = 30
-    private const val ALGORITHM = "HmacSHA1"
   }
 
+  private val generator = DefaultCodeGenerator(HashingAlgorithm.SHA1, DIGITS)
+
   fun generateSecret(): String {
-    val bytes = ByteArray(SECRET_BYTES).also { java.security.SecureRandom().nextBytes(it) }
+    val bytes = ByteArray(SECRET_BYTES).also { SecureRandom().nextBytes(it) }
     return Base64.getEncoder().encodeToString(bytes)
   }
 
@@ -27,40 +36,30 @@ class TotpService {
     code: String,
     window: Int = 1,
   ): Boolean {
-    val expected = generateCodes(secretBase64, window)
-    return expected.any { it == code }
+    val verifier = DefaultCodeVerifier(generator, timeProvider)
+    verifier.setTimePeriod(PERIOD_SECONDS)
+    verifier.setAllowedTimePeriodDiscrepancy(window)
+    return verifier.isValidCode(toBase32(secretBase64), code)
   }
 
-  fun generateCodes(
-    secretBase64: String,
-    window: Int = 1,
-  ): List<String> {
-    val secret = Base64.getDecoder().decode(secretBase64)
-    val counter = System.currentTimeMillis() / 1000 / PERIOD_SECONDS
-    return (-window..window).map { offset ->
-      generateTOTP(secret, counter + offset)
+  fun toBase32(secretBase64: String): String {
+    val bytes = Base64.getDecoder().decode(secretBase64)
+    // RFC 4648 base32, unpadded — what authenticator apps expect in otpauth URLs.
+    val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+    val builder = StringBuilder()
+    var buffer = 0
+    var bits = 0
+    for (byte in bytes) {
+      buffer = (buffer shl 8) or (byte.toInt() and 0xff)
+      bits += 8
+      while (bits >= 5) {
+        builder.append(alphabet[(buffer shr (bits - 5)) and 0x1f])
+        bits -= 5
+      }
     }
-  }
-
-  private fun generateTOTP(
-    secret: ByteArray,
-    counter: Long,
-  ): String {
-    val counterBytes =
-      java.nio.ByteBuffer
-        .allocate(8)
-        .putLong(counter)
-        .array()
-    val mac = Mac.getInstance(ALGORITHM)
-    mac.init(SecretKeySpec(secret, ALGORITHM))
-    val hash = mac.doFinal(counterBytes)
-    val offset = hash[hash.size - 1].toInt() and 0x0f
-    val binary =
-      ((hash[offset].toInt() and 0x7f) shl 24) or
-        ((hash[offset + 1].toInt() and 0xff) shl 16) or
-        ((hash[offset + 2].toInt() and 0xff) shl 8) or
-        (hash[offset + 3].toInt() and 0xff)
-    val otp = binary % 1_000_000
-    return otp.toString().padStart(DIGITS, '0')
+    if (bits > 0) {
+      builder.append(alphabet[(buffer shl (5 - bits)) and 0x1f])
+    }
+    return builder.toString()
   }
 }

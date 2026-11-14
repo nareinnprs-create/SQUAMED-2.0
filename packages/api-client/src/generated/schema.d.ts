@@ -3620,6 +3620,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audit/logs": {
         parameters: {
             query?: never;
@@ -3871,6 +3887,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["removeMember"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/devices/{deviceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revokeDevice"];
         options?: never;
         head?: never;
         patch?: never;
@@ -8239,6 +8271,23 @@ export interface components {
                 [key: string]: Record<string, never>;
             };
         };
+        ApiResponseListDeviceView: {
+            data?: components["schemas"]["DeviceView"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        DeviceView: {
+            /** Format: uuid */
+            id: string;
+            label?: string;
+            /** Format: date-time */
+            firstSeenAt: string;
+            /** Format: date-time */
+            lastSeenAt: string;
+            revoked: boolean;
+        };
         ApiResponseListAuditLogView: {
             data?: components["schemas"]["AuditLogView"][];
             success: boolean;
@@ -8489,6 +8538,15 @@ export interface components {
         };
         ApiResponseListAttendantView: {
             data?: components["schemas"]["AttendantView"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ApiResponseMapStringBoolean: {
+            data?: {
+                [key: string]: boolean;
+            };
             success: boolean;
             meta: {
                 [key: string]: Record<string, never>;
@@ -15841,6 +15899,26 @@ export interface operations {
             };
         };
     };
+    listDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListDeviceView"];
+                };
+            };
+        };
+    };
     listLogs: {
         parameters: {
             query?: {
@@ -16181,6 +16259,28 @@ export interface operations {
             };
         };
     };
+    revokeDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringBoolean"];
+                };
+            };
+        };
+    };
     deleteModel: {
         parameters: {
             query?: never;
@@ -16204,4 +16304,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 52612bff6cb0863ba4e9fa5ccea72d62b441f6bfd865eb5ca47cbfe8cad4b6d6
+// openapi snapshot sha256: 4307ce13256aab7293f9f757c845a6d49bd65bba2f5e75ef295611515504f143

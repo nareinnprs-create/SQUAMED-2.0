@@ -36,6 +36,7 @@ class AuthService(
   private val jwtService: JwtService,
   private val tokenBlacklistService: TokenBlacklistService,
   private val totpService: TotpService,
+  private val deviceRegistryService: DeviceRegistryService,
   @Value("\${squamed.security.jwt.refresh-token-ttl-days}") private val refreshTtlDays: Long,
 ) {
   data class RegisterRequest(
@@ -238,6 +239,7 @@ class AuthService(
         refreshTokenHash = UUID.randomUUID().toString(),
         ipAddress = ipAddress,
         userAgent = userAgent?.take(512),
+        deviceId = deviceRegistryService.registerOrTouch(userId, deviceRegistryService.fingerprint(userAgent), userAgent?.take(255), hospitalId).id,
         hospitalId = hospitalId,
         expiresAt = Instant.now().plus(Duration.ofDays(refreshTtlDays)),
       )

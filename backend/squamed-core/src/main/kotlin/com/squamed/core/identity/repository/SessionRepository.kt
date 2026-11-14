@@ -11,4 +11,6 @@ interface SessionRepository : JpaRepository<SessionRecord, UUID> {
   fun findByRefreshTokenHash(refreshTokenHash: String): Optional<SessionRecord>
 
   fun findByUserIdAndRevokedAtIsNull(userId: UUID): List<SessionRecord>
+
+  fun findByDeviceIdAndRevokedAtIsNull(deviceId: UUID): List<SessionRecord>
 }

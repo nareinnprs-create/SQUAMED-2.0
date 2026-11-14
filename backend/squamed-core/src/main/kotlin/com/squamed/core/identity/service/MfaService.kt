@@ -25,7 +25,7 @@ class MfaService(
       user.mfaSecret = secret
       userRepository.save(user)
     }
-    val otpAuthUrl = "otpauth://totp/SQUAMED:${user.email}?secret=${base32Encode(secret)}&issuer=SQUAMED&period=30&digits=6"
+    val otpAuthUrl = "otpauth://totp/SQUAMED:${user.email}?secret=${totpService.toBase32(secret)}&issuer=SQUAMED&period=30&digits=6"
     return MfaSetupResponse(otpAuthUrl = otpAuthUrl, secret = secret)
   }
 
@@ -41,28 +41,5 @@ class MfaService(
     }
     user.mfaEnabled = true
     userRepository.save(user)
-  }
-
-  private fun base32Encode(secretBase64: String): String {
-    val decoded =
-      java.util.Base64
-        .getDecoder()
-        .decode(secretBase64)
-    val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-    val builder = StringBuilder()
-    var buffer = 0
-    var bits = 0
-    for (byte in decoded) {
-      buffer = (buffer shl 8) or (byte.toInt() and 0xff)
-      bits += 8
-      while (bits >= 5) {
-        builder.append(alphabet[(buffer shr (bits - 5)) and 0x1f])
-        bits -= 5
-      }
-    }
-    if (bits > 0) {
-      builder.append(alphabet[(buffer shl (5 - bits)) and 0x1f])
-    }
-    return builder.toString()
   }
 }

@@ -1474,6 +1474,48 @@ class PlatformIntegrationTests {
       val node = om.readTree(conflict.body)
       assertEquals("IDEMPOTENCY_CONFLICT", node["error"]["code"].asText())
     }
+
+    @Test
+    fun deviceRegistryListAndRevokeInvalidatesSession() {
+      val s = suffix()
+      val email = "device-$s@test.local"
+      val register =
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Dev",
+            "lastName" to "Ice",
+          ),
+        )
+      assertEquals(201, register.status, "register: ${register.body.take(200)}")
+
+      val login = api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123"))
+      assert2xx(login, "login for device journey")
+      val token = `data`(login)["accessToken"].asText()
+
+      val devices = api(HttpMethod.GET, "/api/v1/auth/devices", token = token)
+      assert2xx(devices, "list devices")
+      val deviceList = `data`(devices)
+      assertTrue(deviceList.isArray && deviceList.size() >= 1, "expected at least one device: ${devices.body.take(200)}")
+      val deviceId = deviceList[0]["id"].asText()
+      assertTrue(deviceId.isNotBlank(), "device id must be present")
+
+      val revoked = api(HttpMethod.DELETE, "/api/v1/auth/devices/$deviceId", token = token)
+      assert2xx(revoked, "revoke device")
+
+      // Revoking the device kills the session bound to it → refresh must be rejected.
+      val refresh =
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/refresh",
+          json("refreshToken" to `data`(login)["refreshToken"].asText()),
+        )
+      val refreshStatus = om.readTree(refresh.body)["data"]["status"].asText()
+      assertEquals("INVALID_CREDENTIALS", refreshStatus, "refresh after device revoke must fail: ${refresh.body.take(200)}")
+    }
   }
 
   @Nested

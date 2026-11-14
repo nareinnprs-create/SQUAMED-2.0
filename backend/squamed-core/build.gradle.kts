@@ -130,6 +130,10 @@ val jacocoExecFiles: FileTree = fileTree("${layout.buildDirectory.get()}/jacoco"
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
     executionData.setFrom(jacocoExecFiles)
+    // SC-10: in CI (integration-gates) the report is requested together with
+    // integrationTest; order after it so the merged exec fileTree already holds
+    // PIT data (no forced run for standalone invocations).
+    mustRunAfter(tasks.named("integrationTest"))
     reports {
         xml.required.set(true)
         html.required.set(true)
@@ -141,6 +145,8 @@ tasks.jacocoTestReport {
 tasks.jacocoTestCoverageVerification {
     dependsOn(tasks.test)
     executionData.setFrom(jacocoExecFiles)
+    // SC-10: same ordering contract — verified against unit+PIT exec merged.
+    mustRunAfter(tasks.named("integrationTest"))
     classDirectories.setFrom(jacocoClassDirectories())
     violationRules {
         rule {

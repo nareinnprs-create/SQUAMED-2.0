@@ -1220,6 +1220,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notifications/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notifications/read-all": {
         parameters: {
             query?: never;
@@ -1918,6 +1934,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["activateTrauma"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listForPatient"];
+        put?: never;
+        post: operations["capture"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consents/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["withdraw"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3588,6 +3636,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notifications/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lab/orders/{id}": {
         parameters: {
             query?: never;
@@ -4076,6 +4140,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getRegistration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/consents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getConsent"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6434,6 +6514,47 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
+        NotificationDispatchDto: {
+            /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
+            patientId?: string;
+            /** Format: uuid */
+            recipientId?: string;
+            recipientAddress?: string;
+            channel?: string;
+            type?: string;
+            title?: string;
+            body?: string;
+            payload?: string;
+        };
+        ApiResponseNotificationRequestView: {
+            data?: components["schemas"]["NotificationRequestView"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        NotificationRequestView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
+            patientId?: string;
+            /** Format: uuid */
+            recipientId?: string;
+            recipientAddress?: string;
+            channel: string;
+            type: string;
+            title: string;
+            body?: string;
+            status: string;
+            providerRef?: string;
+            errorMessage?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
         ApiResponseLong: {
             /** Format: int64 */
             data?: number;
@@ -7252,6 +7373,53 @@ export interface components {
             assessedBy?: string;
             /** Format: date-time */
             assessedAt?: string;
+        };
+        ChannelOptInDto: {
+            channel?: string;
+            optedIn?: boolean;
+        };
+        ConsentCaptureDto: {
+            /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
+            patientId?: string;
+            purpose?: string;
+            scope?: string;
+            signatureData?: string;
+            signedByName?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            channelOptIns?: components["schemas"]["ChannelOptInDto"][];
+        };
+        ApiResponseConsentView: {
+            data?: components["schemas"]["ConsentView"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ConsentView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
+            patientId: string;
+            purpose: string;
+            status: string;
+            scope?: string;
+            signaturePresent: boolean;
+            signedByName?: string;
+            /** Format: date-time */
+            signedAt?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: date-time */
+            withdrawnAt?: string;
+            channelOptIns: components["schemas"]["ChannelOptInDto"][];
+        };
+        ConsentWithdrawDto: {
+            reason?: string;
         };
         ChannelCreateDto: {
             name?: string;
@@ -8791,6 +8959,13 @@ export interface components {
                 [key: string]: Record<string, never>;
             };
         };
+        ApiResponseListNotificationRequestView: {
+            data?: components["schemas"]["NotificationRequestView"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
         ApiResponseListVendorDto: {
             data?: components["schemas"]["VendorDto"][];
             success: boolean;
@@ -9103,6 +9278,13 @@ export interface components {
         };
         ApiResponseListEmergencyRegistrationView: {
             data?: components["schemas"]["EmergencyRegistrationView"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ApiResponseListConsentView: {
+            data?: components["schemas"]["ConsentView"][];
             success: boolean;
             meta: {
                 [key: string]: Record<string, never>;
@@ -12277,6 +12459,30 @@ export interface operations {
             };
         };
     };
+    send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationDispatchDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseNotificationRequestView"];
+                };
+            };
+        };
+    };
     markAllRead: {
         parameters: {
             query?: never;
@@ -14051,6 +14257,78 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseTraumaWorkflowView"];
+                };
+            };
+        };
+    };
+    listForPatient: {
+        parameters: {
+            query: {
+                patientId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListConsentView"];
+                };
+            };
+        };
+    };
+    capture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsentCaptureDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConsentView"];
+                };
+            };
+        };
+    };
+    withdraw: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsentWithdrawDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConsentView"];
                 };
             };
         };
@@ -17147,6 +17425,28 @@ export interface operations {
             };
         };
     };
+    listRequests: {
+        parameters: {
+            query?: {
+                patientId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListNotificationRequestView"];
+                };
+            };
+        };
+    };
     getOrder: {
         parameters: {
             query?: never;
@@ -17804,6 +18104,28 @@ export interface operations {
             };
         };
     };
+    getConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConsentView"];
+                };
+            };
+        };
+    };
     unreadCount_1: {
         parameters: {
             query?: never;
@@ -18406,4 +18728,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 7e35cd96caf36ac0622da4d480c262c0f1e9cd56b49efde6e5ce11c496602d03
+// openapi snapshot sha256: 93c6b16a97cac513097d00ce119349adf6ec9a8e927a0672e51afe4b886694ed

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://squamed.local/schemas/config/dnd-hours.schema.json",
+  "title": "Do-not-disturb hours for outbound notifications",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["enabled", "startHour", "endHour"],
+  "properties": {
+    "enabled": { "type": "boolean" },
+    "startHour": { "type": "integer", "minimum": 0, "maximum": 23 },
+    "endHour": { "type": "integer", "minimum": 0, "maximum": 23 },
+    "emergencyBypass": { "type": "boolean" }
+  }
+}

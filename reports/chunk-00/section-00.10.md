@@ -1,47 +1,67 @@
 # Section 00.10 — Audit
 
 ## 1. Scope
-Write-path interceptor, hash-chained audit table, auditor viewer, nightly chain-verify job (pages on breach), WORM export job (MinIO dev / S3 Object Lock prod config).
+Per chunk-00 item 10 (line 19): ADR-9 hash chain, before/after capture, actor identity incl. device, viewer UI for auditor role. ADR-9 (00-MASTER-PLAN.md line 37): append-only table, hash-chained per tenant (`prev_hash` in each row), exported nightly to WORM object storage, retention 10 years. The section scope line adds the nightly chain-verify job (pages on breach). The baseline report (run 43548016617) failed gates 1/8/9 with the named gap: no hash chain (plain `audit_log` table), no before/after capture, no device identity on audit rows, no nightly verify, no WORM export, no viewer UI. This section closes that named gap on the 00.09 event fabric (breach alerts) and 00.01 identity (sessions/devices).
 
 ## 2. Built (current tree)
-- `audit/service/AuditAspect.kt` — AOP interceptor over every `com.squamed.core..*Controller` write (AuthController excluded).
-- `audit/service/AuditRecorder.kt` + `audit/repository/AuditLogRepository.kt` — persistence.
-- `audit/domain/AuditLog.kt` — plain table: actor, action, entity, ip/ua, method/path, request/response payloads, occurred_at. NO hash/previous_hash column.
-- `audit/api/AuditController.kt` + `AuditDtos.kt` — `/audit/logs` read API (auditor read path).
-- Migration `V22__audit.sql` (+ `V2__identity_audit_columns.sql`, `V9`, `V18` per-table audit columns).
+- **`V49__audit_chain.sql`** — `audit.audit_log` gains `chain_seq BIGINT`, `previous_hash`, `row_hash` (sha-256 hex), `actor_session_id`, `device_id`, `before_state`, `after_state`; partial UNIQUE index `(hospital_id, chain_seq) WHERE hospital_id IS NOT NULL`; `audit.chain_head` (per-tenant head: `last_seq`, `last_hash`; the zero UUID keys the system chain for rows without a hospital); `audit.export_cursor` (per-tenant WORM cursor); `audit:read` seeded to READ_ONLY_VIEWER (the auditor viewer read path; `audit:read`/`audit:export` permissions existed since V22 with SYSTEM_ADMIN).
+- **Hash chain (`AuditRecorder` rewrite)** — every audit row appends to its tenant's chain: head row read under `SELECT ... FOR UPDATE` (concurrent writers serialize), `chain_seq = last_seq + 1`, `previous_hash = last_hash`, `row_hash = SHA-256` over a canonical `|`-joined field list (seq, chain key, actor, action, entity, occurredAt epoch-milli, method/path, request/response payloads, before/after, previousHash — documented as byte-stable; changing it invalidates every stored hash), then the head advances. The whole append runs in the recorder's `REQUIRES_NEW` transaction; the chain write survives the caller's rollback so failed requests stay audited. The canonical form lives in `AuditRecorder.computeHash` and `AuditChainService.computeHash` — two copies that must stay in sync (marked in comments).
+- **Before/after capture** — `AuditHibernateInterceptor` (registered via `HibernatePropertiesCustomizer` on `hibernate.session_factory.interceptor`) pushes every flush's before/after state into a ThreadLocal buffer (`AuditStateCapture`), filtered to resolved scalars (String/Number/Boolean/Enum/temporal/UUID) so lazy associations never load. `AuditRecorder` drains the buffer when it writes the row: exact entity-type+id match first, then id-only fallback (the aspect knows DTO names like `PatientUpdateDto`, Hibernate pushes entity names like `PatientRecord`; the path id equals the entity PK for updates). Buffer is cleared before and after the write so pooled-thread leftovers never cross requests.
+- **Actor identity incl. device** — `actor_session_id` from the JWT `sessionId` claim (`SquamedPrincipal`), `device_id` resolved via `SessionRecord.deviceId` → the registered `DeviceRecord` (sha-256 fingerprint of the login User-Agent, 00.01 device registry — no device claim in the JWT needed).
+- **Nightly verify + breach alerts (`AuditChainService`)** — 03:00 cron (`squamed.audit.verify-cron`): walks every chain head in `chain_seq` order, re-computes each `row_hash` and checks `previous_hash` linkage; reports per-tenant breaches (`LINK_BROKEN`, `MISSING_HASH`, `HASH_MISMATCH`), `legacyRows` (pre-V49 rows without a chain — reported, never counted as tamper). Breaches publish `audit.chain_broken` through the 00.09 outbox (recipientIds broadcast to the tenant) so the realtime bridge + notification channel page admins — the chunk-00 item 8 "audit alerts" event, catalog now **13** EMITTED types. `POST /api/v1/audit/verify` (`audit:read:audit`) runs the same verify on demand and alerts on breach (`verifyAndAlert`).
+- **WORM export (`AuditExportService`)** — separate S3 client (`squamed.audit-worm.*` props; dev defaults to the compose MinIO on :9000), bucket `squamed-audit-worm` created with `objectLockEnabledForBucket(true)` at first boot (observed live in bootRun logs). `POST /api/v1/audit/export` (`audit:export:audit`) and the 03:30 cron stream each tenant's rows after the export cursor as JSONL (`audit/<tenant>/<date>/seq-<from>-<to>.jsonl`) and apply COMPLIANCE-mode 10-year retention (retention failures on non-object-lock buckets log a warning so export still lands); `audit.export_cursor` records the last exported seq per tenant (strictly-greater semantics — the boundary row is never re-exported).
+- **Auditor viewer** — `GET /api/v1/audit/logs` view now exposes `chainSeq/previousHash/rowHash/actorSessionId/deviceId/beforeState/afterState`; new page `apps/web/src/app/(app)/audit/page.tsx` (Audit Viewer in the app-shell nav): audit table (when/actor/action/entity/request/status/chain-`#seq`+hash8/device8), "Verify chain" button rendering ok/broken with breach table (tenant/seq/reason), row-count selector. Doctor gets 403 (no `audit:read`), auditor reads + verifies but not export, admin full.
+- Contract: `docs/contracts/openapi-v1.json` snapshot (295,655 bytes, sha256 `d52c4c89…`) + stamped `packages/api-client/src/generated/schema.d.ts` regenerated in the same PR per `docs/development/contract-codegen.md`; `npm run build` 8/8 green.
+- `scripts/demo-00.10-audit.ps1` — exit-demo slice (12 checks, pwsh, port 8081).
 
 ## 3. Contracts delivered
-- Write-path interception (all controllers, PIT-verified rows land), `/audit/logs` read API.
-- NOT delivered: hash chain (no `previous_hash` — grep zero hits), nightly chain-verify job, WORM export job, auditor viewer UI (API only, no page).
+- `POST /api/v1/audit/verify` (`AuditVerifyView`: ok, checked, breachedTenants, legacyRows, breaches[{hospitalId, seq, reason}], verifiedAt) — on-demand ADR-9 chain verification, `audit:read:audit`.
+- `POST /api/v1/audit/export` (`AuditExportView`: exported, objectKey) — immediate WORM export, `audit:export:audit`.
+- Extended `AuditLogView` with the chain/device/before-after fields (auditor viewer read path).
+- `audit.chain_broken` domain event (13th EMITTED catalog entry) with payload `{reasons[], checked}`.
+- NOT delivered: S3 Object-Lock retention *proof* against real AWS (MinIO honors object lock; the retention call is wrapped so buckets without lock degrade to a warning — prod config validates at deploy), tamper-evident *external* anchoring (beyond ADR-9's scope), audit log search UI (viewer is a table + verify, no filters beyond row count — the API supports entityType/entityId/actor).
 
 ## 4. Gates
-1. FAIL — named contents missing: hash-chained table, auditor viewer UI, nightly chain-verify, WORM export.
-2. PASS — CI run 43548016617 (gate 2 green).
-3. PASS — CI run 43548016617 (gate 3 green).
-4. PASS — CI run 43548016617 (gate 4 green).
-5. PASS — CI run 43548016617 (gate 5 green); audit-write assertions inside `fullPatientRevenueJourney`.
-6. PASS — CI run 43548016617 (gate 6 green) (no audit UI page).
-7. PASS — CI run 43548016617 (gate 7 green).
-8. FAIL — schema-registry harness not yet wired (00.02 scope).
-9. FAIL — `V22__audit.sql` exists; `audit_log.hospital_id` is nullable and table is tenant-scoped, RLS cross-tenant denial suite ABSENT until 00.04 lands (ADR-13).
-10. PASS — this IS the audit section: interceptor present and PIT-verified (`audit logs for patient` + `audit rows recorded` assertions).
-11. PASS — this report; hash-chain absence flagged (ADR-9, chunk-0 item), not hidden.
-12. PASS — PIT `fullPatientRevenueJourney` slice: write patient → `/audit/logs?entityType=Patient` returns ≥1 row (API-level scripted slice).
+1. PASS — zero real stubs; zero-stub grep clean on the audit package, V49 and the demo script (run 43644178730).
+2. PASS — run 43644178730 (PR #22, squash abf41d4; no `--admin`).
+3. PASS — Detect source trees job green.
+4. PASS — ktlint + unit + ArchUnit (Backend gates job) green; local `ktlintFormat` BUILD SUCCESSFUL (run twice, incl. after the final test edit).
+5. PASS — Backend gates job (unit suite) green.
+6. PASS — Accessibility + performance gates green (axe/Lighthouse on the new viewer page).
+7. PASS — Frontend gates green; stamped client pins the snapshot hash (`d52c4c89…`); `npm run build` 8/8.
+8. PASS — Integration gates job green: all **49** PIT (48 retained + new `auditChainCoverage`) + merged coverage ≥ 0.80. First local PIT run failed only on the tamper step (`uuid = character varying` JDBC binding) — fixed with `?::uuid`; re-run green before PR (failures never shipped).
+9. PASS — V49 applied (Flyway "Successfully applied 1 migration … now at version v49" observed live in bootRun logs on merged main + CI); chain columns with partial UNIQUE index, per-tenant chain_head with FOR UPDATE serialization, export_cursor; legacy pre-V49 rows deliberately unchained and reported as `legacyRows`, not tamper breaches.
+10. PASS — audit surface: every controller write (incl. the new verify/export endpoints) flows through `AuditAspect` → `AuditRecorder` → the hash chain; the tamper PIT proves rows written before the change detect post-hoc modification.
+11. PASS — this report; ledger row 43 + merge-log #22 + totals updated in the same docs batch.
+12. PASS — scripted live slice `scripts/demo-00.10-audit.ps1`: **12/12 on 8081** (merged main abf41d4; pwsh), 2026-11-15: auditor viewer reads hash-chained rows, per-tenant clean verify, dev-DB row tamper → HASH_MISMATCH breach + `audit.chain_broken` outbox row, doctor denied 403, WORM export object key, catalog 13 with `AuditChainBroken` EMITTED.
 
 ## 5. Tests
-PIT: audit assertions in `fullPatientRevenueJourney` (rows recorded, global read, entity-type filter) + audit authz inside `unauthenticatedRequestsAreRejected`/`userWithoutRolesIsDenied` — green, run 43548016617. Coverage ≥0.80 merged enforced.
+- PIT (new, 49th): `AuditChainTests.auditChainCoverage` — fresh hospital per run (dev DB persists rows): doctor + auditor registered, doctor logs in with a distinct User-Agent → device registered; patient create+update with the UA header → audit rows have `chainSeq` 1/2, sha-256 hex `rowHash`, `previousHash` linkage (update row links to create row hash), `beforeState`/`afterState` captured (before contains the old phone, after the new one), `deviceId` stamped and equal across both writes; `POST /audit/verify` clean for the fresh tenant (checked ≥ 2; per-tenant assert so long-lived dev DBs with stale breached tenants from earlier runs stay green); auditor (READ_ONLY_VIEWER) reads logs + verifies but is denied export 403; doctor denied audit read 403; `POST /audit/export` covers chained rows and returns the object key; row tampered via JdbcTemplate (`SET response_payload … WHERE id = ?::uuid`) → verify reports HASH_MISMATCH for that tenant + `audit.chain_broken` outbox row reaches SENT within 30s.
+- PIT (retained): 49 tests total green in CI run 43644178730 (AuditChain 1, Contract 7, Coverage 20, EventFabric 1, Journey 5, Phase2Inpatient 7, Security 7, TenantIsolation 1). `eventFabricCoverage` updated for the catalog count 12 → 13.
+- Web: stamped client regenerated; `npm run build` 8/8 green.
 
 ## 6. Accessibility
-N/A UI (no auditor page). Gate 6 green repo-wide (run 43548016617).
+The viewer page reuses the house primitives (PageHeader, Table, Badge, Button, Select, StatusIndicator) with the same semantics as the EMPI page; gate 6 (axe + Lighthouse + visual) green repo-wide in run 43644178730.
 
 ## 7. Issues found during build
-Baseline section — see BASELINE-AUDIT.md §2.1 audit row. Verified current tree: `AuditLog.kt` still has NO `previous_hash`/hash columns; no verify/export jobs; interceptor + read API intact.
+- **JDBC UUID binding (the one PIT failure)**: `UPDATE … WHERE id = ?` with a String bound against a `uuid` column throws `operator does not exist: uuid = character varying` — psql tolerates untyped literals, JDBC sends typed VARCHAR. Fixed with `?::uuid`. Everything before the tamper step (chain, device, before/after, permissions, export) passed on the first run.
+- **Aspect-type vs entity-type mismatch**: the aspect derives `entityType` from DTO class names (`PatientUpdateDto`), the Hibernate interceptor pushes entity names (`PatientRecord`) — a naive drain matched nothing and before/after would silently be null. Solved with the id-only fallback (path id = entity PK; outbox/audit rows never share the id), plus explicit buffer clears around the recorder's own transaction (its AuditLog/outbox flushes would otherwise leak into the next request on the pooled thread).
+- **Null-tenant Spring Data trap**: `findByHospitalIdAndChainSeqNotNull(hospitalId)` with a null param relies on Spring Data's null-param criteria translation — replaced with explicit `@Query` JPQL using the null-safe `(:hospitalId is null and a.hospitalId is null) or a.hospitalId = :hospitalId` pattern for both verify and export cursors.
+- **Export cursor off-by-one**: `chainSeq >= cursor` would re-export the boundary row on every run; changed to strictly-greater.
+- **Breach alert reachability**: `verify()` alone never publishes (it is read-only); the endpoint and the nightly job share `verifyAndAlert()` so an on-demand verify by an auditor pages admins exactly like the nightly one.
+- **`objectLockEnabled` naming**: the S3 builder method is `objectLockEnabledForBucket(true)`, not `objectLockEnabled(...)` (compile fix).
+- **Demo robustness on a long-lived dev DB**: the demo's clean-verify asserts per-tenant (a fresh tenant's chain) because PIT tamper runs permanently breach earlier tenants — global `ok=false` is honest state, not a demo failure.
 
 ## 8. External blockers
-None.
+None — chain, capture, device identity, verify, alerts and WORM export are all internal capabilities (MinIO in dev; prod uses the same S3 API with `squamed.audit-worm.*` config). The ledger's `exp:E1` (live ABDM linkage, owed from 00.07 §8) remains open and untouched by this section.
 
 ## 9. Deviations from chunk file
-Zero; hash chain / verify job / WORM export are unbuilt (ADR-9 chunk-0 items), not re-scoped.
+- **"Pages on breach" channel**: the nightly/on-demand verify publishes `audit.chain_broken` through the event fabric (WS broadcast + notification bridge) rather than an email/pager integration — the in-app + realtime channel is what v1 has; channel expansion is 00.12's notification design.
+- **Before/after granularity**: one before/after pair per audited request (first before, last after of the drained buffer), not a per-field diff log; the audit row also keeps the request/response payloads, so the change is reconstructible.
+- **Create rows carry after-only state**: the aspect learns `entityId` from path UUIDs, so create rows (no path id) drain nothing — before/after capture is demonstrated on updates where the id is in the path; the create payload is in `requestPayload`/`responsePayload` regardless.
+- **Legacy rows**: pre-V49 audit rows stay unchained (backfilling would require rewriting history — the opposite of append-only); verify reports them as `legacyRows`, and only tenants with a post-V49 chain head are walked.
+- **Canonical hash form duplicated** in `AuditRecorder` + `AuditChainService` (recorder must not depend on the service bean; marked to keep in sync) — a `shortcut:` note; extract to a shared object if a third consumer appears.
+- **Retention warning path**: buckets without object lock (some dev MinIO images) skip the 10-year retention call with a warning; the export itself always lands. Prod bucket is created with lock enabled, so COMPLIANCE retention applies there.
 
 ## 10. Exit-demo slice
-PIT `fullPatientRevenueJourney` audit assertions (write → audit row → filtered read) — green in run 43548016617. Tamper-test slice (chain breach detection) not possible until hash chain exists.
+`pwsh scripts/demo-00.10-audit.ps1` against the running app (8081, merged main abf41d4): admin login → fresh hospital → auditor registered → auditor reads hash-chained rows (rowHash + chainSeq present) → per-tenant chain verify clean → row tampered directly in the dev DB → verify reports HASH_MISMATCH breach → `audit.chain_broken` outbox row → doctor denied audit read 403 → admin WORM export returns the object key → catalog lists 13 v1 types with AuditChainBroken EMITTED. **12 passed, 0 failed**, live 2026-11-15. PIT suite green in CI run 43644178730.

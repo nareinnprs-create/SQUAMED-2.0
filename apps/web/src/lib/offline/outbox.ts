@@ -43,6 +43,8 @@ export interface FlushOptions {
   baseUrl?: string;
   /** Extra headers, e.g. the Authorization bearer header. */
   headers?: Record<string, string>;
+  /** Injectable fetch for tests; defaults to the global. */
+  fetchImpl?: typeof fetch;
 }
 
 function load(): OutboxEntry[] {
@@ -93,12 +95,13 @@ export async function flushOutbox(options: FlushOptions = {}): Promise<FlushResu
   const entries = load();
   if (entries.length === 0) return { sent: 0, rejected: 0, remaining: 0 };
   const baseUrl = options.baseUrl ?? '';
+  const send = options.fetchImpl ?? fetch;
   let sent = 0;
   let rejected = 0;
   for (const entry of entries) {
     let status = 0;
     try {
-      const response = await fetch(`${baseUrl}${entry.path}`, {
+      const response = await send(`${baseUrl}${entry.path}`, {
         method: entry.method,
         body: entry.body,
         headers: {

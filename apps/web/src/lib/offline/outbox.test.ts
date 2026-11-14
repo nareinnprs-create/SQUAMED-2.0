@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   enqueueOfflineWrite,
   flushOutbox,
@@ -9,26 +9,34 @@ import { registerOfflineWriteRule, resetOfflineWriteRules } from './write-whitel
 
 const BASE = 'http://api.test/api/v1';
 
-function lastCall(): { url: string; init: RequestInit } {
-  const call = vi.mocked(fetch).mock.calls.at(-1);
-  if (!call) throw new Error('no fetch call recorded');
-  return { url: String(call[0]), init: call[1] ?? {} };
+interface FetchCall {
+  url: string;
+  init: RequestInit;
 }
 
-function okResponse(status = 200): Response {
-  return { ok: status >= 200 && status < 300, status } as Response;
+let calls: FetchCall[] = [];
+
+function scriptedFetch(status: number | 'network-error'): typeof fetch {
+  return async (input, init) => {
+    calls.push({ url: String(input), init: init ?? {} });
+    if (status === 'network-error') throw new Error('offline');
+    return new Response(null, { status });
+  };
+}
+
+function header(call: FetchCall | undefined, name: string): string | null {
+  return new Headers(call?.init.headers).get(name);
 }
 
 describe('outbox (chunk-00 item 13 store-and-forward)', () => {
   beforeEach(() => {
     resetOfflineWriteRules();
     localStorage.clear();
-    vi.unstubAllGlobals();
+    calls = [];
   });
 
   afterEach(() => {
     resetOfflineWriteRules();
-    vi.unstubAllGlobals();
   });
 
   it('rejects writes that are not whitelisted and stores nothing', () => {
@@ -58,16 +66,15 @@ describe('outbox (chunk-00 item 13 store-and-forward)', () => {
     const { idempotencyKey } = enqueueOfflineWrite('PATCH', '/tasks/123/status', {
       status: 'completed',
     });
-    vi.stubGlobal('fetch', vi.fn(async () => okResponse(200)));
 
-    const result = await flushOutbox({ baseUrl: BASE });
+    const result = await flushOutbox({ baseUrl: BASE, fetchImpl: scriptedFetch(200) });
 
     expect(result).toEqual({ sent: 1, rejected: 0, remaining: 0 });
-    const { url, init } = lastCall();
-    expect(url).toBe(`${BASE}/tasks/123/status`);
-    expect(init.method).toBe('PATCH');
-    expect(init.body).toBe('{"status":"completed"}');
-    expect(new Headers(init.headers).get('Idempotency-Key')).toBe(idempotencyKey);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe(`${BASE}/tasks/123/status`);
+    expect(calls[0]?.init.method).toBe('PATCH');
+    expect(calls[0]?.init.body).toBe('{"status":"completed"}');
+    expect(header(calls[0], 'Idempotency-Key')).toBe(idempotencyKey);
     expect(pendingOfflineWrites()).toHaveLength(0);
   });
 
@@ -78,43 +85,36 @@ describe('outbox (chunk-00 item 13 store-and-forward)', () => {
     });
     registerOfflineWriteRule({ method: 'POST', pathPattern: /^\/tasks$/ });
     const second = enqueueOfflineWrite('POST', '/tasks', { title: 'second' });
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('offline')));
 
-    const result = await flushOutbox({ baseUrl: BASE });
+    const failed = await flushOutbox({ baseUrl: BASE, fetchImpl: scriptedFetch('network-error') });
+    expect(failed).toEqual({ sent: 0, rejected: 0, remaining: 2 });
+    expect(calls).toHaveLength(1);
 
-    expect(result).toEqual({ sent: 0, rejected: 0, remaining: 2 });
-    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
-
-    vi.stubGlobal('fetch', vi.fn(async () => okResponse(200)));
-    const retry = await flushOutbox({ baseUrl: BASE });
+    const retry = await flushOutbox({ baseUrl: BASE, fetchImpl: scriptedFetch(200) });
     expect(retry).toEqual({ sent: 2, rejected: 0, remaining: 0 });
 
-    const calls = vi.mocked(fetch).mock.calls;
     // The retried write carries the SAME key: the server replays instead of re-executing.
-    expect(new Headers(calls[0]?.[1]?.headers).get('Idempotency-Key')).toBe(idempotencyKey);
-    expect(new Headers(calls[1]?.[1]?.headers).get('Idempotency-Key')).toBe(second.idempotencyKey);
+    expect(header(calls[1], 'Idempotency-Key')).toBe(idempotencyKey);
+    expect(header(calls[2], 'Idempotency-Key')).toBe(second.idempotencyKey);
     expect(pendingOfflineWrites()).toHaveLength(0);
   });
 
   it('stops on 5xx without dropping anything, then drains later', async () => {
     registerOfflineWriteRule({ method: 'POST', pathPattern: /^\/tasks$/ });
     enqueueOfflineWrite('POST', '/tasks', { title: 'a' });
-    vi.stubGlobal('fetch', vi.fn(async () => okResponse(503)));
 
-    const failed = await flushOutbox({ baseUrl: BASE });
+    const failed = await flushOutbox({ baseUrl: BASE, fetchImpl: scriptedFetch(503) });
     expect(failed).toEqual({ sent: 0, rejected: 0, remaining: 1 });
 
-    vi.stubGlobal('fetch', vi.fn(async () => okResponse(201)));
-    const done = await flushOutbox({ baseUrl: BASE });
+    const done = await flushOutbox({ baseUrl: BASE, fetchImpl: scriptedFetch(201) });
     expect(done).toEqual({ sent: 1, rejected: 0, remaining: 0 });
   });
 
   it('drops a definitive 4xx (the server ruled; replaying cannot help)', async () => {
     registerOfflineWriteRule({ method: 'PATCH', pathPattern: /^\/tasks\/[^/]+\/status$/ });
     enqueueOfflineWrite('PATCH', '/tasks/9/status', { status: 'completed' });
-    vi.stubGlobal('fetch', vi.fn(async () => okResponse(400)));
 
-    const result = await flushOutbox({ baseUrl: BASE });
+    const result = await flushOutbox({ baseUrl: BASE, fetchImpl: scriptedFetch(400) });
 
     expect(result).toEqual({ sent: 0, rejected: 1, remaining: 0 });
     expect(pendingOfflineWrites()).toHaveLength(0);
@@ -123,18 +123,16 @@ describe('outbox (chunk-00 item 13 store-and-forward)', () => {
   it('parks the queue on 401 (stale token) instead of dropping the write', async () => {
     registerOfflineWriteRule({ method: 'PATCH', pathPattern: /^\/tasks\/[^/]+\/status$/ });
     enqueueOfflineWrite('PATCH', '/tasks/1/status', { status: 'completed' });
-    vi.stubGlobal('fetch', vi.fn(async () => okResponse(401)));
 
-    const result = await flushOutbox({ baseUrl: BASE });
+    const result = await flushOutbox({ baseUrl: BASE, fetchImpl: scriptedFetch(401) });
 
     expect(result).toEqual({ sent: 0, rejected: 0, remaining: 1 });
     expect(pendingOfflineWrites()).toHaveLength(1);
   });
 
   it('flushing an empty outbox is a no-op', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => okResponse(200)));
-    const result = await flushOutbox({ baseUrl: BASE });
+    const result = await flushOutbox({ baseUrl: BASE, fetchImpl: scriptedFetch(200) });
     expect(result).toEqual({ sent: 0, rejected: 0, remaining: 0 });
-    expect(vi.mocked(fetch).mock.calls).toHaveLength(0);
+    expect(calls).toHaveLength(0);
   });
 });

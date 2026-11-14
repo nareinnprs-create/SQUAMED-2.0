@@ -23,7 +23,28 @@ class RealtimeSessionRegistry {
     sessionsByUser[owner]?.takeIf { it.isEmpty() }?.let { sessionsByUser.remove(owner) }
   }
 
-  fun sessionsFor(userId: UUID): List<WebSocketSession> = sessionsByUser[userId] ?: emptyList()
+  /**
+   * `hospitalId` narrows to the sessions opened with that hospital's token (session attribute set
+   * by the handler from the JWT `hp` claim); null returns all of the user's sessions.
+   */
+  fun sessionsFor(
+    userId: UUID,
+    hospitalId: UUID? = null,
+  ): List<WebSocketSession> {
+    val sessions = sessionsByUser[userId] ?: emptyList()
+    if (hospitalId == null) return sessions.toList()
+    return sessions.filter { it.attributes[HOSPITAL_ATTR] == hospitalId }
+  }
+
+  fun allSessions(hospitalId: UUID? = null): List<WebSocketSession> {
+    val all = sessionsByUser.values.flatten()
+    if (hospitalId == null) return all.toList()
+    return all.filter { it.attributes[HOSPITAL_ATTR] == hospitalId }
+  }
 
   fun connectedCount(): Int = sessionsByUser.values.sumOf { it.size }
+
+  companion object {
+    const val HOSPITAL_ATTR = "hospitalId"
+  }
 }

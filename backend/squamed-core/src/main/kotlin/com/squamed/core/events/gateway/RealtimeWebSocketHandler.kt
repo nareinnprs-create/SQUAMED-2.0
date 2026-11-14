@@ -29,11 +29,14 @@ class RealtimeWebSocketHandler(
           .queryParams
           .getFirst("token")
       }
-    val userId = token?.let { jwtService.parseAccessToken(it)?.userId }
+    val claims = token?.let { jwtService.parseAccessToken(it) }
+    val userId = claims?.userId
     if (userId == null) {
       session.close(CloseStatus.POLICY_VIOLATION)
       return
     }
+    // Hospital scope (ADR-13): the session only receives events for the hospital in its token.
+    claims.hospitalId?.let { session.attributes[RealtimeSessionRegistry.HOSPITAL_ATTR] = it }
     registry.add(userId, session)
     try {
       val welcome =

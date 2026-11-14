@@ -13,9 +13,14 @@ class RealtimeGateway(
 ) {
   private val logger = LoggerFactory.getLogger(RealtimeGateway::class.java)
 
+  /**
+   * Push a frame to one user's sessions. `hospitalId` narrows to sessions opened with that
+   * hospital's token (hospital scope); null reaches all of the user's sessions.
+   */
   fun sendToUser(
     userId: UUID,
     payload: Any,
+    hospitalId: UUID? = null,
   ) {
     val json =
       try {
@@ -24,7 +29,7 @@ class RealtimeGateway(
         logger.error("Failed to serialize realtime payload for userId={}", userId, e)
         return
       }
-    registry.sessionsFor(userId).forEach { session ->
+    registry.sessionsFor(userId, hospitalId).forEach { session ->
       try {
         if (session.isOpen) {
           synchronized(session) {
@@ -40,7 +45,33 @@ class RealtimeGateway(
   fun sendToUsers(
     userIds: List<UUID>,
     payload: Any,
+    hospitalId: UUID? = null,
   ) {
-    userIds.distinct().forEach { userId -> sendToUser(userId, payload) }
+    userIds.distinct().forEach { userId -> sendToUser(userId, payload, hospitalId) }
+  }
+
+  /** Push a frame to every connected session within the hospital scope (null = all sessions). */
+  fun broadcast(
+    hospitalId: UUID?,
+    payload: Any,
+  ) {
+    val json =
+      try {
+        objectMapper.writeValueAsString(payload)
+      } catch (e: Exception) {
+        logger.error("Failed to serialize realtime broadcast payload", e)
+        return
+      }
+    registry.allSessions(hospitalId).forEach { session ->
+      try {
+        if (session.isOpen) {
+          synchronized(session) {
+            session.sendMessage(TextMessage(json))
+          }
+        }
+      } catch (e: Exception) {
+        logger.error("Failed to broadcast realtime frame to session={}", session.id, e)
+      }
+    }
   }
 }

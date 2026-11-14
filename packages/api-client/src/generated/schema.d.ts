@@ -980,6 +980,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/patients/merges/{mergeId}/unmerge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["unmerge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/patients/merge": {
         parameters: {
             query?: never;
@@ -1006,6 +1022,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["match"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/empi/reviews/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rejectEmpiReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/empi/reviews/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["approveEmpiReview"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3324,6 +3372,38 @@ export interface paths {
             cookie?: never;
         };
         get: operations["board"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/merges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMerges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/empi/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listEmpiReviews"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5770,25 +5850,73 @@ export interface components {
                 [key: string]: Record<string, never>;
             };
         };
+        ApiResponseMergeLogDto: {
+            data?: components["schemas"]["MergeLogDto"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        MergeLogDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            targetPatientId: string;
+            /** Format: uuid */
+            duplicatePatientId: string;
+            /** Format: int32 */
+            mergeVersion: number;
+            status: string;
+            /** Format: uuid */
+            mergedBy: string;
+            /** Format: date-time */
+            mergedAt?: string;
+            /** Format: uuid */
+            unmergedBy?: string;
+            /** Format: date-time */
+            unmergedAt?: string;
+            moved: {
+                [key: string]: number;
+            };
+        };
         MergePatientsDto: {
             /** Format: uuid */
             targetId: string;
             /** Format: uuid */
             duplicateId: string;
         };
-        ApiResponseMergeResponseDto: {
-            data?: components["schemas"]["MergeResponseDto"];
+        ApiResponseEmpiReviewDto: {
+            data?: components["schemas"]["EmpiReviewDto"];
             success: boolean;
             meta: {
                 [key: string]: Record<string, never>;
             };
         };
-        MergeResponseDto: {
-            patient: components["schemas"]["PatientDetailDto"];
-            moved: {
-                [key: string]: number;
-            };
-            skipped: string[];
+        EmpiReviewDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            targetPatientId: string;
+            /** Format: uuid */
+            duplicatePatientId: string;
+            /** Format: int32 */
+            score: number;
+            matchedOn: string[];
+            status: string;
+            /** Format: uuid */
+            submittedBy: string;
+            /** Format: uuid */
+            decidedBy?: string;
+            /** Format: date-time */
+            decidedAt?: string;
+            /** Format: uuid */
+            mergeId?: string;
+            /** Format: date-time */
+            createdAt?: string;
         };
         ApiResponseListMatchCandidateDto: {
             data?: components["schemas"]["MatchCandidateDto"][];
@@ -8289,6 +8417,20 @@ export interface components {
         };
         ApiResponseListAllergyDto: {
             data?: components["schemas"]["AllergyDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ApiResponseListMergeLogDto: {
+            data?: components["schemas"]["MergeLogDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ApiResponseListEmpiReviewDto: {
+            data?: components["schemas"]["EmpiReviewDto"][];
             success: boolean;
             meta: {
                 [key: string]: Record<string, never>;
@@ -11372,6 +11514,28 @@ export interface operations {
             };
         };
     };
+    unmerge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mergeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMergeLogDto"];
+                };
+            };
+        };
+    };
     merge: {
         parameters: {
             query?: never;
@@ -11391,7 +11555,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseMergeResponseDto"];
+                    "*/*": components["schemas"]["ApiResponseEmpiReviewDto"];
                 };
             };
         };
@@ -11416,6 +11580,50 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListMatchCandidateDto"];
+                };
+            };
+        };
+    };
+    rejectEmpiReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEmpiReviewDto"];
+                };
+            };
+        };
+    };
+    approveEmpiReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEmpiReviewDto"];
                 };
             };
         };
@@ -16396,6 +16604,51 @@ export interface operations {
             };
         };
     };
+    listMerges: {
+        parameters: {
+            query?: {
+                hospitalId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListMergeLogDto"];
+                };
+            };
+        };
+    };
+    listEmpiReviews: {
+        parameters: {
+            query?: {
+                status?: string;
+                hospitalId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListEmpiReviewDto"];
+                };
+            };
+        };
+    };
     getPatient360: {
         parameters: {
             query?: never;
@@ -17632,4 +17885,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: ba4c6db5dfcad3fd0e032d10abf9cb810220fc99637d5390d74fe7a09ff02f3e
+// openapi snapshot sha256: 22ce936d8163650b58acc55fed1bf595c2f2462151cfe3e84dba7320176a8043

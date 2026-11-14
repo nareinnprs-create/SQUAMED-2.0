@@ -1,11 +1,14 @@
 package com.squamed.core.patient.service
 
+import com.fasterxml.jackson.core.type.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.patient.api.AddressDto
 import com.squamed.core.patient.api.AllergyDto
 import com.squamed.core.patient.api.ContactPointDto
 import com.squamed.core.patient.api.MedicalHistoryDto
+import com.squamed.core.patient.api.MergeLogDto
 import com.squamed.core.patient.api.MergeResponseDto
 import com.squamed.core.patient.api.NoteDto
 import com.squamed.core.patient.api.PatientCreateDto
@@ -19,6 +22,7 @@ import com.squamed.core.patient.domain.Allergy
 import com.squamed.core.patient.domain.ContactPoint
 import com.squamed.core.patient.domain.MedicalHistory
 import com.squamed.core.patient.domain.PatientIdentifier
+import com.squamed.core.patient.domain.PatientMergeLog
 import com.squamed.core.patient.domain.PatientNote
 import com.squamed.core.patient.domain.PatientRecord
 import com.squamed.core.patient.domain.PatientRelationship
@@ -28,12 +32,14 @@ import com.squamed.core.patient.repository.ContactPointRepository
 import com.squamed.core.patient.repository.EpisodeOfCareRepository
 import com.squamed.core.patient.repository.MedicalHistoryRepository
 import com.squamed.core.patient.repository.PatientIdentifierRepository
+import com.squamed.core.patient.repository.PatientMergeLogRepository
 import com.squamed.core.patient.repository.PatientNoteRepository
 import com.squamed.core.patient.repository.PatientRecordRepository
 import com.squamed.core.patient.repository.PatientRelationshipRepository
 import com.squamed.core.search.SearchIndexer
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.repository.CrudRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.multipart.MultipartFile
@@ -53,10 +59,12 @@ class PatientService(
   private val medicalHistoryRepository: MedicalHistoryRepository,
   private val episodeOfCareRepository: EpisodeOfCareRepository,
   private val patientRelationshipRepository: PatientRelationshipRepository,
+  private val patientMergeLogRepository: PatientMergeLogRepository,
   private val mrnGenerator: MrnGenerator,
   private val eventPublisher: DomainEventPublisher,
   private val searchIndexer: SearchIndexer,
   private val photoStorage: PatientPhotoStorage,
+  private val objectMapper: ObjectMapper,
 ) {
   private val logger = LoggerFactory.getLogger(PatientService::class.java)
 
@@ -281,7 +289,8 @@ class PatientService(
       } else {
         searchByQuery(q, hospitalId)
       }
-    return results.map { PatientSummaryDto.from(it) }
+    // Archived (merged) duplicate rows are hidden from search; they stay reachable by direct id.
+    return results.filter { it.mergedInto == null }.map { PatientSummaryDto.from(it) }
   }
 
   @Transactional
@@ -388,6 +397,7 @@ class PatientService(
   fun mergePatient(
     targetId: UUID,
     duplicateId: UUID,
+    actorId: UUID,
   ): MergeResponseDto {
     if (targetId == duplicateId) {
       throw IllegalArgumentException("CANNOT_MERGE_PATIENT_WITH_ITSELF")
@@ -396,6 +406,9 @@ class PatientService(
     val duplicate = findPatient(duplicateId)
     if (target.hospitalId != null && duplicate.hospitalId != null && target.hospitalId != duplicate.hospitalId) {
       throw IllegalArgumentException("MERGE_CROSS_HOSPITAL")
+    }
+    if (target.mergedInto != null || duplicate.mergedInto != null) {
+      throw IllegalArgumentException("PATIENT_ALREADY_MERGED")
     }
 
     val moved =
@@ -407,6 +420,21 @@ class PatientService(
         "notes" to 0,
         "history" to 0,
         "episodes" to 0,
+        "relationships" to 0,
+      )
+    // V47 reversibility: every moved child row id is recorded in the merge-log snapshot
+    // so unmerge can re-point each row back to the duplicate.
+    val movedIds =
+      linkedMapOf(
+        "identifiers" to mutableListOf<String>(),
+        "contacts" to mutableListOf(),
+        "addresses" to mutableListOf(),
+        "allergies" to mutableListOf(),
+        "notes" to mutableListOf(),
+        "history" to mutableListOf(),
+        "episodes" to mutableListOf(),
+        "relationshipsOut" to mutableListOf(),
+        "relationshipsIn" to mutableListOf(),
       )
     val skipped = mutableListOf<String>()
 
@@ -421,6 +449,7 @@ class PatientService(
           targetId,
         )
       } else {
+        identifier.id?.let { movedIds.getValue("identifiers").add(it.toString()) }
         identifier.patientId = targetId
         patientIdentifierRepository.save(identifier)
         moved["identifiers"] = moved.getValue("identifiers") + 1
@@ -428,47 +457,231 @@ class PatientService(
     }
 
     contactPointRepository.findByPatientId(duplicateId).forEach { contact ->
+      contact.id?.let { movedIds.getValue("contacts").add(it.toString()) }
       contact.patientId = targetId
       contactPointRepository.save(contact)
       moved["contacts"] = moved.getValue("contacts") + 1
     }
 
     addressRepository.findByPatientId(duplicateId).forEach { address ->
+      address.id?.let { movedIds.getValue("addresses").add(it.toString()) }
       address.patientId = targetId
       addressRepository.save(address)
       moved["addresses"] = moved.getValue("addresses") + 1
     }
 
     allergyRepository.findByPatientId(duplicateId).forEach { allergy ->
+      allergy.id?.let { movedIds.getValue("allergies").add(it.toString()) }
       allergy.patientId = targetId
       allergyRepository.save(allergy)
       moved["allergies"] = moved.getValue("allergies") + 1
     }
 
     patientNoteRepository.findByPatientId(duplicateId).forEach { note ->
+      note.id?.let { movedIds.getValue("notes").add(it.toString()) }
       note.patientId = targetId
       patientNoteRepository.save(note)
       moved["notes"] = moved.getValue("notes") + 1
     }
 
     medicalHistoryRepository.findByPatientId(duplicateId).forEach { history ->
+      history.id?.let { movedIds.getValue("history").add(it.toString()) }
       history.patientId = targetId
       medicalHistoryRepository.save(history)
       moved["history"] = moved.getValue("history") + 1
     }
 
     episodeOfCareRepository.findByPatientId(duplicateId).forEach { episode ->
+      episode.id?.let { movedIds.getValue("episodes").add(it.toString()) }
       episode.patientId = targetId
       episodeOfCareRepository.save(episode)
       moved["episodes"] = moved.getValue("episodes") + 1
     }
 
-    patientRecordRepository.deleteById(duplicateId)
+    // Relationships move both ways (outgoing by patientId, incoming by relatedPatientId);
+    // an identical relationship already on the survivor stays put and is skipped.
+    patientRelationshipRepository.findByPatientId(duplicateId).forEach { relationship ->
+      if (patientRelationshipRepository.existsByHospitalIdAndPatientIdAndRelatedPatientIdAndRelationshipType(
+          relationship.hospitalId,
+          targetId,
+          relationship.relatedPatientId,
+          relationship.relationshipType,
+        )
+      ) {
+        skipped += "RELATIONSHIP:${relationship.relationshipType}:${relationship.relatedPatientId}"
+      } else {
+        relationship.id?.let { movedIds.getValue("relationshipsOut").add(it.toString()) }
+        relationship.patientId = targetId
+        patientRelationshipRepository.save(relationship)
+        moved["relationships"] = moved.getValue("relationships") + 1
+      }
+    }
+    patientRelationshipRepository.findByRelatedPatientId(duplicateId).forEach { relationship ->
+      if (patientRelationshipRepository.existsByHospitalIdAndPatientIdAndRelatedPatientIdAndRelationshipType(
+          relationship.hospitalId,
+          relationship.patientId,
+          targetId,
+          relationship.relationshipType,
+        )
+      ) {
+        skipped += "RELATIONSHIP:${relationship.relationshipType}:${relationship.patientId}"
+      } else {
+        relationship.id?.let { movedIds.getValue("relationshipsIn").add(it.toString()) }
+        relationship.relatedPatientId = targetId
+        patientRelationshipRepository.save(relationship)
+        moved["relationships"] = moved.getValue("relationships") + 1
+      }
+    }
+
+    // Archive the duplicate row (never delete) so the merge stays reversible (V47).
+    duplicate.mergedInto = targetId
+    duplicate.mergedAt = Instant.now()
+    duplicate.recordsStatus = "merged"
+    patientRecordRepository.save(duplicate)
+
+    val hospitalId =
+      target.hospitalId ?: duplicate.hospitalId ?: throw IllegalArgumentException("PATIENT_HOSPITAL_REQUIRED")
+    val mergeVersion =
+      1 +
+        patientMergeLogRepository
+          .findByHospitalIdAndTargetPatientIdAndDuplicatePatientId(hospitalId, targetId, duplicateId)
+          .size +
+        patientMergeLogRepository
+          .findByHospitalIdAndTargetPatientIdAndDuplicatePatientId(hospitalId, duplicateId, targetId)
+          .size
+    val now = Instant.now()
+    val log =
+      patientMergeLogRepository.save(
+        PatientMergeLog(
+          hospitalId = hospitalId,
+          targetPatientId = targetId,
+          duplicatePatientId = duplicateId,
+          mergeVersion = mergeVersion,
+          status = PatientMergeLog.STATUS_MERGED,
+          snapshot = objectMapper.writeValueAsString(movedIds),
+          mergedBy = actorId,
+          mergedAt = now,
+        ),
+      )
+
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "patient.merged",
+        occurredAt = now,
+        source = "patient-service",
+        entityType = "patient",
+        entityId = targetId,
+        hospitalId = hospitalId,
+        payload =
+          mapOf(
+            "duplicatePatientId" to duplicateId.toString(),
+            "mergeId" to log.id.toString(),
+            "mergeVersion" to mergeVersion,
+          ),
+      ),
+    )
+
     return MergeResponseDto(
       patient = getDetail(targetId),
       moved = moved,
       skipped = skipped,
+      mergeId = log.id,
     )
+  }
+
+  /**
+   * V47 unmerge: re-point every child row from the merge-log snapshot back to the duplicate
+   * (rows later re-owned elsewhere are left alone), restore the archived duplicate row, mark
+   * the log UNMERGED. Re-merging the same pair produces a new merge_version.
+   */
+  @Transactional
+  fun unmergePatient(
+    mergeId: UUID,
+    actorId: UUID,
+  ): MergeLogDto {
+    val log =
+      patientMergeLogRepository.findById(mergeId).orElseThrow { IllegalArgumentException("MERGE_NOT_FOUND") }
+    if (log.status != PatientMergeLog.STATUS_MERGED) {
+      throw IllegalArgumentException("MERGE_NOT_UNMERGEABLE")
+    }
+    val targetId = log.targetPatientId
+    val duplicateId = log.duplicatePatientId
+    val snapshot: Map<String, List<String>> =
+      objectMapper.readValue(log.snapshot, object : TypeReference<Map<String, List<String>>>() {})
+
+    fun ids(key: String): List<UUID> = snapshot[key].orEmpty().mapNotNull { runCatching { UUID.fromString(it) }.getOrNull() }
+
+    val movedBack =
+      linkedMapOf(
+        "identifiers" to 0,
+        "contacts" to 0,
+        "addresses" to 0,
+        "allergies" to 0,
+        "notes" to 0,
+        "history" to 0,
+        "episodes" to 0,
+        "relationships" to 0,
+      )
+
+    fun <T : Any> repoint(
+      rowIds: List<UUID>,
+      repository: CrudRepository<T, UUID>,
+      owner: (T) -> UUID,
+      reassign: (T, UUID) -> Unit,
+      counter: String,
+    ) {
+      for (rowId in rowIds) {
+        repository.findById(rowId).ifPresent { row ->
+          if (owner(row) == targetId) {
+            reassign(row, duplicateId)
+            repository.save(row)
+            movedBack[counter] = movedBack.getValue(counter) + 1
+          }
+        }
+      }
+    }
+
+    repoint(ids("identifiers"), patientIdentifierRepository, { it.patientId }, { row, id -> row.patientId = id }, "identifiers")
+    repoint(ids("contacts"), contactPointRepository, { it.patientId }, { row, id -> row.patientId = id }, "contacts")
+    repoint(ids("addresses"), addressRepository, { it.patientId }, { row, id -> row.patientId = id }, "addresses")
+    repoint(ids("allergies"), allergyRepository, { it.patientId }, { row, id -> row.patientId = id }, "allergies")
+    repoint(ids("notes"), patientNoteRepository, { it.patientId }, { row, id -> row.patientId = id }, "notes")
+    repoint(ids("history"), medicalHistoryRepository, { it.patientId }, { row, id -> row.patientId = id }, "history")
+    repoint(ids("episodes"), episodeOfCareRepository, { it.patientId }, { row, id -> row.patientId = id }, "episodes")
+    repoint(ids("relationshipsOut"), patientRelationshipRepository, { it.patientId }, { row, id -> row.patientId = id }, "relationships")
+    repoint(ids("relationshipsIn"), patientRelationshipRepository, { it.relatedPatientId }, { row, id -> row.relatedPatientId = id }, "relationships")
+
+    val duplicate = findPatient(duplicateId)
+    duplicate.mergedInto = null
+    duplicate.mergedAt = null
+    duplicate.recordsStatus = "active"
+    patientRecordRepository.save(duplicate)
+
+    log.status = PatientMergeLog.STATUS_UNMERGED
+    log.unmergedBy = actorId
+    log.unmergedAt = Instant.now()
+    patientMergeLogRepository.save(log)
+
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "patient.unmerged",
+        occurredAt = log.unmergedAt ?: Instant.now(),
+        source = "patient-service",
+        entityType = "patient",
+        entityId = duplicateId,
+        hospitalId = log.hospitalId,
+        payload =
+          mapOf(
+            "targetPatientId" to targetId.toString(),
+            "mergeId" to mergeId.toString(),
+            "mergeVersion" to log.mergeVersion,
+          ),
+      ),
+    )
+
+    return MergeLogDto.from(log, snapshot)
   }
 
   @Transactional(readOnly = true)

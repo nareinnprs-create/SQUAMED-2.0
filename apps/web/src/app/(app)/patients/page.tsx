@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  Badge,
   Button,
+  Checkbox,
   ContentPanel,
   Input,
   Modal,
@@ -19,6 +21,7 @@ import {
   TableRow,
 } from '@squamed/ui';
 import { useApi } from '../../../lib/use-api';
+import { buildRegistrationPayload, registrationRequired, type RegistrationForm } from './register-payload';
 
 interface PatientSummary {
   id: string;
@@ -31,6 +34,7 @@ interface PatientSummary {
   qid?: string | null;
   email?: string | null;
   nationalId?: string | null;
+  isUnknown?: boolean;
 }
 
 interface DuplicateMatch {
@@ -46,7 +50,7 @@ interface RegisterResponse {
   matches: DuplicateMatch[];
 }
 
-const emptyForm = {
+const emptyForm: RegistrationForm = {
   firstName: '',
   lastName: '',
   dateOfBirth: '',
@@ -65,6 +69,9 @@ export default function PatientsPage() {
   const [query, setQuery] = useState('');
   const [registerOpen, setRegisterOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [unknownPatient, setUnknownPatient] = useState(false);
+  const [idType, setIdType] = useState('ABHA');
+  const [idValue, setIdValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [matches, setMatches] = useState<DuplicateMatch[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -86,11 +93,11 @@ export default function PatientsPage() {
     if (isReady) void loadPatients('');
   }, [isReady, loadPatients]);
 
-  function updateForm(key: keyof typeof emptyForm, value: string) {
+  function updateForm(key: keyof RegistrationForm, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  const requiredPresent = Boolean(form.firstName.trim() && form.lastName.trim() && form.dateOfBirth && form.gender);
+  const requiredPresent = registrationRequired(form, unknownPatient);
 
   async function registerPatient() {
     if (!requiredPresent) return;
@@ -98,23 +105,15 @@ export default function PatientsPage() {
     try {
       const data = await apiFetch<RegisterResponse>('/patients', {
         method: 'POST',
-        body: JSON.stringify({
-          firstName: form.firstName,
-          lastName: form.lastName,
-          dateOfBirth: form.dateOfBirth,
-          gender: form.gender,
-          phone: form.phone || undefined,
-          qid: form.qid || undefined,
-          email: form.email || undefined,
-          nationality: form.nationality || undefined,
-          city: form.city || undefined,
-        }),
+        body: JSON.stringify(buildRegistrationPayload(form, unknownPatient, idType, idValue)),
       });
       const found = data.matches ?? [];
       setMatches(found);
       if (found.length === 0) {
         setRegisterOpen(false);
         setForm(emptyForm);
+        setUnknownPatient(false);
+        setIdValue('');
         await loadPatients('');
       }
     } catch (e) {
@@ -169,7 +168,12 @@ export default function PatientsPage() {
                   <TableRow key={patient.id}>
                     <TableCell>{patient.mrn}</TableCell>
                     <TableCell>
-                      {patient.firstName} {patient.lastName}
+                      <Stack direction="row" gap={8} align="center" wrap>
+                        <span>
+                          {patient.firstName} {patient.lastName}
+                        </span>
+                        {patient.isUnknown ? <Badge variant="warning">Unknown</Badge> : null}
+                      </Stack>
                     </TableCell>
                     <TableCell>{patient.dateOfBirth}</TableCell>
                     <TableCell>{patient.gender}</TableCell>
@@ -205,45 +209,72 @@ export default function PatientsPage() {
         }
       >
         <Stack gap={12}>
-          <Stack direction="row" gap={12}>
-            <Input
-              label="First name"
-              required
-              value={form.firstName}
-              onChange={(e) => updateForm('firstName', e.target.value)}
-            />
-            <Input
-              label="Last name"
-              required
-              value={form.lastName}
-              onChange={(e) => updateForm('lastName', e.target.value)}
-            />
-          </Stack>
-          <Stack direction="row" gap={12}>
-            <Input
-              label="Date of birth"
-              required
-              type="date"
-              value={form.dateOfBirth}
-              onChange={(e) => updateForm('dateOfBirth', e.target.value)}
-            />
-            <Select
-              label="Gender"
-              required
-              value={form.gender}
-              onChange={(e) => updateForm('gender', e.target.value)}
-            >
-              <option value="" disabled>
-                Select gender
-              </option>
-              <option value="female">female</option>
-              <option value="male">male</option>
-              <option value="other">other</option>
-            </Select>
-          </Stack>
+          <Checkbox
+            checked={unknownPatient}
+            onCheckedChange={setUnknownPatient}
+            label="Unknown patient — register a temporary record (identity to be captured later)"
+          />
+          {!unknownPatient ? (
+            <>
+              <Stack direction="row" gap={12}>
+                <Input
+                  label="First name"
+                  required
+                  value={form.firstName}
+                  onChange={(e) => updateForm('firstName', e.target.value)}
+                />
+                <Input
+                  label="Last name"
+                  required
+                  value={form.lastName}
+                  onChange={(e) => updateForm('lastName', e.target.value)}
+                />
+              </Stack>
+              <Stack direction="row" gap={12}>
+                <Input
+                  label="Date of birth"
+                  required
+                  type="date"
+                  value={form.dateOfBirth}
+                  onChange={(e) => updateForm('dateOfBirth', e.target.value)}
+                />
+                <Select
+                  label="Gender"
+                  required
+                  value={form.gender}
+                  onChange={(e) => updateForm('gender', e.target.value)}
+                >
+                  <option value="" disabled>
+                    Select gender
+                  </option>
+                  <option value="female">female</option>
+                  <option value="male">male</option>
+                  <option value="other">other</option>
+                </Select>
+              </Stack>
+            </>
+          ) : null}
           <Stack direction="row" gap={12}>
             <Input label="Phone" value={form.phone} onChange={(e) => updateForm('phone', e.target.value)} />
             <Input label="QID" value={form.qid} onChange={(e) => updateForm('qid', e.target.value)} />
+          </Stack>
+          <Stack direction="row" gap={12}>
+            <Select
+              label="ABHA type"
+              value={idType}
+              onChange={(e) => {
+                setIdType(e.target.value);
+                setIdValue('');
+              }}
+            >
+              <option value="ABHA">ABHA number (14 digits)</option>
+              <option value="ABHA_ADDRESS">ABHA address</option>
+            </Select>
+            <Input
+              label={idType === 'ABHA' ? 'ABHA number' : 'ABHA address'}
+              value={idValue}
+              onChange={(e) => setIdValue(e.target.value)}
+            />
           </Stack>
           <Stack direction="row" gap={12}>
             <Input label="Email" value={form.email} onChange={(e) => updateForm('email', e.target.value)} />

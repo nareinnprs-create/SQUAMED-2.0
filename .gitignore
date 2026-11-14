@@ -49,6 +49,7 @@ pnpm-debug.log*
 .gradle/
 backend/squamed-core/.gradle/
 backend/squamed-core/build/
+backend/squamed-core/.kotlin/
 backend/squamed-core/**/build/
 
 # Docker

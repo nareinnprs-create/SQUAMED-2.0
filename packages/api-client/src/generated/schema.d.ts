@@ -884,6 +884,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/patients/{id}/relationships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRelationships"];
+        put?: never;
+        post: operations["addRelationship"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/{id}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["downloadPhoto"];
+        put?: never;
+        post: operations["uploadPhoto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/patients/{id}/notes": {
         parameters: {
             query?: never;
@@ -894,6 +926,22 @@ export interface paths {
         get: operations["listNotes"];
         put?: never;
         post: operations["addNote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/{id}/identifiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listIdentifiers"];
+        put?: never;
+        post: operations["addIdentifier"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4100,6 +4148,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/patients/{id}/relationships/{relationshipId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteRelationship"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/{id}/identifiers/{identifierId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteIdentifier"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/patients/{id}/allergies/{allergyId}": {
         parameters: {
             query?: never;
@@ -4438,12 +4518,14 @@ export interface components {
             communicationPreference?: string;
             registrationChannel?: string;
             recordsStatus?: string;
+            isUnknown?: boolean;
             identifiers: components["schemas"]["PatientIdentifierDto"][];
             contactPoints: components["schemas"]["ContactPointDto"][];
             addresses: components["schemas"]["AddressDto"][];
             allergies: components["schemas"]["AllergyDto"][];
             conditions: components["schemas"]["MedicalHistoryDto"][];
             notes: components["schemas"]["NoteDto"][];
+            relationships: components["schemas"]["PatientRelationshipDto"][];
         };
         PatientIdentifierDto: {
             /** Format: uuid */
@@ -4454,6 +4536,18 @@ export interface components {
             idValue?: string;
             issuingAuthority?: string;
             primaryFlag?: boolean;
+        };
+        PatientRelationshipDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            patientId?: string;
+            /** Format: uuid */
+            relatedPatientId?: string;
+            relationshipType?: string;
+            isPrimaryGuardian?: boolean;
+            notes?: string;
+            reverse: boolean;
         };
         VendorDto: {
             /** Format: uuid */
@@ -5561,6 +5655,7 @@ export interface components {
             /** Format: uuid */
             hospitalId?: string;
             mrn?: string;
+            unknownPatient?: boolean;
             externalId?: string;
             title?: string;
             firstName?: string;
@@ -5630,8 +5725,32 @@ export interface components {
             patient: components["schemas"]["PatientDetailDto"];
             matches: components["schemas"]["MatchCandidateDto"][];
         };
+        ApiResponsePatientRelationshipDto: {
+            data?: components["schemas"]["PatientRelationshipDto"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ApiResponsePhotoDto: {
+            data?: components["schemas"]["PhotoDto"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        PhotoDto: {
+            photoKey?: string;
+        };
         ApiResponseNoteDto: {
             data?: components["schemas"]["NoteDto"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ApiResponsePatientIdentifierDto: {
+            data?: components["schemas"]["PatientIdentifierDto"];
             success: boolean;
             meta: {
                 [key: string]: Record<string, never>;
@@ -8138,9 +8257,24 @@ export interface components {
             email?: string;
             qid?: string;
             recordsStatus?: string;
+            isUnknown: boolean;
+        };
+        ApiResponseListPatientRelationshipDto: {
+            data?: components["schemas"]["PatientRelationshipDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
         };
         ApiResponseListNoteDto: {
             data?: components["schemas"]["NoteDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ApiResponseListPatientIdentifierDto: {
+            data?: components["schemas"]["PatientIdentifierDto"][];
             success: boolean;
             meta: {
                 [key: string]: Record<string, never>;
@@ -8979,6 +9113,13 @@ export interface components {
         };
         ApiResponseListAttendantView: {
             data?: components["schemas"]["AttendantView"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ApiResponseVoid: {
+            data?: Record<string, never>;
             success: boolean;
             meta: {
                 [key: string]: Record<string, never>;
@@ -10940,6 +11081,105 @@ export interface operations {
             };
         };
     };
+    listRelationships: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPatientRelationshipDto"];
+                };
+            };
+        };
+    };
+    addRelationship: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatientRelationshipDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePatientRelationshipDto"];
+                };
+            };
+        };
+    };
+    downloadPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    uploadPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePhotoDto"];
+                };
+            };
+        };
+    };
     listNotes: {
         parameters: {
             query?: never;
@@ -10984,6 +11224,54 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseNoteDto"];
+                };
+            };
+        };
+    };
+    listIdentifiers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPatientIdentifierDto"];
+                };
+            };
+        };
+    };
+    addIdentifier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatientIdentifierDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePatientIdentifierDto"];
                 };
             };
         };
@@ -17184,6 +17472,52 @@ export interface operations {
             };
         };
     };
+    deleteRelationship: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                relationshipId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    deleteIdentifier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                identifierId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
     deactivateAllergy: {
         parameters: {
             query?: never;
@@ -17298,4 +17632,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: dd282b0a195b8f75de6f96a886af53ca1bb7be88078855b7c1276aef4103e02f
+// openapi snapshot sha256: ba4c6db5dfcad3fd0e032d10abf9cb810220fc99637d5390d74fe7a09ff02f3e

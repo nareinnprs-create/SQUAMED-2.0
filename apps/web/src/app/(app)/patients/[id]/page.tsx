@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Badge,
   Button,
+  Checkbox,
   ContentPanel,
   Input,
   Modal,
@@ -38,6 +39,30 @@ interface MedicalHistoryEntry {
   onsetDate?: string | null;
 }
 
+interface PatientIdentifier {
+  id: string;
+  idType: string;
+  idValue: string;
+  issuingAuthority?: string | null;
+}
+
+interface PatientRelationship {
+  id: string;
+  patientId: string;
+  relatedPatientId: string;
+  relationshipType: string;
+  isPrimaryGuardian?: boolean;
+  reverse?: boolean;
+}
+
+interface PatientListEntry {
+  id: string;
+  mrn: string;
+  firstName: string;
+  lastName: string;
+  isUnknown?: boolean;
+}
+
 interface PatientDetail {
   id: string;
   mrn: string;
@@ -50,9 +75,13 @@ interface PatientDetail {
   email?: string | null;
   nationality?: string | null;
   city?: string | null;
+  isUnknown?: boolean;
+  photoUrl?: string | null;
   allergies: Allergy[];
   notes: PatientNote[];
   medicalHistory: MedicalHistoryEntry[];
+  identifiers?: PatientIdentifier[];
+  relationships?: PatientRelationship[];
 }
 
 const allergyVariants: Record<string, BadgeVariant> = {
@@ -65,6 +94,11 @@ const allergyVariants: Record<string, BadgeVariant> = {
 const emptyAllergyForm = { allergen: '', reaction: '', severity: 'mild' };
 const emptyHistoryForm = { conditionName: '', diagnosisCode: '', onsetDate: '' };
 const emptyNoteForm = { title: '', body: '' };
+const emptyIdentifierForm = { idType: 'ABHA', idValue: '' };
+const emptyRelationshipForm = { relatedPatientId: '', relationshipType: 'guardian', isPrimaryGuardian: false };
+
+const identifierTypes = ['ABHA', 'ABHA_ADDRESS', 'NATIONAL_ID', 'PASSPORT', 'OTHER'];
+const relationshipTypes = ['guardian', 'spouse', 'father', 'mother', 'son', 'daughter', 'sibling', 'other'];
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
@@ -90,18 +124,28 @@ function Field({ label, value }: { label: string; value?: string | null }) {
 export default function PatientDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
-  const { apiFetch, isReady } = useApi();
+  const { apiFetch, apiFetchRaw, isReady } = useApi();
   const [patient, setPatient] = useState<PatientDetail | null>(null);
   const [allergyOpen, setAllergyOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
+  const [identifierOpen, setIdentifierOpen] = useState(false);
+  const [relationshipOpen, setRelationshipOpen] = useState(false);
   const [allergyForm, setAllergyForm] = useState(emptyAllergyForm);
   const [historyForm, setHistoryForm] = useState(emptyHistoryForm);
   const [noteForm, setNoteForm] = useState(emptyNoteForm);
+  const [identifierForm, setIdentifierForm] = useState(emptyIdentifierForm);
+  const [relationshipForm, setRelationshipForm] = useState(emptyRelationshipForm);
+  const [patientOptions, setPatientOptions] = useState<PatientListEntry[]>([]);
   const [savingAllergy, setSavingAllergy] = useState(false);
   const [savingHistory, setSavingHistory] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
+  const [savingIdentifier, setSavingIdentifier] = useState(false);
+  const [savingRelationship, setSavingRelationship] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoObjectUrl, setPhotoObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadPatient = useCallback(async () => {
     try {
@@ -116,6 +160,115 @@ export default function PatientDetailPage() {
   useEffect(() => {
     if (isReady) void loadPatient();
   }, [isReady, loadPatient]);
+
+  // Same bounded load the list page does — powers the related-patient picker and name display.
+  useEffect(() => {
+    if (!isReady) return;
+    apiFetch<PatientListEntry[]>('/patients?query=')
+      .then((options) => setPatientOptions((options ?? []).filter((p) => p.id !== id)))
+      .catch(() => setPatientOptions([]));
+  }, [apiFetch, id, isReady]);
+
+  // Fetch photo bytes only when a photo key exists (GET /photo 404s otherwise).
+  useEffect(() => {
+    if (!isReady || !patient?.photoUrl || !patient.photoUrl.startsWith('photos/')) {
+      setPhotoObjectUrl(null);
+      return;
+    }
+    let revoked = false;
+    let url: string | null = null;
+    apiFetchRaw(`/patients/${id}/photo`)
+      .then((response) => response.blob())
+      .then((blob) => {
+        if (!revoked) {
+          url = URL.createObjectURL(blob);
+          setPhotoObjectUrl(url);
+        }
+      })
+      .catch(() => setPhotoObjectUrl(null));
+    return () => {
+      revoked = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [apiFetchRaw, id, isReady, patient?.photoUrl]);
+
+  async function uploadPhoto(file: File) {
+    setUploadingPhoto(true);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      await apiFetch<unknown>(`/patients/${id}/photo`, { method: 'POST', body });
+      await loadPatient();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to upload photo');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function addIdentifier() {
+    setSavingIdentifier(true);
+    try {
+      await apiFetch<unknown>(`/patients/${id}/identifiers`, {
+        method: 'POST',
+        body: JSON.stringify({
+          idType: identifierForm.idType,
+          idValue:
+            identifierForm.idType === 'ABHA_ADDRESS' ? identifierForm.idValue.trim().toLowerCase() : identifierForm.idValue.trim(),
+        }),
+      });
+      setIdentifierOpen(false);
+      setIdentifierForm(emptyIdentifierForm);
+      await loadPatient();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to add identifier');
+    } finally {
+      setSavingIdentifier(false);
+    }
+  }
+
+  async function deleteIdentifier(identifierId: string) {
+    try {
+      await apiFetch<unknown>(`/patients/${id}/identifiers/${identifierId}`, { method: 'DELETE' });
+      await loadPatient();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete identifier');
+    }
+  }
+
+  async function openRelationshipModal() {
+    setRelationshipOpen(true);
+  }
+
+  async function addRelationship() {
+    setSavingRelationship(true);
+    try {
+      await apiFetch<unknown>(`/patients/${id}/relationships`, {
+        method: 'POST',
+        body: JSON.stringify({
+          relatedPatientId: relationshipForm.relatedPatientId,
+          relationshipType: relationshipForm.relationshipType,
+          isPrimaryGuardian: relationshipForm.isPrimaryGuardian,
+        }),
+      });
+      setRelationshipOpen(false);
+      setRelationshipForm(emptyRelationshipForm);
+      await loadPatient();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to add relationship');
+    } finally {
+      setSavingRelationship(false);
+    }
+  }
+
+  async function deleteRelationship(relationshipId: string) {
+    try {
+      await apiFetch<unknown>(`/patients/${id}/relationships/${relationshipId}`, { method: 'DELETE' });
+      await loadPatient();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete relationship');
+    }
+  }
 
   async function addAllergy() {
     setSavingAllergy(true);
@@ -174,16 +327,48 @@ export default function PatientDetailPage() {
 
   const fullName = patient ? `${patient.firstName} ${patient.lastName}` : 'Patient';
 
+  function patientName(patientId: string): string {
+    const entry = patientOptions.find((p) => p.id === patientId);
+    return entry ? `${entry.firstName} ${entry.lastName} (${entry.mrn})` : patientId.slice(0, 8);
+  }
+
   return (
     <div style={{ padding: 24 }}>
       <PageHeader
         title={
           <Stack direction="row" gap={8} align="center" wrap>
+            {photoObjectUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={photoObjectUrl}
+                alt={`${fullName} photo`}
+                style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }}
+              />
+            ) : null}
             <span>{fullName}</span>
             {patient ? <Badge variant="neutral">{patient.mrn}</Badge> : null}
+            {patient?.isUnknown ? <Badge variant="warning">Unknown patient</Badge> : null}
           </Stack>
         }
         description="Patient demographics and clinical records."
+        actions={
+          <>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void uploadPhoto(file);
+                e.target.value = '';
+              }}
+            />
+            <Button variant="outline" loading={uploadingPhoto} onClick={() => photoInputRef.current?.click()}>
+              Upload photo
+            </Button>
+          </>
+        }
       />
 
       {error ? <StatusIndicator tone="critical" label={error} /> : null}
@@ -201,6 +386,87 @@ export default function PatientDetailPage() {
             <Field label="Nationality" value={patient?.nationality} />
             <Field label="City" value={patient?.city} />
           </div>
+        </ContentPanel>
+
+        <ContentPanel>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 12,
+            }}
+          >
+            <strong style={{ fontSize: 14 }}>Identifiers</strong>
+            <Button size="sm" onClick={() => setIdentifierOpen(true)}>
+              Add identifier
+            </Button>
+          </div>
+          {!patient || (patient.identifiers ?? []).length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--sq-fg-muted)' }}>No identifiers recorded.</div>
+          ) : (
+            <Stack gap={8}>
+              {(patient.identifiers ?? []).map((identifier) => (
+                <Stack
+                  key={identifier.id}
+                  direction="row"
+                  gap={8}
+                  align="center"
+                  wrap
+                  style={{ paddingBottom: 8, borderBottom: '1px solid var(--sq-border)' }}
+                >
+                  <Badge variant="neutral">{identifier.idType}</Badge>
+                  <span style={{ fontSize: 14, fontFamily: 'monospace' }}>{identifier.idValue}</span>
+                  <Button variant="ghost" size="sm" onClick={() => void deleteIdentifier(identifier.id)}>
+                    Remove
+                  </Button>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+        </ContentPanel>
+
+        <ContentPanel>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 12,
+            }}
+          >
+            <strong style={{ fontSize: 14 }}>Relationships &amp; guardians</strong>
+            <Button size="sm" onClick={() => void openRelationshipModal()}>
+              Add relationship
+            </Button>
+          </div>
+          {!patient || (patient.relationships ?? []).length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--sq-fg-muted)' }}>No relationships recorded.</div>
+          ) : (
+            <Stack gap={8}>
+              {(patient.relationships ?? []).map((relationship) => (
+                <Stack
+                  key={relationship.id}
+                  direction="row"
+                  gap={8}
+                  align="center"
+                  wrap
+                  style={{ paddingBottom: 8, borderBottom: '1px solid var(--sq-border)' }}
+                >
+                  <Badge variant={relationship.isPrimaryGuardian ? 'success' : 'neutral'}>
+                    {relationship.isPrimaryGuardian ? 'primary guardian' : relationship.relationshipType}
+                  </Badge>
+                  <span style={{ fontSize: 14 }}>
+                    {patientName(relationship.reverse ? relationship.patientId : relationship.relatedPatientId)}
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--sq-fg-muted)' }}>{relationship.relationshipType}</span>
+                  <Button variant="ghost" size="sm" onClick={() => void deleteRelationship(relationship.id)}>
+                    Remove
+                  </Button>
+                </Stack>
+              ))}
+            </Stack>
+          )}
         </ContentPanel>
 
         <ContentPanel>
@@ -427,6 +693,102 @@ export default function PatientDetailPage() {
             label="Body"
             value={noteForm.body}
             onChange={(e) => setNoteForm({ ...noteForm, body: e.target.value })}
+          />
+        </Stack>
+      </Modal>
+
+      <Modal
+        open={identifierOpen}
+        onClose={() => setIdentifierOpen(false)}
+        title="Add identifier"
+        description="Attach an identity document, including ABHA (14-digit) or ABHA address."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIdentifierOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void addIdentifier()}
+              loading={savingIdentifier}
+              disabled={!identifierForm.idValue.trim()}
+            >
+              Add
+            </Button>
+          </>
+        }
+      >
+        <Stack gap={12}>
+          <Select
+            label="Identifier type"
+            value={identifierForm.idType}
+            onChange={(e) => setIdentifierForm({ ...identifierForm, idType: e.target.value })}
+          >
+            {identifierTypes.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </Select>
+          <Input
+            label="Value"
+            required
+            value={identifierForm.idValue}
+            onChange={(e) => setIdentifierForm({ ...identifierForm, idValue: e.target.value })}
+          />
+        </Stack>
+      </Modal>
+
+      <Modal
+        open={relationshipOpen}
+        onClose={() => setRelationshipOpen(false)}
+        title="Add relationship"
+        description={`Link ${fullName} to another patient (guardian, family member).`}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setRelationshipOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void addRelationship()}
+              loading={savingRelationship}
+              disabled={!relationshipForm.relatedPatientId}
+            >
+              Add
+            </Button>
+          </>
+        }
+      >
+        <Stack gap={12}>
+          <Select
+            label="Related patient"
+            required
+            value={relationshipForm.relatedPatientId}
+            onChange={(e) => setRelationshipForm({ ...relationshipForm, relatedPatientId: e.target.value })}
+          >
+            <option value="" disabled>
+              Select patient
+            </option>
+            {patientOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.firstName} {option.lastName} ({option.mrn}){option.isUnknown ? ' — Unknown' : ''}
+              </option>
+            ))}
+          </Select>
+          <Select
+            label="Relationship type"
+            value={relationshipForm.relationshipType}
+            onChange={(e) => setRelationshipForm({ ...relationshipForm, relationshipType: e.target.value })}
+          >
+            {relationshipTypes.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </Select>
+          <Checkbox
+            checked={relationshipForm.isPrimaryGuardian}
+            onCheckedChange={(checked) => setRelationshipForm({ ...relationshipForm, isPrimaryGuardian: checked })}
+            label="Primary guardian"
           />
         </Stack>
       </Modal>

@@ -12,11 +12,11 @@ export interface PriorityIndicatorProps {
 
 const priorityTones: Record<PriorityLevel, { color: string; background: string }> = {
   routine: { color: 'var(--sq-fg-muted)', background: 'color-mix(in srgb, var(--sq-fg) 9%, transparent)' },
-  low: { color: 'var(--sq-information)', background: 'var(--sq-information-soft)' },
-  urgent: { color: 'var(--sq-warning)', background: 'var(--sq-warning-soft)' },
-  high: { color: 'var(--sq-warning)', background: 'var(--sq-warning-soft)' },
-  emergency: { color: 'var(--sq-critical)', background: 'var(--sq-critical-soft)' },
-  critical: { color: 'var(--sq-critical)', background: 'var(--sq-critical-soft)' },
+  low: { color: 'var(--sq-information-on-soft)', background: 'var(--sq-information-soft)' },
+  urgent: { color: 'var(--sq-warning-on-soft)', background: 'var(--sq-warning-soft)' },
+  high: { color: 'var(--sq-warning-on-soft)', background: 'var(--sq-warning-soft)' },
+  emergency: { color: 'var(--sq-critical-on-soft)', background: 'var(--sq-critical-soft)' },
+  critical: { color: 'var(--sq-critical-on-soft)', background: 'var(--sq-critical-soft)' },
 };
 
 export function PriorityIndicator({ level, label, className, style }: PriorityIndicatorProps) {

@@ -85,7 +85,7 @@ const columns: DataGridColumn<LabResultRow>[] = [
       <span
         style={
           row.interpretation === 'critical'
-            ? { backgroundColor: 'var(--sq-critical-soft)', color: 'var(--sq-critical)', fontWeight: 700, padding: '2px 8px', borderRadius: 6 }
+            ? { backgroundColor: 'var(--sq-critical-soft)', color: 'var(--sq-critical-on-soft)', fontWeight: 700, padding: '2px 8px', borderRadius: 6 }
             : undefined
         }
       >

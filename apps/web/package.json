@@ -10,6 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "axe": "node scripts/axe-scan.mjs",
+    "lighthouse": "node scripts/lighthouse-budget.mjs",
+    "visual-regression": "playwright test --config playwright.visual-regression.config.ts",
+    "visual-regression:update": "playwright test --config playwright.visual-regression.config.ts --update-snapshots",
     "clean": "rm -rf .next dist node_modules"
   },
   "dependencies": {
@@ -39,7 +43,12 @@
     "postcss": "^8.5.0",
     "autoprefixer": "^10.4.0",
     "vitest": "^3.1.0",
+    "jsdom": "^26.1.0",
+    "@testing-library/jest-dom": "^6.6.0",
     "@playwright/test": "^1.52.0",
+    "axe-core": "^4.10.0",
+    "lighthouse": "^12.8.0",
+    "chrome-launcher": "^1.2.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.0.0"
   }

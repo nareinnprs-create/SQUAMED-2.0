@@ -32,7 +32,32 @@ class TaskController(
   fun listTasks(
     @RequestParam(name = "assigneeId", required = false) assigneeId: UUID?,
     @RequestParam(name = "status", required = false) status: String?,
-  ): ApiResponse<List<TaskView>> = ApiResponse.ok(taskService.listTasks(assigneeId, status))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<TaskView>> = ApiResponse.ok(taskService.listTasks(assigneeId, status, tenantResolver.pin(principal, null)))
+
+  @GetMapping("/overdue")
+  @RequiresPermission("task:manage:task")
+  @Transactional(readOnly = true)
+  fun overdueTasks(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<TaskView>> = ApiResponse.ok(taskService.overdueTasks(tenantResolver.pin(principal, null)))
+
+  @GetMapping("/subject")
+  @RequiresPermission("task:manage:task")
+  @Transactional(readOnly = true)
+  fun tasksForSubject(
+    @RequestParam(name = "subjectType") subjectType: String,
+    @RequestParam(name = "subjectId") subjectId: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<TaskView>> = ApiResponse.ok(taskService.tasksForSubject(subjectType, subjectId, tenantResolver.pin(principal, null)))
+
+  /** Monitor pass on demand (the scheduled job runs the same scan; chunk item 9). */
+  @PostMapping("/sla/scan")
+  @RequiresPermission("task:manage:task")
+  @Transactional
+  fun runSlaScan(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(taskService.scanAndEscalate(principal.userId))
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
@@ -49,7 +74,8 @@ class TaskController(
   @Transactional(readOnly = true)
   fun getTask(
     @PathVariable id: UUID,
-  ): ApiResponse<TaskView> = ApiResponse.ok(taskService.getTask(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<TaskView> = ApiResponse.ok(taskService.getTask(id, tenantResolver.pin(principal, null)))
 
   @PutMapping("/{id}")
   @RequiresPermission("task:manage:task")
@@ -57,7 +83,8 @@ class TaskController(
   fun updateTask(
     @PathVariable id: UUID,
     @RequestBody dto: TaskUpdateDto,
-  ): ApiResponse<TaskView> = ApiResponse.ok(taskService.updateTask(id, dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<TaskView> = ApiResponse.ok(taskService.updateTask(id, dto, principal.userId, tenantResolver.pin(principal, null)))
 
   @PatchMapping("/{id}/status")
   @RequiresPermission("task:manage:task")
@@ -66,7 +93,10 @@ class TaskController(
     @PathVariable id: UUID,
     @RequestBody dto: TaskStatusDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<TaskView> = ApiResponse.ok(taskService.setStatus(id, dto.status ?: throw IllegalArgumentException("TASK_STATUS_REQUIRED"), principal.userId))
+  ): ApiResponse<TaskView> =
+    ApiResponse.ok(
+      taskService.setStatus(id, dto.status ?: throw IllegalArgumentException("TASK_STATUS_REQUIRED"), principal.userId, tenantResolver.pin(principal, null)),
+    )
 
   @PostMapping("/{id}/assign")
   @RequiresPermission("task:manage:task")
@@ -77,6 +107,21 @@ class TaskController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<TaskView> =
     ApiResponse.ok(
-      taskService.assignTask(id, dto.assigneeId ?: throw IllegalArgumentException("TASK_ASSIGNEE_REQUIRED"), principal.userId),
+      taskService.assignTask(
+        id,
+        dto.assigneeId ?: throw IllegalArgumentException("TASK_ASSIGNEE_REQUIRED"),
+        principal.userId,
+        tenantResolver.pin(principal, null),
+      ),
     )
+
+  /** Chunk API `escalate`: manual escalation + notification fan-out (task.escalated event). */
+  @PostMapping("/{id}/escalate")
+  @RequiresPermission("task:manage:task")
+  @Transactional
+  fun escalateTask(
+    @PathVariable id: UUID,
+    @RequestBody dto: TaskEscalateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<TaskView> = ApiResponse.ok(taskService.escalateTask(id, principal.userId, dto.reason, tenantResolver.pin(principal, null)))
 }

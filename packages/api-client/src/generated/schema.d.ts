@@ -452,6 +452,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{id}/escalate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["escalateTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{id}/assign": {
         parameters: {
             query?: never;
@@ -462,6 +478,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["assignTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/sla/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["runSlaScan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3300,6 +3332,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/subject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tasksForSubject"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/overdue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["overdueTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/surgery/schedules/{id}": {
         parameters: {
             query?: never;
@@ -4472,6 +4536,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        TaskLinkDto: {
+            subjectType?: string;
+            /** Format: uuid */
+            subjectId?: string;
+        };
         TaskUpdateDto: {
             title?: string;
             description?: string;
@@ -4483,6 +4552,7 @@ export interface components {
             relatedType?: string;
             /** Format: uuid */
             relatedId?: string;
+            links?: components["schemas"]["TaskLinkDto"][];
         };
         ApiResponseTaskView: {
             data?: components["schemas"]["TaskView"];
@@ -4511,6 +4581,11 @@ export interface components {
             relatedId?: string;
             /** Format: date-time */
             completedAt?: string;
+            /** Format: date-time */
+            escalatedAt?: string;
+            /** Format: int32 */
+            escalationCount: number;
+            links: components["schemas"]["TaskLinkDto"][];
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -5307,6 +5382,10 @@ export interface components {
             relatedType?: string;
             /** Format: uuid */
             relatedId?: string;
+            links?: components["schemas"]["TaskLinkDto"][];
+        };
+        TaskEscalateDto: {
+            reason?: string;
         };
         TaskAssignDto: {
             /** Format: uuid */
@@ -10420,6 +10499,32 @@ export interface operations {
             };
         };
     };
+    escalateTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskEscalateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseTaskView"];
+                };
+            };
+        };
+    };
     assignTask: {
         parameters: {
             query?: never;
@@ -10442,6 +10547,26 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseTaskView"];
+                };
+            };
+        };
+    };
+    runSlaScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
                 };
             };
         };
@@ -16650,6 +16775,49 @@ export interface operations {
             };
         };
     };
+    tasksForSubject: {
+        parameters: {
+            query: {
+                subjectType: string;
+                subjectId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListTaskView"];
+                };
+            };
+        };
+    };
+    overdueTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListTaskView"];
+                };
+            };
+        };
+    };
     getSchedule: {
         parameters: {
             query?: never;
@@ -18238,4 +18406,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: d52c4c892eb23cc952a033f221f644a397f834fd2f6898469f9383dfc7ea544d
+// openapi snapshot sha256: 7e35cd96caf36ac0622da4d480c262c0f1e9cd56b49efde6e5ce11c496602d03

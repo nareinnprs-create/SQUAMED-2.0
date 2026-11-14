@@ -25,6 +25,7 @@ import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.containers.wait.strategy.Wait
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 import kotlin.random.Random
@@ -4750,7 +4751,7 @@ class PlatformIntegrationTests {
       assertEquals(13, catalog.size(), "event catalog lists the v1 set: $catalog")
       assertTrue(catalog.any { it["name"].asText() == "NotificationDispatched" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "AuditChainBroken" && it["status"].asText() == "EMITTED" })
-      assertTrue(catalog.any { it["name"].asText() == "TaskEscalated" && it["status"].asText() == "PLANNED" })
+      assertTrue(catalog.any { it["name"].asText() == "TaskEscalated" && it["status"].asText() == "EMITTED" })
 
       assertEquals(403, api(HttpMethod.GET, "/api/v1/admin/events/outbox", token = u1Token).status, "doctor token denied event ops")
     }
@@ -4944,6 +4945,177 @@ class PlatformIntegrationTests {
       }
       assertNotNull(brokenRow, "audit.chain_broken published to the outbox")
       assertEquals("SENT", brokenRow!!["status"].asText(), "breach alert dispatched")
+    }
+  }
+
+  @Nested
+  inner class TaskEngineTests {
+    @Test
+    fun taskEngineCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+
+      // Fresh hospitals: the task workforce (doctor, now granted task:manage via V50) + an outsider.
+      val h =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Tasks H $s", "code" to "TK1-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val hOut =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Tasks Out $s", "code" to "TK2-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+
+      fun doctorIn(hospitalId: String): Pair<String, String> {
+        val email = "tasks-doc-$s-${UUID.randomUUID().toString().take(6)}@test.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to "Doc",
+              "lastName" to "Tasks$s",
+              "roles" to listOf("DOCTOR"),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register tasks doctor",
+        )
+        val token =
+          `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+        val userId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = token))["userId"].asText()
+        return token to userId
+      }
+
+      val (doctor, doctorId) = doctorIn(h)
+      val (outsider, _) = doctorIn(hOut)
+
+      // Subject to attach: a real patient + a department placeholder id.
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Task",
+              "lastName" to "Subject$s",
+              "gender" to "female",
+              "dateOfBirth" to "1988-09-09",
+              "phone" to "559$s".take(12),
+              "qid" to "8$s".take(11),
+              "nationality" to "Qatar",
+              "city" to "Doha",
+            ),
+            doctor,
+          ),
+        )["patient"]["id"].asText()
+      val departmentId = UUID.randomUUID()
+
+      // Create with subject links (chunk item 9): patient + department; invalid type rejected.
+      val created =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/tasks",
+            json(
+              "title" to "Verify merged record $s",
+              "priority" to "urgent",
+              "assigneeId" to doctorId,
+              "dueAt" to Instant.now().minusSeconds(3600).toString(),
+              "links" to
+                listOf(
+                  mapOf("subjectType" to "patient", "subjectId" to patient),
+                  mapOf("subjectType" to "department", "subjectId" to departmentId.toString()),
+                ),
+            ),
+            doctor,
+          ),
+        )
+      val taskId = created["id"].asText()
+      assertEquals(2, created["links"].size(), "subject attachments stored: ${created["links"]}")
+      assertEquals(
+        400,
+        api(
+          HttpMethod.POST,
+          "/api/v1/tasks",
+          json("title" to "bad $s", "links" to listOf(mapOf("subjectType" to "banana", "subjectId" to patient))),
+          doctor,
+        ).status,
+        "invalid subject type rejected",
+      )
+
+      // Lifecycle: assign -> execute -> escalate (manual, chunk API `:escalate`) -> complete.
+      assert2xx(api(HttpMethod.POST, "/api/v1/tasks/$taskId/assign", json("assigneeId" to doctorId), doctor), "task assign")
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/tasks/$taskId/status", json("status" to "in_progress"), doctor), "task in_progress")
+      val escalated = `data`(api(HttpMethod.POST, "/api/v1/tasks/$taskId/escalate", json("reason" to "second opinion"), doctor))
+      assertEquals("escalated", escalated["status"].asText(), "manual escalation")
+      assertEquals(1, escalated["escalationCount"].asInt(), "escalation counter")
+      assertTrue(escalated["escalatedAt"].isNull != true, "escalatedAt stamped")
+
+      var escalatedRow: JsonNode? = null
+      val escDeadline = System.currentTimeMillis() + 30_000
+      while (System.currentTimeMillis() < escDeadline) {
+        val rows = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = admin))
+        escalatedRow = rows.firstOrNull { it["eventType"].asText() == "task.escalated" && it["hospitalId"].asText() == h }
+        if (escalatedRow != null && escalatedRow["status"].asText() == "SENT") break
+        Thread.sleep(500)
+      }
+      assertNotNull(escalatedRow, "task.escalated published to the outbox")
+      assertEquals("SENT", escalatedRow!!["status"].asText(), "escalation notified")
+
+      // Monitor visibility: the due-past task is overdue for its tenant.
+      val overdue = `data`(api(HttpMethod.GET, "/api/v1/tasks/overdue", token = doctor))
+      assertTrue(overdue.any { it["id"].asText() == taskId }, "overdue monitor lists the past-due task: $overdue")
+
+      // Reverse subject lookup: work attached to the patient comes back with the link.
+      val bySubject = `data`(api(HttpMethod.GET, "/api/v1/tasks/subject?subjectType=patient&subjectId=$patient", token = doctor))
+      assertTrue(bySubject.any { it["id"].asText() == taskId }, "subject lookup returns the attached task")
+
+      // Cross-tenant: the outsider hospital sees neither the task nor the inbox of h's doctor.
+      assertEquals(400, api(HttpMethod.GET, "/api/v1/tasks/$taskId", token = outsider).status, "cross-hospital task read denied (not found)")
+      assertTrue(`data`(api(HttpMethod.GET, "/api/v1/tasks?assigneeId=$doctorId", token = outsider)).isEmpty(), "cross-hospital inbox leak denied")
+
+      // Complete the escalated task.
+      val completed = `data`(api(HttpMethod.PATCH, "/api/v1/tasks/$taskId/status", json("status" to "completed"), doctor))
+      assertEquals("completed", completed["status"].asText(), "escalated task completes")
+      assertTrue(completed["completedAt"].isNull != true, "completedAt stamped")
+
+      // SLA rules from config (item 9): urgent breaches instantly (slaHours 0) with DOCTOR as the
+      // escalation role target; normal tasks stay under the 72h default. No dueAt -> created-age rule.
+      assert2xx(
+        api(
+          HttpMethod.PUT,
+          "/api/v1/hospital-config/hospitals/$h/config/task-sla",
+          json("rules" to listOf(mapOf("priority" to "urgent", "slaHours" to 0, "escalateToRole" to "DOCTOR")), "defaultSlaHours" to 72),
+          admin,
+        ),
+        "publish task-sla config",
+      )
+      val urgentId =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/tasks", json("title" to "SLA urgent $s", "priority" to "urgent", "assigneeId" to doctorId, "hospitalId" to h), doctor),
+        )["id"].asText()
+      val normalId =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/tasks", json("title" to "SLA normal $s", "priority" to "normal", "assigneeId" to doctorId, "hospitalId" to h), doctor),
+        )["id"].asText()
+
+      val scan = `data`(api(HttpMethod.POST, "/api/v1/tasks/sla/scan", json(), doctor))
+      assertTrue(scan["escalated"].asInt() >= 1, "scan escalates breaches: $scan")
+      assertEquals(
+        "escalated",
+        `data`(api(HttpMethod.GET, "/api/v1/tasks/$urgentId", token = doctor))["status"].asText(),
+        "urgent task auto-escalated by SLA rule",
+      )
+      assertEquals("pending", `data`(api(HttpMethod.GET, "/api/v1/tasks/$normalId", token = doctor))["status"].asText(), "normal task under default SLA")
+
+      // Already-escalated work is not re-escalated on the next pass.
+      val scan2 = `data`(api(HttpMethod.POST, "/api/v1/tasks/sla/scan", json(), doctor))
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/tasks/$urgentId", token = doctor))["escalationCount"].asInt(), "no repeat escalation: $scan2")
+
+      // Doctor (task:manage since V50) reads the inbox; the auditor role is out of scope here.
+      assert2xx(api(HttpMethod.GET, "/api/v1/tasks?assigneeId=$doctorId", token = doctor), "doctor reads own inbox")
     }
   }
 

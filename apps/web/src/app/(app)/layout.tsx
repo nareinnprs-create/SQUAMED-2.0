@@ -12,6 +12,7 @@ const navItems: SidebarItem[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'patients', label: 'Patients' },
   { id: 'empi', label: 'EMPI Review' },
+  { id: 'tasks', label: 'Task Inbox' },
   { id: 'audit', label: 'Audit Viewer' },
   { id: 'appointments', label: 'Appointments' },
   { id: 'reception', label: 'Reception & Triage' },

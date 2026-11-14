@@ -66,6 +66,9 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
 
+    // vetted TOTP (RFC 6238) — replaces the hand-rolled HMAC implementation (00.03 hardening)
+    implementation("dev.samstevens.totp:totp:1.7.1")
+
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")

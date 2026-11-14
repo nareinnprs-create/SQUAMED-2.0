@@ -63,6 +63,12 @@ squamed:
   security:
     jwt:
       secret: ${JWT_SECRET:dev-only-secret-key-change-in-production-0123456789abcdef}
+      # 00.03 hardening: key rotation. Empty keys map = legacy single-secret mode.
+      # To rotate: set env SQUAMED_SECURITY_JWT_KEYS={old-kid:secret,new-kid:secret}
+      # + SQUAMED_SECURITY_JWT_ACTIVE_KID=new-kid, deploy; old-kid tokens keep verifying
+      # via kid pinning until TTL expiry, then drop old-kid from the map.
+      keys: {}
+      active-kid: ${JWT_ACTIVE_KID:default}
       access-token-ttl-minutes: 15
       refresh-token-ttl-days: 7
   bootstrap:

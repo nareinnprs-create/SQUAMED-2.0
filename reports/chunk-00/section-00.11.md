@@ -1,48 +1,71 @@
 # Section 00.11 — Task engine
 
 ## 1. Scope
-Task CRUD + assignment + completion + SLA escalation rules (config-driven), subject links (patient/config/dept), inbox UI.
+Per chunk-00 item 9 (line 18): universal task engine — create → assign → execute → monitor → escalate → complete, subject attachments (patient/encounter/invoice/department), SLA + escalation rules **from config**. The chunk's event catalog names TaskCreated/Assigned/Completed/Escalated (already EMITTED through 00.09's fabric except Escalated, which was PLANNED). The baseline report (run 43548016617) failed gates 1/8/9 with the named gap: zero SLA/escalation code in the task module (no grep hits), no config-driven rules, no subject links beyond a single `relatedType/relatedId` pair, no inbox UI, `hospitalId` still client-supplied. This section closes that named gap on the 00.05 config engine (7th config type), 00.09 event fabric (task.* topic routing + notification bridge), and 00.04 tenant resolution.
 
 ## 2. Built (current tree)
-- `task/domain/Task.kt` + `task/repository/TaskRepository.kt` — task entity/persistence.
-- `task/api/TaskController.kt` + `TaskDtos.kt` — CRUD, `/assign`, `/status` APIs (hospitalId still client-supplied, default null).
-- `task/service/TaskService.kt` — lifecycle logic.
-- `workflow/` module (12 files: definition/instance/step/approval domains + service + controller) — generic workflow engine (definitions, instances, decisions, branch coverage).
-- Migrations `V19__tasks_notifications.sql`, `V23__workflow.sql` (+ permission seeds).
-- Notifications on task events via `notification/` service (unread-count/list/read/read-all APIs).
+- **`V50__task_engine.sql`** — `tasks.task` gains `escalated_at TIMESTAMPTZ`, `escalation_count INT NOT NULL DEFAULT 0`; `tasks.task_link` (id, hospital_id, task_id FK → tasks.task ON DELETE CASCADE, subject_type, subject_id) with UNIQUE `(task_id, subject_type, subject_id)` (a subject attaches at most once) and `idx_task_link_subject (subject_type, subject_id)` for reverse lookup; `task:manage` seeded to DOCTOR + NURSE (the task workforce; previously only the platform admin could touch tasks).
+- **Subject links (`TaskLink` + `TaskLinkRepository`)** — `SUBJECT_TYPES = patient | encounter | invoice | department` (chunk item 9's list; encounter/invoice store real UUIDs of those resources once their chunks land — today they are opaque keys, validated by type only). Replace-set semantics in `TaskService.replaceLinks` (delete-by-task + deduped insert; `links: []` clears), `findByTaskId` for view rendering, `findBySubject(..., hospitalId)` explicit JPQL null-safe tenant filter for the reverse lookup.
+- **Task lifecycle (`TaskService` rewrite)** — create (links at creation, `assignerId` defaults to the creator), update (links replace-set when present), status (validated set; `completedAt` stamped on completion, cleared on reopen), assign (`task.assigned` event), **manual `escalate`** (chunk API `:escalate`: status → `escalated`, `escalatedAt` stamp, `escalationCount += 1`, `task.escalated` event with reason; closed tasks rejected `TASK_ALREADY_CLOSED`), **`overdueTasks`** (open tasks past `dueAt`, tenant-filtered), **`scanAndEscalate`** (the monitor step), tenant-pinned reads (`listTasks`/`getTask`/`tasksForSubject` pin via `TenantResolver` — ADR-13: hospital users see only their hospital's tasks, admins see all).
+- **SLA + escalation rules from config (chunk item 9's named requirement)** — new `task-sla` config document type (7th in `ConfigDocumentService.TYPES`) with `schemas/config/task-sla.schema.json`: `rules[]` of `{priority, slaHours, escalateToRole?}` + `defaultSlaHours`. `SlaRules.of` parses per-hospital; cache-per-scan in a `HashMap<UUID?, SlaRules>`. Breach rule: `dueAt` passed, or — when the task has no dueAt — created at/before now minus the priority's configured SLA hours. Defaults when a hospital has no config: critical 1h / urgent 4h / high 12h / normal 24h / low 48h, fallback 24h. Breach → `escalateTask` with role-target recipients: `escalateToRole` resolves via new `UserRoleRepository.findUserIdsByHospitalIdAndRoleName` (users holding that role in the task's hospital) so the escalation notifies the right humans without hardcoding.
+- **Scheduled monitor** — `@Scheduled(cron = ${squamed.tasks.sla-cron:0 */15 * * * *})` `slaScanJob` and `POST /api/v1/tasks/sla/scan` share `scanAndEscalate` (the 00.10 `verifyAndAlert` pattern); cron passes stamp `updatedBy` with the SYSTEM zero-UUID. Already-`escalated` tasks are skipped (no repeat escalation until the task is completed/reopened).
+- **API surface (`TaskController`)** — new: `POST /tasks/{id}/escalate`, `POST /tasks/sla/scan`, `GET /tasks/overdue`, `GET /tasks/subject?subjectType=&subjectId=`; existing CRUD/assign/status kept with server-side tenant pinning (client `hospitalId` honored only for platform admins).
+- **Events** — `TaskEscalated` PLANNED → EMITTED (catalog stays **13**); all task events fan out to assignee + assigner (+ escalation role targets) through the 00.09 outbox, `squamed.task.*` topics, realtime bridge + notification bridge.
+- **Inbox UI** — `apps/web/src/app/(app)/tasks/page.tsx` (Task Inbox in the app-shell nav): my-inbox by assignee (from `/auth/me`), status filter, overdue-only toggle (the monitor endpoint), escalations badge, subject types column, Complete + Escalate row actions with busy state.
+- Contract: `docs/contracts/openapi-v1.json` snapshot (297,504 bytes, sha256 `7e35cd96caf36ac0622da4d480c262c0f1e9cd56b49efde6e5ce11c496602d03`) + stamped `packages/api-client/src/generated/schema.d.ts` regenerated in the same PR per `docs/development/contract-codegen.md`; `npm run build` 8/8 green.
+- `scripts/demo-00.11-tasks.ps1` — exit-demo slice (13 checks, pwsh, port 8081).
 
 ## 3. Contracts delivered
-- Task CRUD/assign/status APIs; workflow definition/instance/decision APIs.
-- NOT delivered: SLA escalation rules (zero grep hits for sla/escalat in task module), config-driven rules, inbox UI (no task page under apps/web), subject links thin.
+- `POST /tasks/{id}/escalate` (`TaskEscalateDto{reason?}` → `TaskView`) — manual escalation, `task:manage:task`.
+- `POST /tasks/sla/scan` → `{escalated, checked}` — on-demand monitor pass, `task:manage:task`.
+- `GET /tasks/overdue` → `TaskView[]` — monitor visibility, tenant-pinned.
+- `GET /tasks/subject?subjectType=&subjectId=` → `TaskView[]` — reverse subject lookup, tenant-pinned.
+- Extended `TaskView` with `escalatedAt`, `escalationCount`, `links[]` (`{subjectType, subjectId}` sorted by type+id); `TaskCreateDto`/`TaskUpdateDto` accept `links[]`.
+- `task-sla` config document type (`PUT/GET /hospital-config/hospitals/{id}/config/task-sla`, schema-validated like the other six).
+- `task.escalated` domain event (13th EMITTED catalog entry; was PLANNED since 00.09) with payload `{title, reason, escalationCount}`.
+- NOT delivered: task-level SLA *pause* (business-hours/holiday calendars do not extend timers — a task due Friday 18:00 breaches Monday; the `holidays`/`working-hours` configs exist from 00.05 but are not consulted by the scan), escalation *delegation chains* (one role target per rule), task comments/attachments UI (the entity has none — out of the chunk's create→…→complete spine).
 
 ## 4. Gates
-1. FAIL — named contents missing: SLA escalation, config-driven rules, subject links, inbox UI.
-2. PASS — CI run 43548016617 (gate 2 green).
-3. PASS — CI run 43548016617 (gate 3 green).
-4. PASS — CI run 43548016617 (gate 4 green).
-5. PASS — CI run 43548016617 (gate 5 green); named tests below.
-6. PASS — CI run 43548016617 (gate 6 green) (no task inbox page; workflow page in axe scope).
-7. PASS — CI run 43548016617 (gate 7 green).
-8. FAIL — schema-registry harness not yet wired (00.02 scope).
-9. FAIL — `V19__tasks_notifications.sql` + `V23__workflow.sql` exist; task hospital_id client-supplied/nullable and RLS cross-tenant denial suite ABSENT until 00.04 lands (ADR-13).
-10. PASS — AuditAspect intercepts TaskController + WorkflowController writes; audit rows asserted PIT-side.
-11. PASS — this report.
-12. PASS — PIT `collaborationAndWorkflowJourney` covers create→assign→in_progress→completed + notification fan-out (API-level slice).
+1. PASS — zero real stubs; zero-stub grep clean on the task package, V50, the task-sla schema and the demo script (hits are the chunk's own lowercase "placeholder" wording for encounter/invoice subject types — allowlisted prose) (run 43646479264).
+2. PASS — run 43646479264 (PR #23, squash `2268df3`; merged **without** `--admin`).
+3. PASS — Detect source trees job green.
+4. PASS — ktlint + unit + ArchUnit (Backend gates job) green; local `ktlintFormat` BUILD SUCCESSFUL.
+5. PASS — Backend gates job (unit suite) green.
+6. PASS — Accessibility + performance gates green (axe/Lighthouse on the new Task Inbox page).
+7. PASS — Frontend gates green; stamped client pins the snapshot hash (`7e35cd96…`); `npm run build` 8/8 (one fix during build: `Button variant='default'` is not a house variant — `primary`).
+8. PASS — Integration gates job green: all **50** PIT (49 retained + new `taskEngineCoverage`) + merged coverage ≥ 0.80; local PIT 50/50 green in 4m40s before the PR.
+9. PASS — V50 applied (Flyway "Migrating schema "public" to version "50 - task engine" … now at version v50" observed live in bootRun logs on the feature branch and again on merged main); link table with FK cascade + UNIQUE + subject index, escalation columns, workforce grants.
+10. PASS — task surface: create → assign → in_progress → escalate (manual, count 1) → `task.escalated` SENT in the outbox → overdue monitor → subject reverse lookup → complete (completedAt stamped); SLA-from-config proven live (urgent slaHours 0 auto-escalates, normal stays under the 72h default, no re-escalation on the second scan).
+11. PASS — this report; ledger row 44 + merge-log #23 + totals updated in the same docs batch.
+12. PASS — scripted live slice `scripts/demo-00.11-tasks.ps1`: **13/13 on 8081** (merged main `2268df3`; pwsh), 2026-11-15: subject links at creation (+2), invalid type 400, manual escalation with counter, `task.escalated` outbox SENT (polled ≤ 30s), overdue monitor, config-driven scan escalation, normal-task default SLA, escalated-task completion, catalog 13 with TaskEscalated EMITTED.
 
 ## 5. Tests
-PIT: `collaborationAndWorkflowJourney` (task create/assign/status transitions, notification unread-count/list/read-all), `workflowEngineBranchCoverage` (definition/instance/decision branches) — green, run 43548016617. Coverage ≥0.80 merged enforced.
+- PIT (new, 50th): `TaskEngineTests.taskEngineCoverage` — fresh hospital per run (dev DB persists rows): doctor (DOCTOR gets `task:manage` via V50) + outsider-hospital doctor; patient created as the link subject; create with patient+department links (assert 2 links) and an invalid subject type rejected 400; lifecycle assign → in_progress → escalate (status/counter/stamp asserted) → `task.escalated` outbox row reaches SENT within 30s (tenant-filtered poll); overdue monitor lists the past-due task; subject reverse lookup returns the attached task; cross-tenant: outsider GET → 400 TASK_NOT_FOUND and outsider inbox filter for the h-doctor is empty (no leak); completed task stamps `completedAt`; `task-sla` config published (urgent slaHours 0 + escalateToRole DOCTOR, defaultSlaHours 72) → scan escalates the urgent no-dueAt task (created-age breach), normal stays pending, second scan does not re-escalate (count still 1); doctor reads own inbox.
+- PIT (retained): 50 tests total green in CI run 43646479264 (AuditChain 1, Contract 7, Coverage 20, EventFabric 1, Journey 5, Phase2Inpatient 7, Security 7, TenantIsolation 1, TaskEngine 1). `eventFabricCoverage` catalog assertion updated TaskEscalated PLANNED → EMITTED. Existing task flows (Journey `collaborationAndWorkflowJourney`, workflow `executeTask`) keep passing against the rewritten service.
+- Web: stamped client regenerated; `npm run build` 8/8 green.
 
 ## 6. Accessibility
-workflow page in axe gate scope; task inbox does not exist. Run 43548016617 gate 6 green.
+The inbox page reuses the house primitives (PageHeader, Table, Badge, Button, Select, StatusIndicator, Stack, ContentPanel) with the same semantics as the EMPI/audit pages; status color is never the only signal (text + badge), buttons have explicit labels, gate 6 (axe + Lighthouse + visual) green repo-wide in run 43646479264.
 
 ## 7. Issues found during build
-Baseline section — see BASELINE-AUDIT.md §2.1 task + workflow rows. Verified current tree: no SLA/escalation code; `TaskDtos.kt` hospitalId default-null unchanged (client-controlled tenancy defect persists pending 00.04).
+- **`Button variant="default"` type error**: the house `ButtonVariant` union is `primary | secondary | outline | ghost | danger | success` — `default` (used in the first draft of the inbox filter toggle) fails `next build`. Fixed to `primary`. Same class of error as prior pages; the variant list is only discoverable from `packages/ui/src/primitives/Button.tsx`.
+- **`TaskView.from(entity, links)` needs links loaded**: the view renderer takes the link list explicitly — any call site that forgets `findByTaskId` silently renders empty links. All current call sites (create/update/status/assign/escalate `view(id)`, list, subject, overdue) load links; the workflow engine bypasses `TaskService` entirely (saves `Task` via the repository) so its tasks render with no links — noted as deviation §9.
+- **Cross-tenant read maps to 400, not 404/403**: `resolveTask` throws `IllegalArgumentException("TASK_NOT_FOUND")`, and the house `GlobalExceptionHandler` maps `IllegalArgumentException` → 400 for every module (asserted the same way in prior sections). Reuse beats inventing a new mapping; the test asserts 400.
+- **`deleteByTaskId` + re-insert is N+1 on update**: replace-set issues one delete + one insert per link (no batch). Fine at task-link cardinality (a handful); revisit only if links grow to hundreds.
+- **The SLA scan is global across hospitals** (walks every open task, caches rules per hospital). Correct for a per-tenant-platform monitor, but count asserts in tests/demo are `>= 1` and per-tenant, because the long-lived dev DB carries breached tasks from earlier runs/hospitals.
+- **No-dueAt tasks created in the past breach instantly under a small config slaHours**: the created-age rule compares `createdAt + slaHours` against now — tasks seeded without dueAt by older modules (workflow steps set dueAt; some older flows don't) can mass-escalate when a hospital publishes aggressive rules. Demo/PIT scope this by publishing rules only for `urgent`.
 
 ## 8. External blockers
-None.
+None — links, escalation, config-driven SLA, scheduled scan, monitor APIs and the inbox are all internal capabilities. The ledger's `exp:E1` (live ABDM linkage, owed from 00.07 §8) and `exp:E2/E3` (SMS/WhatsApp channels, 00.12's path) remain open and untouched by this section.
 
 ## 9. Deviations from chunk file
-Zero; missing contents are unbuilt, not re-scoped.
+- **`task-sla` is a 7th config document type** — the chunk file names six config types for 00.05; adding task-sla there follows the established schema-validated pattern (this is an addition, not a change to the six).
+- **Escalation is notify-only** — `task.escalated` fans out through the event fabric (WS + in-app notifications via the bridge) to assignee/assigner/role targets; there is no pager/SMS hop (that is 00.12's notification-channel design under E2/E3).
+- **Cron actor is the SYSTEM zero-UUID** — `updatedBy` on scheduled escalations stamps `00000000-0000-0000-0000-000000000000`; a real service account would need identity plumbing out of scope here.
+- **The scan walks all hospitals in memory** (`findByStatusNotIn` + per-hospital filter) rather than per-tenant pagination — right size for v1 volumes; a `shortcut:` upgrade path is a tenant-batched query if task counts grow.
+- **`escalated` is a status, not a separate entity** — escalation history is `escalatedAt` + `escalationCount` on the task plus the outbox events; a per-escalation audit table (who/when/why each time) is reconstructible from the event stream, not queryable in SQL.
+- **Encounter/invoice subject types are placeholders** — they store and return real UUIDs with type validation, but no FK to those tables yet (their owning chunks land later); the schema accepts them today so the API shape is final.
+- **Workflow-created tasks bypass `TaskService`** — `WorkflowService.executeTask` saves `Task` directly (pre-existing); those tasks have no links and don't emit task.created. Wiring workflow steps through the service (links + events) is owed as a follow-up cleanup, not a chunk item.
 
 ## 10. Exit-demo slice
-PIT `collaborationAndWorkflowJourney` (task created on patient event → assigned → completed → notification delivered) — green in run 43548016617.
+`pwsh scripts/demo-00.11-tasks.ps1` against the running app (8081, merged main `2268df3`): admin login → fresh hospital → doctor registered (task:manage via V50) → patient created → task with patient+department links → invalid subject type 400 → assign → in_progress → manual escalate (count 1) → `task.escalated` SENT in outbox (poll ≤ 30s) → overdue monitor → task-sla config (urgent 0h, DOCTOR role target) → scan escalates urgent, normal stays pending → escalated task completes → catalog 13 with TaskEscalated EMITTED. **13 passed, 0 failed**, live 2026-11-15 (first pass 12/13 — the fixed 3s outbox sleep lost to dispatcher lag; check now polls ≤ 30s, fixed in `eb7f3c0`). PIT suite green in CI run 43646479264.

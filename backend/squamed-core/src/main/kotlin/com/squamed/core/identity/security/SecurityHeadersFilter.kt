@@ -4,12 +4,15 @@ import jakarta.servlet.FilterChain
 import jakarta.servlet.ServletException
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.boot.autoconfigure.security.SecurityProperties
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 
+// Runs OUTSIDE the security chain (and outside the 00.02 idempotency filter) so the hardened
+// headers are applied to every response, including idempotent replays that never reach a controller.
 @Component
-@Order(Int.MAX_VALUE)
+@Order(SecurityProperties.DEFAULT_FILTER_ORDER - 1)
 class SecurityHeadersFilter : OncePerRequestFilter() {
   override fun doFilterInternal(
     request: HttpServletRequest,

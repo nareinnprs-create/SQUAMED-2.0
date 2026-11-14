@@ -34,7 +34,13 @@ class PlatformIntegrationTests {
   @LocalServerPort
   var port: Int = 0
 
-  private val om = ObjectMapper()
+  // Mirrors the production mapper (Boot auto-configures JavaTimeModule; Instant → ISO-8601 string).
+  private val om =
+    ObjectMapper()
+      .registerModule(
+        com.fasterxml.jackson.datatype.jsr310
+          .JavaTimeModule(),
+      ).disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 
   private val rest: RestTemplate by lazy {
     RestTemplateBuilder().rootUri("http://localhost:$port").build()
@@ -50,11 +56,13 @@ class PlatformIntegrationTests {
     path: String,
     bodyJson: String? = null,
     token: String? = null,
+    extraHeaders: Map<String, String> = emptyMap(),
   ): ApiResp {
     val headers =
       HttpHeaders().apply {
         contentType = MediaType.APPLICATION_JSON
         if (token != null) setBearerAuth(token)
+        extraHeaders.forEach { (name, value) -> add(name, value) }
       }
     val entity = HttpEntity(bodyJson, headers)
     return try {
@@ -1326,6 +1334,145 @@ class PlatformIntegrationTests {
 
       val unknown = api(HttpMethod.GET, "/api/v1/patients/" + UUID.randomUUID(), token = token)
       assertTrue(unknown.status in 404..409 || unknown.status == 400, "unknown patient -> 4xx (${unknown.status})")
+    }
+
+    @Test
+    fun eventEnvelopeV1ValidatesPublishedShape() {
+      // Real envelope shape (com.squamed.core.events.DomainEvent) must validate against the
+      // published event-envelope-v1 JSON schema (gate 8: schema-registry harness).
+      val registry =
+        com.squamed.core.events
+          .SchemaRegistry()
+      val event =
+        com.squamed.core.events.DomainEvent(
+          eventId = UUID.randomUUID(),
+          eventType = "patient.created",
+          occurredAt = java.time.Instant.now(),
+          source = "squamed-core",
+          entityType = "patient",
+          entityId = UUID.randomUUID(),
+          hospitalId = null,
+          payload = mapOf("body" to "created"),
+          recipientIds = listOf(UUID.randomUUID()),
+        )
+      val valid = om.readTree(om.writeValueAsString(event))
+      val violations = registry.validate("event-envelope-v1.schema.json", valid)
+      assertTrue(violations.isEmpty(), "published envelope shape must validate: $violations")
+
+      // Breaking shape: uppercase/underscore event type violates the v1 naming contract.
+      val broken =
+        (valid.deepCopy<com.fasterxml.jackson.databind.node.ObjectNode>()).apply {
+          put("eventType", "Patient_Created")
+        }
+      assertTrue(registry.validate("event-envelope-v1.schema.json", broken).isNotEmpty(), "broken envelope must fail")
+
+      // Unknown field = breaking change to the envelope (additionalProperties: false).
+      val unknown =
+        (valid.deepCopy<com.fasterxml.jackson.databind.node.ObjectNode>()).apply {
+          put("futureField", 1)
+        }
+      assertTrue(registry.validate("event-envelope-v1.schema.json", unknown).isNotEmpty(), "unknown field must fail")
+    }
+
+    @Test
+    fun openApiSnapshotMatchesLiveContract() {
+      // Gate 8: breaking changes are detected by diffing the committed contract snapshot against
+      // the live /api-docs document. Any difference = regenerate the snapshot + api-client codegen
+      // (docs/development/contract-codegen.md) and land both in the same PR.
+      val snapshotFile = java.io.File("../../docs/contracts/openapi-v1.json")
+      assertTrue(snapshotFile.exists(), "openapi snapshot missing at ${snapshotFile.absolutePath} — generate it from the live /api-docs")
+      val snapshot = normalizeContract(om.readTree(snapshotFile.readText()))
+      val liveResp = api(HttpMethod.GET, "/api-docs")
+      assert2xx(liveResp, "live api-docs")
+      val live = normalizeContract(om.readTree(liveResp.body))
+      assertEquals(
+        snapshot,
+        live,
+        "OpenAPI contract drifted from the committed snapshot — regenerate docs/contracts/openapi-v1.json and run: npm run codegen -w @squamed/api-client",
+      )
+    }
+
+    private fun normalizeContract(doc: com.fasterxml.jackson.databind.JsonNode): com.fasterxml.jackson.databind.JsonNode =
+      (doc.deepCopy<com.fasterxml.jackson.databind.node.ObjectNode>()).apply {
+        remove("servers")
+      }
+
+    @Test
+    fun idempotentRetryReplaysSameResponseWithoutSideEffect() {
+      val token = adminToken()
+      val s = suffix()
+      val body =
+        json(
+          "firstName" to "Idem",
+          "lastName" to "Potent$s",
+          "gender" to "male",
+          "dateOfBirth" to "1992-05-15",
+          "phone" to "55${System.currentTimeMillis()}".take(12),
+          "qid" to "2$s".take(11),
+          "nationality" to "Qatar",
+          "city" to "Doha",
+        )
+      val key = "pit-idem-$s"
+
+      val first = api(HttpMethod.POST, "/api/v1/patients", body, token, mapOf("Idempotency-Key" to key))
+      assert2xx(first, "first create")
+      val replay = api(HttpMethod.POST, "/api/v1/patients", body, token, mapOf("Idempotency-Key" to key))
+      assert2xx(replay, "idempotent replay")
+
+      assertEquals(first.body, replay.body, "replay must return the byte-identical stored response")
+      assertEquals(
+        `data`(first)["patient"]["id"].asText(),
+        `data`(replay)["patient"]["id"].asText(),
+        "replay must not create a second patient",
+      )
+    }
+
+    @Test
+    fun sameIdempotencyKeyDifferentPayloadConflicts() {
+      val token = adminToken()
+      val s = suffix()
+      val key = "pit-conflict-$s"
+      val phone = "55${System.currentTimeMillis()}".take(12)
+      val qid = "2$s".take(11)
+
+      val first =
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json(
+            "firstName" to "Conflict",
+            "lastName" to "Case$s",
+            "gender" to "male",
+            "dateOfBirth" to "1992-05-15",
+            "phone" to phone,
+            "qid" to qid,
+            "nationality" to "Qatar",
+            "city" to "Doha",
+          ),
+          token,
+          mapOf("Idempotency-Key" to key),
+        )
+      assert2xx(first, "first create")
+      val conflict =
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json(
+            "firstName" to "Conflict",
+            "lastName" to "Different$s",
+            "gender" to "male",
+            "dateOfBirth" to "1992-05-15",
+            "phone" to phone,
+            "qid" to qid,
+            "nationality" to "Qatar",
+            "city" to "Doha",
+          ),
+          token,
+          mapOf("Idempotency-Key" to key),
+        )
+      assertEquals(409, conflict.status, "payload change under same key -> 409, got ${conflict.body.take(200)}")
+      val node = om.readTree(conflict.body)
+      assertEquals("IDEMPOTENCY_CONFLICT", node["error"]["code"].asText())
     }
   }
 

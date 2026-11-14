@@ -55,6 +55,7 @@ dependencies {
 
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")
+    implementation("com.networknt:json-schema-validator:1.5.8")
 
     implementation("org.opensearch.client:opensearch-java:2.11.1")
     implementation("org.apache.httpcomponents.client5:httpclient5")

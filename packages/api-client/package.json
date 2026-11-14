@@ -7,6 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
+    "codegen": "openapi-typescript ../../docs/contracts/openapi-v1.json -o src/generated/schema.d.ts && node ./scripts/stamp-schema.mjs",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -17,6 +18,7 @@
     "axios": "^1.7.0"
   },
   "devDependencies": {
+    "openapi-typescript": "^7.5.0",
     "typescript": "^5.8.0",
     "vitest": "^3.1.0",
     "eslint": "^9.0.0"

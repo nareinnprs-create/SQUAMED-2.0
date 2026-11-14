@@ -1,8 +1,14 @@
 package com.squamed.core.task.api
 
 import com.squamed.core.task.domain.Task
+import com.squamed.core.task.domain.TaskLink
 import java.time.Instant
 import java.util.UUID
+
+data class TaskLinkDto(
+  val subjectType: String? = null,
+  val subjectId: UUID? = null,
+)
 
 data class TaskCreateDto(
   val hospitalId: UUID? = null,
@@ -14,6 +20,7 @@ data class TaskCreateDto(
   val dueAt: Instant? = null,
   val relatedType: String? = null,
   val relatedId: UUID? = null,
+  val links: List<TaskLinkDto>? = null,
 )
 
 data class TaskUpdateDto(
@@ -24,6 +31,7 @@ data class TaskUpdateDto(
   val dueAt: Instant? = null,
   val relatedType: String? = null,
   val relatedId: UUID? = null,
+  val links: List<TaskLinkDto>? = null,
 )
 
 data class TaskStatusDto(
@@ -32,6 +40,10 @@ data class TaskStatusDto(
 
 data class TaskAssignDto(
   val assigneeId: UUID? = null,
+)
+
+data class TaskEscalateDto(
+  val reason: String? = null,
 )
 
 data class TaskView(
@@ -47,11 +59,17 @@ data class TaskView(
   val relatedType: String?,
   val relatedId: UUID?,
   val completedAt: Instant?,
+  val escalatedAt: Instant?,
+  val escalationCount: Int,
+  val links: List<TaskLinkDto>,
   val createdAt: Instant?,
   val updatedAt: Instant?,
 ) {
   companion object {
-    fun from(entity: Task) =
+    fun from(
+      entity: Task,
+      links: List<TaskLink> = emptyList(),
+    ): TaskView =
       TaskView(
         id = entity.id,
         hospitalId = entity.hospitalId,
@@ -65,6 +83,12 @@ data class TaskView(
         relatedType = entity.relatedType,
         relatedId = entity.relatedId,
         completedAt = entity.completedAt,
+        escalatedAt = entity.escalatedAt,
+        escalationCount = entity.escalationCount,
+        links =
+          links
+            .sortedWith(compareBy({ it.subjectType }, { it.subjectId }))
+            .map { TaskLinkDto(subjectType = it.subjectType, subjectId = it.subjectId) },
         createdAt = entity.createdAt,
         updatedAt = entity.updatedAt,
       )

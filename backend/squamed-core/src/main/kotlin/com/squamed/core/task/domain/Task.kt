@@ -32,4 +32,8 @@ class Task(
   var relatedId: UUID? = null,
   @Column(name = "completed_at")
   var completedAt: Instant? = null,
+  @Column(name = "escalated_at")
+  var escalatedAt: Instant? = null,
+  @Column(name = "escalation_count", nullable = false)
+  var escalationCount: Int = 0,
 ) : BaseEntity()

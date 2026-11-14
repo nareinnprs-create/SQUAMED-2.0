@@ -20,8 +20,8 @@ class ConfigDocumentService(
   private val domainEventPublisher: DomainEventPublisher,
 ) {
   companion object {
-    /** The six config document types shipped by 00.05 (chunk-00 §5). */
-    val TYPES: Set<String> = setOf("working-hours", "holidays", "shifts", "workflow", "queue", "approval")
+    /** The six config document types shipped by 00.05 (chunk-00 §5) + task-sla (00.11 item 9). */
+    val TYPES: Set<String> = setOf("working-hours", "holidays", "shifts", "workflow", "queue", "approval", "task-sla")
   }
 
   /**

@@ -24,7 +24,7 @@ object EventCatalog {
       Entry("TaskCreated", "task.created", Status.EMITTED, "Task created in the task engine."),
       Entry("TaskAssigned", "task.assigned", Status.EMITTED, "Task assigned to a staff user."),
       Entry("TaskCompleted", "task.completed", Status.EMITTED, "Task reached a completed status."),
-      Entry("TaskEscalated", "task.escalated", Status.PLANNED, "SLA breach escalation (00.11 task engine)."),
+      Entry("TaskEscalated", "task.escalated", Status.EMITTED, "SLA breach or manual escalation (00.11 task engine)."),
       Entry("ConsentCaptured", "consent.captured", Status.PLANNED, "Consent captured (00.12 consent engine)."),
       Entry("ConsentWithdrawn", "consent.withdrawn", Status.PLANNED, "Consent withdrawn (00.12 consent engine)."),
       Entry("ConfigChanged", "config.changed", Status.EMITTED, "Hospital config document changed."),

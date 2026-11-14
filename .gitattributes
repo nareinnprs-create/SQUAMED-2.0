@@ -3,4 +3,5 @@
 .gate/** text eol=lf
 .github/** text eol=lf
 scripts/** text eol=lf
+docs/contracts/** text eol=lf
 CODEOWNERS text eol=lf

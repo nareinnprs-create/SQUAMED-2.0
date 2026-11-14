@@ -4745,10 +4745,11 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (12 types, emitted/planned).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types, emitted/planned; audit.chain_broken from 00.10).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
-      assertEquals(12, catalog.size(), "event catalog lists the v1 set: $catalog")
+      assertEquals(13, catalog.size(), "event catalog lists the v1 set: $catalog")
       assertTrue(catalog.any { it["name"].asText() == "NotificationDispatched" && it["status"].asText() == "EMITTED" })
+      assertTrue(catalog.any { it["name"].asText() == "AuditChainBroken" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "TaskEscalated" && it["status"].asText() == "PLANNED" })
 
       assertEquals(403, api(HttpMethod.GET, "/api/v1/admin/events/outbox", token = u1Token).status, "doctor token denied event ops")
@@ -4803,6 +4804,146 @@ class PlatformIntegrationTests {
         Thread.sleep(250)
       }
       return null
+    }
+  }
+
+  @Nested
+  inner class AuditChainTests {
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var auditJdbc: org.springframework.jdbc.core.JdbcTemplate
+
+    @Test
+    fun auditChainCoverage() {
+      val admin = adminToken()
+      val adminId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = admin))["userId"].asText()
+      val s = suffix()
+      val h1 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Audit H1 $s", "code" to "AU1-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+
+      // Doctor + auditor in a fresh hospital (dev DB persists rows). The doctor logs in with a
+      // distinct User-Agent so the session carries a registered device identity (00.10).
+      val docEmail = "audit-doc-$s@test.local"
+      val audEmail = "audit-aud-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to docEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Doc",
+            "lastName" to "Chain$s",
+            "roles" to listOf("DOCTOR"),
+            "hospitalId" to h1,
+          ),
+        ),
+        "register audit doctor",
+      )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to audEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Aud",
+            "lastName" to "Itor$s",
+            "roles" to listOf("READ_ONLY_VIEWER"),
+            "hospitalId" to h1,
+          ),
+        ),
+        "register auditor",
+      )
+      val ua = mapOf("User-Agent" to "SquamedAuditTest/1.0 ($s)")
+      val docLogin = api(HttpMethod.POST, "/api/v1/auth/login", json("username" to docEmail, "password" to "Passw0rd!123"), null, ua)
+      assert2xx(docLogin, "doctor login with device UA")
+      val doctor = `data`(docLogin)["accessToken"].asText()
+      val doctorId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = doctor))["userId"].asText()
+      val auditor =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/auth/login", json("username" to audEmail, "password" to "Passw0rd!123")),
+        )["accessToken"].asText()
+
+      // Two writes -> two chained rows (create has no path id, update carries it).
+      val oldPhone = "551$s".take(12)
+      val newPhone = "552$s".take(12)
+      val create =
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json(
+            "firstName" to "Chain",
+            "lastName" to "Patient$s",
+            "gender" to "male",
+            "dateOfBirth" to "1991-03-03",
+            "phone" to oldPhone,
+            "qid" to "3$s".take(11),
+            "nationality" to "Qatar",
+            "city" to "Doha",
+          ),
+          doctor,
+          ua,
+        )
+      assert2xx(create, "patient create (audit chain)")
+      val patId = `data`(create)["patient"]["id"].asText()
+      assert2xx(api(HttpMethod.PUT, "/api/v1/patients/$patId", json("phone" to newPhone), doctor, ua), "patient update (audit before/after)")
+
+      val logs = `data`(api(HttpMethod.GET, "/api/v1/audit/logs?actor=$doctorId&limit=100", token = admin))
+      val createRow =
+        logs.first { it["method"].asText() == "POST" && it["path"].asText() == "/api/v1/patients" && it["entityType"].asText().contains("Patient") }
+      val updateRow = logs.first { it["method"].asText() == "PUT" && it["path"].asText() == "/api/v1/patients/$patId" }
+      // ADR-9 chain: fresh tenant -> create is seq 1 (no previous hash), update links to it.
+      assertEquals(1L, createRow["chainSeq"].asLong(), "fresh tenant chain starts at seq 1")
+      assertTrue(createRow["previousHash"].isNull, "first chained row has no previous hash")
+      assertTrue(createRow["rowHash"].asText().matches(Regex("[0-9a-f]{64}")), "row hash is sha-256 hex: ${createRow["rowHash"].asText()}")
+      assertEquals(2L, updateRow["chainSeq"].asLong())
+      assertEquals(createRow["rowHash"].asText(), updateRow["previousHash"].asText(), "update row links to the create row hash")
+      assertTrue(updateRow["beforeState"].asText().contains(oldPhone), "before state captured: ${updateRow["beforeState"].asText().take(120)}")
+      assertTrue(updateRow["afterState"].asText().contains(newPhone), "after state captured")
+      assertTrue(!createRow["deviceId"].isNull && createRow["deviceId"].asText().isNotEmpty(), "device id stamped from the login session")
+      assertEquals(createRow["deviceId"].asText(), updateRow["deviceId"].asText(), "same device across both writes")
+
+      // Chain verifies clean for THIS tenant (stale breaches from previous local runs on other
+      // tenants are out of scope here).
+      val verify = `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
+      assertTrue(verify["checked"].asInt() >= 2, "both chained rows verified: $verify")
+      assertTrue(
+        verify["breaches"].none { it["hospitalId"].asText() == h1 },
+        "fresh tenant chain verifies clean: ${verify["breaches"]}",
+      )
+
+      // Permissions: auditor (READ_ONLY_VIEWER) reads + verifies but cannot export; doctor denied.
+      assert2xx(api(HttpMethod.GET, "/api/v1/audit/logs?actor=$doctorId", token = auditor), "auditor reads audit logs")
+      assert2xx(api(HttpMethod.POST, "/api/v1/audit/verify", json(), auditor), "auditor runs chain verify")
+      assertEquals(403, api(HttpMethod.POST, "/api/v1/audit/export", json(), auditor).status, "auditor denied export")
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/audit/logs", token = doctor).status, "doctor denied audit read")
+
+      // WORM export covers the fresh tenant rows and returns the object key.
+      val export = `data`(api(HttpMethod.POST, "/api/v1/audit/export", json(), admin))
+      assertTrue(export["exported"].asInt() >= 3, "export covers chained rows: $export")
+      assertTrue(export["objectKey"].asText().contains("/"), "export object key: ${export["objectKey"].asText()}")
+
+      // Tamper: overwrite a stored field -> verify reports HASH_MISMATCH for this tenant and an
+      // audit.chain_broken event lands in the outbox (chunk-00 item 8 "audit alerts").
+      auditJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", "TAMPERED-$s", createRow["id"].asText())
+      val breach = `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
+      val h1Breaches = breach["breaches"].filter { it["hospitalId"].asText() == h1 }
+      assertTrue(
+        h1Breaches.isNotEmpty() && h1Breaches.all { it["reason"].asText().contains("HASH_MISMATCH") },
+        "tamper detected on the tenant chain: ${breach["breaches"]}",
+      )
+      var brokenRow: JsonNode? = null
+      val brokenDeadline = System.currentTimeMillis() + 30_000
+      while (System.currentTimeMillis() < brokenDeadline) {
+        val rows = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = admin))
+        brokenRow = rows.firstOrNull { it["eventType"].asText() == "audit.chain_broken" && it["hospitalId"].asText() == h1 }
+        if (brokenRow != null && brokenRow["status"].asText() == "SENT") break
+        Thread.sleep(500)
+      }
+      assertNotNull(brokenRow, "audit.chain_broken published to the outbox")
+      assertEquals("SENT", brokenRow!!["status"].asText(), "breach alert dispatched")
     }
   }
 

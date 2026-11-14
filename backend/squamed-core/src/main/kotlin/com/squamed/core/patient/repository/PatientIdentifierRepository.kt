@@ -13,4 +13,9 @@ interface PatientIdentifierRepository : JpaRepository<PatientIdentifier, UUID> {
     idType: String,
     idValue: String,
   ): Boolean
+
+  fun findByIdTypeAndIdValue(
+    idType: String,
+    idValue: String,
+  ): List<PatientIdentifier>
 }

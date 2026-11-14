@@ -94,4 +94,6 @@ class PatientRecord(
   var registrationChannel: String = "walk-in",
   @Column(name = "records_status", nullable = false, length = 20)
   var recordsStatus: String = "active",
+  @Column(name = "is_unknown", nullable = false)
+  var isUnknown: Boolean = false,
 ) : BaseEntity()

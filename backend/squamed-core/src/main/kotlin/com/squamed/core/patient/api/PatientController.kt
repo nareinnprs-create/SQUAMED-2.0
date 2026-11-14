@@ -7,6 +7,9 @@ import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.patient.service.EmpiMatcher
 import com.squamed.core.patient.service.PatientService
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
+import org.springframework.security.access.AccessDeniedException
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.multipart.MultipartFile
 import java.util.UUID
 
 @RestController
@@ -56,7 +60,11 @@ class PatientController(
   fun update(
     @PathVariable id: UUID,
     @RequestBody dto: PatientUpdateDto,
-  ): ApiResponse<PatientDetailDto> = ApiResponse.ok(patientService.update(id, dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<PatientDetailDto> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.update(id, dto))
+  }
 
   @GetMapping
   @RequiresPermission("patient:read:patient")
@@ -136,5 +144,107 @@ class PatientController(
   @Transactional
   fun merge(
     @RequestBody dto: MergePatientsDto,
-  ): ApiResponse<MergeResponseDto> = ApiResponse.ok(patientService.mergePatient(dto.targetId, dto.duplicateId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<MergeResponseDto> {
+    requireSameHospital(principal, patientService.getHospitalId(dto.targetId))
+    return ApiResponse.ok(patientService.mergePatient(dto.targetId, dto.duplicateId))
+  }
+
+  @PostMapping("/{id}/identifiers")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("patient:write:patient")
+  @Transactional
+  fun addIdentifier(
+    @PathVariable id: UUID,
+    @RequestBody dto: PatientIdentifierDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<PatientIdentifierDto> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.addIdentifier(id, dto))
+  }
+
+  @GetMapping("/{id}/identifiers")
+  @RequiresPermission("patient:read:patient")
+  @Transactional(readOnly = true)
+  fun listIdentifiers(
+    @PathVariable id: UUID,
+  ): ApiResponse<List<PatientIdentifierDto>> = ApiResponse.ok(patientService.listIdentifiers(id))
+
+  @DeleteMapping("/{id}/identifiers/{identifierId}")
+  @RequiresPermission("patient:write:patient")
+  @Transactional
+  fun deleteIdentifier(
+    @PathVariable id: UUID,
+    @PathVariable identifierId: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<Void> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    patientService.deleteIdentifier(id, identifierId)
+    return ApiResponse.ok(null)
+  }
+
+  @PostMapping("/{id}/relationships")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("patient:write:patient")
+  @Transactional
+  fun addRelationship(
+    @PathVariable id: UUID,
+    @RequestBody dto: PatientRelationshipDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<PatientRelationshipDto> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.addRelationship(id, dto))
+  }
+
+  @GetMapping("/{id}/relationships")
+  @RequiresPermission("patient:read:patient")
+  @Transactional(readOnly = true)
+  fun listRelationships(
+    @PathVariable id: UUID,
+  ): ApiResponse<List<PatientRelationshipDto>> = ApiResponse.ok(patientService.listRelationships(id))
+
+  @DeleteMapping("/{id}/relationships/{relationshipId}")
+  @RequiresPermission("patient:write:patient")
+  @Transactional
+  fun deleteRelationship(
+    @PathVariable id: UUID,
+    @PathVariable relationshipId: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<Void> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    patientService.deleteRelationship(id, relationshipId)
+    return ApiResponse.ok(null)
+  }
+
+  @PostMapping("/{id}/photo", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
+  @RequiresPermission("patient:write:patient")
+  @Transactional
+  fun uploadPhoto(
+    @PathVariable id: UUID,
+    @RequestParam("file") file: MultipartFile,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<PhotoDto> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(PhotoDto(photoKey = patientService.setPhoto(id, file)))
+  }
+
+  @GetMapping("/{id}/photo")
+  @RequiresPermission("patient:read:patient")
+  @Transactional(readOnly = true)
+  fun downloadPhoto(
+    @PathVariable id: UUID,
+  ): ResponseEntity<ByteArray> {
+    val key = patientService.getPhotoKey(id) ?: throw IllegalArgumentException("PHOTO_NOT_UPLOADED")
+    if (!key.startsWith("photos/")) throw IllegalArgumentException("PHOTO_NOT_STORED")
+    val (bytes, contentType) = patientService.getPhoto(key)
+    return ResponseEntity.ok().header("Content-Type", contentType).body(bytes)
+  }
+
+  private fun requireSameHospital(
+    principal: SquamedPrincipal,
+    entityHospitalId: UUID?,
+  ) {
+    val pinned = tenantResolver.pinOrDefault(principal, entityHospitalId)
+    if (pinned != entityHospitalId) throw AccessDeniedException("TENANT_FORBIDDEN")
+  }
 }

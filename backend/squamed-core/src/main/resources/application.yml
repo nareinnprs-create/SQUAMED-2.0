@@ -87,6 +87,15 @@ squamed:
     enabled: true
     opensearch-uris: ${OPENSEARCH_URIS:http://localhost:9200}
     reindex-on-startup: ${SEARCH_REINDEX_ON_STARTUP:true}
+  photos:
+    # S3 API object storage for patient photos — MinIO (pgsty/silo) in dev, S3 in prod.
+    enabled: ${PHOTOS_ENABLED:true}
+    endpoint: ${PHOTOS_ENDPOINT:http://localhost:9000}
+    region: ${PHOTOS_REGION:us-east-1}
+    access-key: ${PHOTOS_ACCESS_KEY:squamed}
+    secret-key: ${PHOTOS_SECRET_KEY:squamed_dev_password}
+    bucket: ${PHOTOS_BUCKET:squamed-patient-photos}
+    path-style: ${PHOTOS_PATH_STYLE:true}
 
 logging:
   level:

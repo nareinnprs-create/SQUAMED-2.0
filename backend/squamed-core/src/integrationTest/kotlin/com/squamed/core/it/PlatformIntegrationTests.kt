@@ -232,9 +232,25 @@ class PlatformIntegrationTests {
           ).withStartupAttempts(3)
       }
 
+    // 00.07 patient photos: S3-API object storage. pgsty/silo = maintained MinIO fork (compose parity).
+    private val minio: GenericContainer<*>? =
+      if (EXTERNAL) {
+        null
+      } else {
+        GenericContainer("pgsty/silo:RELEASE.2026-11-12T00-00-00Z")
+          .withCommand("server", "/data")
+          .withEnv(
+            mapOf(
+              "MINIO_ROOT_USER" to "squamed",
+              "MINIO_ROOT_PASSWORD" to "squamed_dev_password",
+            ),
+          ).withExposedPorts(9000)
+          .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofMinutes(2)))
+      }
+
     init {
       if (!EXTERNAL) {
-        listOfNotNull(postgres, redis, kafka, opensearch).forEach { container ->
+        listOfNotNull(postgres, redis, kafka, opensearch, minio).forEach { container ->
           if (!container.isRunning) {
             container.start()
           }
@@ -261,6 +277,8 @@ class PlatformIntegrationTests {
         registry.add("spring.kafka.bootstrap-servers") { "localhost:9092" }
         registry.add("squamed.search.opensearch-uris") { "http://localhost:9200" }
         registry.add("squamed.search.reindex-on-startup") { "false" }
+        // Photos point at the compose MinIO (defaults in application.yml); explicit for clarity.
+        registry.add("squamed.photos.endpoint") { "http://localhost:9000" }
       } else {
         registry.add("spring.datasource.url") { postgres!!.jdbcUrl }
         registry.add("spring.datasource.username") { postgres!!.username }
@@ -270,6 +288,9 @@ class PlatformIntegrationTests {
         registry.add("spring.kafka.bootstrap-servers") { "localhost:${kafka!!.getMappedPort(9092)}" }
         registry.add("squamed.search.opensearch-uris") { "http://localhost:${opensearch!!.getMappedPort(9200)}" }
         registry.add("squamed.search.reindex-on-startup") { "false" }
+        registry.add("squamed.photos.endpoint") { "http://localhost:${minio!!.getMappedPort(9000)}" }
+        registry.add("squamed.photos.access-key") { "squamed" }
+        registry.add("squamed.photos.secret-key") { "squamed_dev_password" }
       }
     }
   }
@@ -2083,6 +2104,232 @@ class PlatformIntegrationTests {
       assert2xx(api(HttpMethod.GET, "/api/v1/master-data/equipment?hospitalId=$h1", token = token), "hospital-filtered equipment")
       assert2xx(api(HttpMethod.GET, "/api/v1/master-data/employees?hospitalId=$h1&active=true", token = token), "hospital-filtered employees")
       assert2xx(api(HttpMethod.GET, "/api/v1/master-data/price-lists?hospitalId=$h1", token = token), "hospital-filtered price lists")
+    }
+
+    @Test
+    fun patientMasterCompletionCoverage() {
+      val token = adminToken()
+      val s = suffix()
+
+      // Fresh hospitals per run: the dev database persists rows across runs.
+      val h1 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "PM-A $s", "code" to "PA-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      val h2 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "PM-B $s", "code" to "PB-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+
+      // Unknown-patient flow: temporary record with sentinel identity, pending until identified.
+      val unknown =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/patients", json("unknownPatient" to true, "hospitalId" to h1), token),
+        )["patient"]
+      val unknownId = unknown["id"].asText()
+      assertTrue(unknown["isUnknown"].asBoolean(), "unknown flag must be set: $unknown")
+      assertEquals("pending", unknown["recordsStatus"].asText(), "unknown record must be pending: $unknown")
+      assertEquals("Unknown", unknown["firstName"].asText(), "sentinel first name: $unknown")
+      assertEquals("1900-01-01", unknown["dateOfBirth"].asText(), "sentinel DOB: $unknown")
+      assertEquals("unknown", unknown["gender"].asText(), "sentinel gender: $unknown")
+
+      // Identification: a real name + DOB on PUT closes the unknown state.
+      val identified =
+        `data`(
+          api(
+            HttpMethod.PUT,
+            "/api/v1/patients/$unknownId",
+            json("firstName" to "Asha", "lastName" to "Rao", "dateOfBirth" to "1990-05-05", "gender" to "female"),
+            token,
+          ),
+        )
+      assertFalse(identified["isUnknown"].asBoolean(), "identification must clear unknown: $identified")
+      assertEquals("active", identified["recordsStatus"].asText(), "identified record must be active: $identified")
+      assertEquals("1990-05-05", identified["dateOfBirth"].asText(), "identified DOB must replace sentinel: $identified")
+
+      // ABHA identifiers: format-validated, stored as patient_identifier rows, unique per value.
+      // Values are unique per run: the dev database persists rows, a fixed number would
+      // collide with the previous run's insert (DUPLICATE_IDENTIFIER).
+      val abhaNumber = "90%012d".format(System.currentTimeMillis() % 1_000_000_000_000L)
+      val abhaAddress = "asha.rao.%010d@abdm".format(System.currentTimeMillis() % 10_000_000_000L)
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/patients/$unknownId/identifiers", json("idType" to "ABHA", "idValue" to "1234"), token),
+        "ABHA number below 14 digits must be rejected",
+      )
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/patients/$unknownId/identifiers", json("idType" to "ABHA_ADDRESS", "idValue" to "bad address"), token),
+        "malformed ABHA address must be rejected",
+      )
+      val abha =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/patients/$unknownId/identifiers", json("idType" to "ABHA", "idValue" to abhaNumber), token),
+        )
+      assertEquals(abhaNumber, abha["idValue"].asText(), "ABHA number must persist: $abha")
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/patients/$unknownId/identifiers", json("idType" to "ABHA_ADDRESS", "idValue" to abhaAddress), token),
+        "valid ABHA address is accepted (normalised to lowercase)",
+      )
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/patients/$unknownId/identifiers", json("idType" to "ABHA", "idValue" to abhaNumber), token),
+        "duplicate identifier value must be rejected",
+      )
+      // ABHA value resolves through patient search (00.07 gap: identifier search).
+      val search =
+        `data`(api(HttpMethod.GET, "/api/v1/patients?query=$abhaNumber", token = token))
+      assertTrue(search.any { it["id"].asText() == unknownId }, "identifier search must resolve to the owning patient: $search")
+
+      // Relationships: guardian/family links, no self-link, cross-hospital rejected, unique triple.
+      val related =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json("firstName" to "Ravi", "lastName" to "Rao", "dateOfBirth" to "1965-01-01", "gender" to "male", "hospitalId" to h1),
+            token,
+          ),
+        )["patient"]
+      val relatedId = related["id"].asText()
+      val relationship =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients/$unknownId/relationships",
+            json("relatedPatientId" to relatedId, "relationshipType" to "guardian", "isPrimaryGuardian" to true),
+            token,
+          ),
+        )
+      assertEquals(relatedId, relationship["relatedPatientId"].asText(), "relationship must persist: $relationship")
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/patients/$unknownId/relationships", json("relatedPatientId" to unknownId, "relationshipType" to "guardian"), token),
+        "patient cannot be linked to itself",
+      )
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/patients/$unknownId/relationships", json("relatedPatientId" to relatedId, "relationshipType" to "guardian"), token),
+        "duplicate relationship triple must be rejected",
+      )
+      val outsider =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json("firstName" to "Out", "lastName" to "Sider", "dateOfBirth" to "1980-01-01", "gender" to "female", "hospitalId" to h2),
+            token,
+          ),
+        )["patient"]
+      assert4xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients/$unknownId/relationships",
+          json("relatedPatientId" to outsider["id"].asText(), "relationshipType" to "spouse"),
+          token,
+        ),
+        "relationship across hospitals must be rejected",
+      )
+      val relList = `data`(api(HttpMethod.GET, "/api/v1/patients/$relatedId/relationships", token = token))
+      assertTrue(
+        relList.any {
+          it["id"].asText() == relationship["id"].asText() && it["reverse"].asBoolean()
+        },
+        "reverse relationship must be listed for the related party: $relList",
+      )
+
+      // Merge: cross-hospital pairs must be refused (same-hospital merge covered by EMPI tests).
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/patients/merge", json("targetId" to unknownId, "duplicateId" to outsider["id"].asText()), token),
+        "merge across hospitals must be rejected",
+      )
+
+      // Photo: multipart upload to S3/MinIO, bytes retrievable, content types enforced.
+      val jpegBytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x00, 0x01, 0x02, 0x03, 0xFF.toByte(), 0xD9.toByte())
+      val parts = org.springframework.util.LinkedMultiValueMap<String, Any>()
+      val resource =
+        object : org.springframework.core.io.ByteArrayResource(jpegBytes) {
+          override fun getFilename(): String = "photo.jpg"
+        }
+      parts.add("file", resource)
+      val uploadHeaders =
+        HttpHeaders().apply {
+          contentType = MediaType.MULTIPART_FORM_DATA
+          setBearerAuth(token)
+        }
+      val upload =
+        rest.exchange("/api/v1/patients/$unknownId/photo", HttpMethod.POST, HttpEntity(parts, uploadHeaders), String::class.java)
+      assertTrue(upload.statusCode.is2xxSuccessful, "photo upload -> ${upload.body?.take(300)}")
+      val photoKey = om.readTree(upload.body ?: "{}")["data"]["photoKey"].asText()
+      assertTrue(photoKey.startsWith("photos/"), "photo key must be an object-storage key: $photoKey")
+
+      val photoBytes =
+        try {
+          val resp =
+            rest.exchange(
+              "/api/v1/patients/$unknownId/photo",
+              HttpMethod.GET,
+              HttpEntity<Void?>(HttpHeaders().apply { setBearerAuth(token) }),
+              ByteArray::class.java,
+            )
+          Pair(resp.statusCode.value(), resp.body ?: ByteArray(0))
+        } catch (e: RestClientResponseException) {
+          Pair(e.statusCode.value(), ByteArray(0))
+        }
+      assertEquals(200, photoBytes.first, "photo download must succeed")
+      assertTrue(jpegBytes.contentEquals(photoBytes.second), "downloaded photo bytes must match the upload")
+
+      val badParts = org.springframework.util.LinkedMultiValueMap<String, Any>()
+      badParts.add(
+        "file",
+        object : org.springframework.core.io.ByteArrayResource(ByteArray(10)) {
+          override fun getFilename(): String = "notes.txt"
+        },
+      )
+      // RestTemplate throws on 4xx; capture the status either way.
+      val badUploadStatus =
+        try {
+          rest
+            .exchange(
+              "/api/v1/patients/$unknownId/photo",
+              HttpMethod.POST,
+              HttpEntity(
+                badParts,
+                HttpHeaders().apply {
+                  // Request stays multipart; the server derives the part type from the filename
+                  // (notes.txt -> text/plain) and must reject it as unsupported.
+                  contentType = MediaType.MULTIPART_FORM_DATA
+                  setBearerAuth(token)
+                },
+              ),
+              String::class.java,
+            ).statusCode
+            .value()
+        } catch (e: RestClientResponseException) {
+          e.statusCode.value()
+        }
+      assertTrue(badUploadStatus in 400..499, "non-image content type must be rejected: $badUploadStatus")
+
+      // Tenant guard: a hospital-bound doctor cannot update patients of another hospital.
+      val doctorEmail = "doctor-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to doctorEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Doc",
+            "lastName" to "PM$s",
+            "roles" to listOf("DOCTOR"),
+            "hospitalId" to h1,
+          ),
+        ),
+        "register doctor for tenant guard",
+      )
+      val doctorToken =
+        `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to doctorEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+      val crossUpdate = api(HttpMethod.PUT, "/api/v1/patients/${outsider["id"].asText()}", json("phone" to "55999999"), doctorToken)
+      assertEquals(403, crossUpdate.status, "cross-hospital patient update must be 403: ${crossUpdate.body.take(300)}")
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/patients/${outsider["id"].asText()}/identifiers", json("idType" to "OTHER", "idValue" to "X-$s"), doctorToken),
+        "cross-hospital identifier write must be denied",
+      )
     }
 
     @Test

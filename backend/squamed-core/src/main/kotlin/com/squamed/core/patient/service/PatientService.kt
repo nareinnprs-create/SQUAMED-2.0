@@ -11,6 +11,7 @@ import com.squamed.core.patient.api.NoteDto
 import com.squamed.core.patient.api.PatientCreateDto
 import com.squamed.core.patient.api.PatientDetailDto
 import com.squamed.core.patient.api.PatientIdentifierDto
+import com.squamed.core.patient.api.PatientRelationshipDto
 import com.squamed.core.patient.api.PatientSummaryDto
 import com.squamed.core.patient.api.PatientUpdateDto
 import com.squamed.core.patient.domain.Address
@@ -20,6 +21,7 @@ import com.squamed.core.patient.domain.MedicalHistory
 import com.squamed.core.patient.domain.PatientIdentifier
 import com.squamed.core.patient.domain.PatientNote
 import com.squamed.core.patient.domain.PatientRecord
+import com.squamed.core.patient.domain.PatientRelationship
 import com.squamed.core.patient.repository.AddressRepository
 import com.squamed.core.patient.repository.AllergyRepository
 import com.squamed.core.patient.repository.ContactPointRepository
@@ -28,11 +30,13 @@ import com.squamed.core.patient.repository.MedicalHistoryRepository
 import com.squamed.core.patient.repository.PatientIdentifierRepository
 import com.squamed.core.patient.repository.PatientNoteRepository
 import com.squamed.core.patient.repository.PatientRecordRepository
+import com.squamed.core.patient.repository.PatientRelationshipRepository
 import com.squamed.core.search.SearchIndexer
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.multipart.MultipartFile
 import java.time.Instant
 import java.time.LocalDate
 import java.util.LinkedHashMap
@@ -48,15 +52,23 @@ class PatientService(
   private val patientNoteRepository: PatientNoteRepository,
   private val medicalHistoryRepository: MedicalHistoryRepository,
   private val episodeOfCareRepository: EpisodeOfCareRepository,
+  private val patientRelationshipRepository: PatientRelationshipRepository,
   private val mrnGenerator: MrnGenerator,
   private val eventPublisher: DomainEventPublisher,
   private val searchIndexer: SearchIndexer,
+  private val photoStorage: PatientPhotoStorage,
 ) {
   private val logger = LoggerFactory.getLogger(PatientService::class.java)
+
+  companion object {
+    /** Sentinel DOB for unknown patients (documented in V46 header) — replaced on identification. */
+    val UNKNOWN_SENTINEL_DOB: LocalDate = LocalDate.of(1900, 1, 1)
+  }
 
   @Transactional
   fun create(dto: PatientCreateDto): PatientDetailDto {
     val mrn = resolveMrn(dto)
+    val unknown = dto.unknownPatient ?: false
     val patient =
       patientRecordRepository.save(
         PatientRecord(
@@ -64,12 +76,22 @@ class PatientService(
           mrn = mrn,
           externalId = dto.externalId,
           title = dto.title,
-          firstName = dto.firstName ?: throw IllegalArgumentException("PATIENT_FIRST_NAME_REQUIRED"),
+          firstName =
+            when {
+              dto.firstName != null -> dto.firstName
+              unknown -> "Unknown"
+              else -> throw IllegalArgumentException("PATIENT_FIRST_NAME_REQUIRED")
+            },
           middleName = dto.middleName,
-          lastName = dto.lastName ?: throw IllegalArgumentException("PATIENT_LAST_NAME_REQUIRED"),
+          lastName =
+            when {
+              dto.lastName != null -> dto.lastName
+              unknown -> "Unknown"
+              else -> throw IllegalArgumentException("PATIENT_LAST_NAME_REQUIRED")
+            },
           preferredName = dto.preferredName,
-          dateOfBirth = dto.dateOfBirth ?: throw IllegalArgumentException("PATIENT_DATE_OF_BIRTH_REQUIRED"),
-          gender = dto.gender ?: throw IllegalArgumentException("PATIENT_GENDER_REQUIRED"),
+          dateOfBirth = dto.dateOfBirth ?: if (unknown) UNKNOWN_SENTINEL_DOB else throw IllegalArgumentException("PATIENT_DATE_OF_BIRTH_REQUIRED"),
+          gender = dto.gender ?: if (unknown) "unknown" else throw IllegalArgumentException("PATIENT_GENDER_REQUIRED"),
           bloodGroup = dto.bloodGroup,
           nationality = dto.nationality,
           religion = dto.religion,
@@ -101,7 +123,8 @@ class PatientService(
           languagePreference = dto.languagePreference ?: "en",
           communicationPreference = dto.communicationPreference ?: "phone",
           registrationChannel = dto.registrationChannel ?: "walk-in",
-          recordsStatus = dto.recordsStatus ?: "active",
+          recordsStatus = dto.recordsStatus ?: if (unknown) "pending" else "active",
+          isUnknown = unknown,
         ),
       )
     val patientId = patient.id ?: throw IllegalStateException("PATIENT_ID_MISSING")
@@ -110,6 +133,7 @@ class PatientService(
     for (input in dto.identifiers.orEmpty()) {
       val idType = input.idType ?: throw IllegalArgumentException("IDENTIFIER_TYPE_REQUIRED")
       val idValue = input.idValue ?: throw IllegalArgumentException("IDENTIFIER_VALUE_REQUIRED")
+      validateIdentifier(idType, idValue.trim())
       try {
         patientIdentifierRepository.save(
           PatientIdentifier(
@@ -222,6 +246,11 @@ class PatientService(
     patient.communicationPreference = dto.communicationPreference ?: patient.communicationPreference
     patient.registrationChannel = dto.registrationChannel ?: patient.registrationChannel
     patient.recordsStatus = dto.recordsStatus ?: patient.recordsStatus
+    // Identifying an unknown patient: real name or DOB closes the unknown state.
+    if (dto.firstName != null || dto.dateOfBirth != null) {
+      patient.isUnknown = false
+      if (patient.recordsStatus == "pending") patient.recordsStatus = "active"
+    }
     patientRecordRepository.save(patient)
     searchIndexer.indexPatient(patient)
     return getDetail(id)
@@ -236,7 +265,8 @@ class PatientService(
     val allergies = allergyRepository.findByPatientId(id).map { AllergyDto.from(it) }
     val conditions = medicalHistoryRepository.findByPatientId(id).map { MedicalHistoryDto.from(it) }
     val notes = patientNoteRepository.findByPatientId(id).map { NoteDto.from(it) }
-    return PatientDetailDto.from(patient, identifiers, contactPoints, addresses, allergies, conditions, notes)
+    val relationships = listRelationships(id)
+    return PatientDetailDto.from(patient, identifiers, contactPoints, addresses, allergies, conditions, notes, relationships)
   }
 
   @Transactional(readOnly = true)
@@ -362,8 +392,11 @@ class PatientService(
     if (targetId == duplicateId) {
       throw IllegalArgumentException("CANNOT_MERGE_PATIENT_WITH_ITSELF")
     }
-    findPatient(targetId)
-    findPatient(duplicateId)
+    val target = findPatient(targetId)
+    val duplicate = findPatient(duplicateId)
+    if (target.hospitalId != null && duplicate.hospitalId != null && target.hospitalId != duplicate.hospitalId) {
+      throw IllegalArgumentException("MERGE_CROSS_HOSPITAL")
+    }
 
     val moved =
       mutableMapOf(
@@ -438,6 +471,14 @@ class PatientService(
     )
   }
 
+  @Transactional(readOnly = true)
+  fun getHospitalId(id: UUID): UUID? = findPatient(id).hospitalId
+
+  @Transactional(readOnly = true)
+  fun getPhotoKey(id: UUID): String? = findPatient(id).photoUrl
+
+  fun getPhoto(key: String): Pair<ByteArray, String> = photoStorage.download(key)
+
   private fun searchByQuery(
     q: String,
     hospitalId: UUID?,
@@ -455,6 +496,10 @@ class PatientService(
     addCandidate(patientRecordRepository.findByPhoneContaining(q))
     addCandidate(patientRecordRepository.findByQid(q))
     addCandidate(patientRecordRepository.findByEmailIgnoreCase(q))
+    // Identifier search (ABHA / ABHA address / any stored id) resolves to owning patients.
+    patientIdentifierRepository.findByIdValue(q).forEach { identifier ->
+      patientRecordRepository.findById(identifier.patientId).ifPresent { addCandidate(listOf(it)) }
+    }
 
     val tokens = q.split(Regex("\\s+")).filter { it.isNotBlank() }
     if (tokens.size >= 2) {
@@ -502,6 +547,141 @@ class PatientService(
   }
 
   private fun findPatient(id: UUID): PatientRecord = patientRecordRepository.findById(id).orElseThrow { IllegalArgumentException("PATIENT_NOT_FOUND") }
+
+  @Transactional
+  fun addIdentifier(
+    patientId: UUID,
+    dto: PatientIdentifierDto,
+  ): PatientIdentifierDto {
+    findPatient(patientId)
+    val idType = dto.idType ?: throw IllegalArgumentException("IDENTIFIER_TYPE_REQUIRED")
+    val idValue0 = dto.idValue?.trim() ?: throw IllegalArgumentException("IDENTIFIER_VALUE_REQUIRED")
+    validateIdentifier(idType, idValue0)
+    // ABHA addresses are case-insensitive; store them lowercase so duplicate checks are exact.
+    val idValue = if (idType.equals("ABHA_ADDRESS", ignoreCase = true)) idValue0.lowercase() else idValue0
+    if (patientIdentifierRepository.existsByIdTypeAndIdValue(idType, idValue)) {
+      throw IllegalStateException("DUPLICATE_IDENTIFIER")
+    }
+    return PatientIdentifierDto.from(
+      patientIdentifierRepository.save(
+        PatientIdentifier(
+          patientId = patientId,
+          idType = idType,
+          idValue = idValue,
+          issuingAuthority = dto.issuingAuthority,
+          primaryFlag = dto.primaryFlag ?: false,
+        ),
+      ),
+    )
+  }
+
+  @Transactional(readOnly = true)
+  fun listIdentifiers(patientId: UUID): List<PatientIdentifierDto> {
+    findPatient(patientId)
+    return patientIdentifierRepository.findByPatientId(patientId).map { PatientIdentifierDto.from(it) }
+  }
+
+  @Transactional
+  fun deleteIdentifier(
+    patientId: UUID,
+    identifierId: UUID,
+  ) {
+    val identifier = patientIdentifierRepository.findById(identifierId).orElseThrow { IllegalArgumentException("IDENTIFIER_NOT_FOUND") }
+    if (identifier.patientId != patientId) throw IllegalArgumentException("IDENTIFIER_NOT_FOUND")
+    patientIdentifierRepository.delete(identifier)
+  }
+
+  @Transactional
+  fun addRelationship(
+    patientId: UUID,
+    dto: PatientRelationshipDto,
+  ): PatientRelationshipDto {
+    val patient = findPatient(patientId)
+    val relatedId = dto.relatedPatientId ?: throw IllegalArgumentException("RELATED_PATIENT_REQUIRED")
+    if (relatedId == patientId) throw IllegalArgumentException("CANNOT_LINK_PATIENT_TO_ITSELF")
+    val related = findPatient(relatedId)
+    if (patient.hospitalId != null && related.hospitalId != null && patient.hospitalId != related.hospitalId) {
+      throw IllegalArgumentException("RELATED_PATIENT_OTHER_HOSPITAL")
+    }
+    val type = dto.relationshipType?.trim()?.lowercase() ?: throw IllegalArgumentException("RELATIONSHIP_TYPE_REQUIRED")
+    val hospitalId = patient.hospitalId ?: throw IllegalStateException("PATIENT_HOSPITAL_MISSING")
+    // Pre-save check: a UNIQUE-violation only surfaces at flush time, outside any in-transaction catch.
+    if (patientRelationshipRepository.existsByHospitalIdAndPatientIdAndRelatedPatientIdAndRelationshipType(
+        hospitalId,
+        patientId,
+        relatedId,
+        type,
+      )
+    ) {
+      throw IllegalStateException("DUPLICATE_RELATIONSHIP")
+    }
+    try {
+      return PatientRelationshipDto.from(
+        patientRelationshipRepository.save(
+          PatientRelationship(
+            hospitalId = hospitalId,
+            patientId = patientId,
+            relatedPatientId = relatedId,
+            relationshipType = type,
+            isPrimaryGuardian = dto.isPrimaryGuardian ?: false,
+            notes = dto.notes,
+          ),
+        ),
+      )
+    } catch (e: DataIntegrityViolationException) {
+      throw IllegalStateException("DUPLICATE_RELATIONSHIP")
+    }
+  }
+
+  @Transactional(readOnly = true)
+  fun listRelationships(patientId: UUID): List<PatientRelationshipDto> {
+    findPatient(patientId)
+    val direct = patientRelationshipRepository.findByPatientId(patientId).map { it to false }
+    val reverse = patientRelationshipRepository.findByRelatedPatientId(patientId).map { it to true }
+    return (direct + reverse).map { (rel, reversed) -> PatientRelationshipDto.from(rel, reversed) }
+  }
+
+  @Transactional
+  fun deleteRelationship(
+    patientId: UUID,
+    relationshipId: UUID,
+  ) {
+    val rel = patientRelationshipRepository.findById(relationshipId).orElseThrow { IllegalArgumentException("RELATIONSHIP_NOT_FOUND") }
+    if (rel.patientId != patientId && rel.relatedPatientId != patientId) throw IllegalArgumentException("RELATIONSHIP_NOT_FOUND")
+    patientRelationshipRepository.delete(rel)
+  }
+
+  @Transactional
+  fun setPhoto(
+    patientId: UUID,
+    file: MultipartFile,
+  ): String {
+    val patient = findPatient(patientId)
+    val key = photoStorage.upload(patient.hospitalId ?: throw IllegalStateException("PATIENT_HOSPITAL_MISSING"), patientId, file)
+    patient.photoUrl = key
+    patientRecordRepository.save(patient)
+    return key
+  }
+
+  /** ABHA per ABDM: numeric 14-digit (or 13-digit legacy without checksum row), ABHA address like `name@abdm`. */
+  private fun validateIdentifier(
+    idType: String,
+    idValue: String,
+  ) {
+    when (idType.uppercase()) {
+      "ABHA" -> {
+        if (!Regex("^\\d{14}$").matches(idValue)) {
+          throw IllegalArgumentException("ABHA_NUMBER_INVALID")
+        }
+      }
+
+      "ABHA_ADDRESS" -> {
+        if (!Regex("^[a-z0-9._-]{4,20}@[a-z]{2,}$").matches(idValue.lowercase())) {
+          throw IllegalArgumentException("ABHA_ADDRESS_INVALID")
+        }
+      }
+    }
+  }
 
   @Transactional
   fun findOrCreateFromHl7(

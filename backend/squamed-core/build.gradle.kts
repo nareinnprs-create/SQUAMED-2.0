@@ -59,6 +59,10 @@ dependencies {
 
     implementation("org.opensearch.client:opensearch-java:2.11.1")
     implementation("org.apache.httpcomponents.client5:httpclient5")
+    // 00.07: patient photo object storage — S3 API (MinIO pgsty/silo in dev, S3 in prod)
+    implementation(platform("software.amazon.awssdk:bom:2.25.70"))
+    implementation("software.amazon.awssdk:s3")
+    implementation("software.amazon.awssdk:apache-client")
 
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
 

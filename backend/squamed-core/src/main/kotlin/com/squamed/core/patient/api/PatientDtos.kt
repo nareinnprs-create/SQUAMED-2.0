@@ -7,6 +7,7 @@ import com.squamed.core.patient.domain.MedicalHistory
 import com.squamed.core.patient.domain.PatientIdentifier
 import com.squamed.core.patient.domain.PatientNote
 import com.squamed.core.patient.domain.PatientRecord
+import com.squamed.core.patient.domain.PatientRelationship
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -14,6 +15,7 @@ import java.util.UUID
 data class PatientCreateDto(
   val hospitalId: UUID? = null,
   val mrn: String? = null,
+  val unknownPatient: Boolean? = null,
   val externalId: String? = null,
   val title: String? = null,
   val firstName: String? = null,
@@ -116,6 +118,7 @@ data class PatientSummaryDto(
   val email: String?,
   val qid: String?,
   val recordsStatus: String?,
+  val isUnknown: Boolean = false,
 ) {
   companion object {
     fun from(entity: PatientRecord) =
@@ -133,6 +136,7 @@ data class PatientSummaryDto(
         email = entity.email,
         qid = entity.qid,
         recordsStatus = entity.recordsStatus,
+        isUnknown = entity.isUnknown,
       )
   }
 }
@@ -181,12 +185,14 @@ data class PatientDetailDto(
   val communicationPreference: String?,
   val registrationChannel: String?,
   val recordsStatus: String?,
+  val isUnknown: Boolean? = null,
   val identifiers: List<PatientIdentifierDto> = emptyList(),
   val contactPoints: List<ContactPointDto> = emptyList(),
   val addresses: List<AddressDto> = emptyList(),
   val allergies: List<AllergyDto> = emptyList(),
   val conditions: List<MedicalHistoryDto> = emptyList(),
   val notes: List<NoteDto> = emptyList(),
+  val relationships: List<PatientRelationshipDto> = emptyList(),
 ) {
   companion object {
     fun from(
@@ -197,6 +203,7 @@ data class PatientDetailDto(
       allergies: List<AllergyDto>,
       conditions: List<MedicalHistoryDto>,
       notes: List<NoteDto>,
+      relationships: List<PatientRelationshipDto> = emptyList(),
     ) = PatientDetailDto(
       id = entity.id,
       hospitalId = entity.hospitalId,
@@ -241,15 +248,21 @@ data class PatientDetailDto(
       communicationPreference = entity.communicationPreference,
       registrationChannel = entity.registrationChannel,
       recordsStatus = entity.recordsStatus,
+      isUnknown = entity.isUnknown,
       identifiers = identifiers,
       contactPoints = contactPoints,
       addresses = addresses,
       allergies = allergies,
       conditions = conditions,
       notes = notes,
+      relationships = relationships,
     )
   }
 }
+
+data class PhotoDto(
+  val photoKey: String? = null,
+)
 
 data class PatientIdentifierDto(
   val id: UUID? = null,
@@ -269,6 +282,32 @@ data class PatientIdentifierDto(
         issuingAuthority = entity.issuingAuthority,
         primaryFlag = entity.primaryFlag,
       )
+  }
+}
+
+data class PatientRelationshipDto(
+  val id: UUID? = null,
+  val patientId: UUID? = null,
+  val relatedPatientId: UUID? = null,
+  val relationshipType: String? = null,
+  val isPrimaryGuardian: Boolean? = null,
+  val notes: String? = null,
+  /** true when the row was matched in reverse (this patient is the related party). */
+  val reverse: Boolean = false,
+) {
+  companion object {
+    fun from(
+      entity: PatientRelationship,
+      reverse: Boolean = false,
+    ) = PatientRelationshipDto(
+      id = entity.id,
+      patientId = entity.patientId,
+      relatedPatientId = entity.relatedPatientId,
+      relationshipType = entity.relationshipType,
+      isPrimaryGuardian = entity.isPrimaryGuardian,
+      notes = entity.notes,
+      reverse = reverse,
+    )
   }
 }
 

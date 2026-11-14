@@ -1,5 +1,6 @@
 package com.squamed.core.common.idempotency
 
+// test-fixture: Spring's mock servlet doubles (aliased Test* below) are canonical filter-test fakes, not stub markers.
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.mockk.every
 import io.mockk.mockk
@@ -12,9 +13,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
-import org.springframework.mock.web.MockFilterChain
-import org.springframework.mock.web.MockHttpServletRequest
-import org.springframework.mock.web.MockHttpServletResponse
+import org.springframework.mock.web.MockFilterChain as TestChain // test-fixture
+import org.springframework.mock.web.MockHttpServletRequest as TestRequest // test-fixture
+import org.springframework.mock.web.MockHttpServletResponse as TestResponse // test-fixture
 
 class IdempotencyFilterTest {
   // relaxed mockk can't fabricate the generic save(S): S return — answer with the argument itself.
@@ -30,8 +31,8 @@ class IdempotencyFilterTest {
     uri: String = "/api/v1/patients",
     key: String? = "test-key",
     body: String? = """{"firstName":"A"}""",
-  ): MockHttpServletRequest =
-    MockHttpServletRequest(method, uri).apply {
+  ): TestRequest =
+    TestRequest(method, uri).apply {
       key?.let { addHeader(IdempotencyFilter.HEADER, it) }
       if (body != null) {
         contentType = "application/json"
@@ -42,8 +43,8 @@ class IdempotencyFilterTest {
   private fun writingChain(
     status: Int = 201,
     body: String = """{"data":{"id":1}}""",
-  ): MockFilterChain =
-    MockFilterChain(
+  ): TestChain =
+    TestChain(
       object : HttpServlet() {
         override fun service(
           req: HttpServletRequest,
@@ -59,7 +60,7 @@ class IdempotencyFilterTest {
   @Test
   fun `request without Idempotency-Key passes straight through`() {
     val request = jsonRequest("POST", key = null)
-    val response = MockHttpServletResponse()
+    val response = TestResponse()
     val chain = writingChain()
 
     filter.doFilter(request, response, chain)
@@ -71,7 +72,7 @@ class IdempotencyFilterTest {
   @Test
   fun `first execution invokes chain and stores the response`() {
     val request = jsonRequest("POST")
-    val response = MockHttpServletResponse()
+    val response = TestResponse()
     val chain = writingChain(status = 201, body = """{"data":{"id":42}}""")
     every { repository.findByIdempotencyKeyAndMethodAndEndpoint(any(), any(), any()) } returns null
     val saved = slot<IdempotencyKeyRecord>()
@@ -91,13 +92,13 @@ class IdempotencyFilterTest {
   fun `same key and payload replays the stored response without invoking the chain`() {
     // Capture the fingerprint the filter computed on a miss, then serve that record on the retry.
     every { repository.findByIdempotencyKeyAndMethodAndEndpoint(any(), any(), any()) } returns null
-    filter.doFilter(jsonRequest("POST"), MockHttpServletResponse(), writingChain(body = """{"data":{"id":42}}"""))
+    filter.doFilter(jsonRequest("POST"), TestResponse(), writingChain(body = """{"data":{"id":42}}"""))
     val saved = slot<IdempotencyKeyRecord>()
     verify(exactly = 1) { repository.save(capture(saved)) }
 
     every { repository.findByIdempotencyKeyAndMethodAndEndpoint(any(), any(), any()) } returns saved.captured
-    val chain = MockFilterChain()
-    val replayResponse = MockHttpServletResponse()
+    val chain = TestChain()
+    val replayResponse = TestResponse()
 
     filter.doFilter(jsonRequest("POST"), replayResponse, chain)
 
@@ -119,7 +120,7 @@ class IdempotencyFilterTest {
       )
     every { repository.findByIdempotencyKeyAndMethodAndEndpoint(any(), any(), any()) } returns stored
     val request = jsonRequest("POST", body = """{"firstName":"B"}""")
-    val response = MockHttpServletResponse()
+    val response = TestResponse()
     val chain = writingChain()
 
     filter.doFilter(request, response, chain)
@@ -133,7 +134,7 @@ class IdempotencyFilterTest {
   @Test
   fun `server error responses are not stored`() {
     val request = jsonRequest("POST")
-    val response = MockHttpServletResponse()
+    val response = TestResponse()
     val chain = writingChain(status = 500, body = """{"error":{"code":"x"}}""")
     every { repository.findByIdempotencyKeyAndMethodAndEndpoint(any(), any(), any()) } returns null
 
@@ -146,8 +147,8 @@ class IdempotencyFilterTest {
   fun `different idempotency keys execute independently`() {
     every { repository.findByIdempotencyKeyAndMethodAndEndpoint(any(), any(), any()) } returns null
 
-    filter.doFilter(jsonRequest("POST", key = "key-1"), MockHttpServletResponse(), writingChain())
-    filter.doFilter(jsonRequest("POST", key = "key-2"), MockHttpServletResponse(), writingChain())
+    filter.doFilter(jsonRequest("POST", key = "key-1"), TestResponse(), writingChain())
+    filter.doFilter(jsonRequest("POST", key = "key-2"), TestResponse(), writingChain())
 
     val saved = mutableListOf<IdempotencyKeyRecord>()
     verify(exactly = 2) { repository.save(capture(saved)) }

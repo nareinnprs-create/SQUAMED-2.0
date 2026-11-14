@@ -1394,6 +1394,24 @@ class PlatformIntegrationTests {
           put("futureField", 1)
         }
       assertTrue(registry.validate("event-envelope-v1.schema.json", unknown).isNotEmpty(), "unknown field must fail")
+
+      // 00.09: envelope v1 field completion — actor/correlation fields validate on the real class shape.
+      val stampedEvent =
+        event.copy(
+          version = 1,
+          actorType = "user",
+          actorId = UUID.randomUUID(),
+          correlationId = "corr-123",
+          causationId = UUID.randomUUID(),
+        )
+      val stamped = om.readTree(om.writeValueAsString(stampedEvent))
+      assertTrue(
+        registry.validate("event-envelope-v1.schema.json", stamped).isEmpty(),
+        "stamped envelope must validate: ${registry.validate("event-envelope-v1.schema.json", stamped)}",
+      )
+      val badActor =
+        (stamped.deepCopy<com.fasterxml.jackson.databind.node.ObjectNode>()).apply { put("actorType", "robot") }
+      assertTrue(registry.validate("event-envelope-v1.schema.json", badActor).isNotEmpty(), "bad actorType must fail")
     }
 
     @Test
@@ -4587,6 +4605,204 @@ class PlatformIntegrationTests {
         }
         assertFalse(anonSession.isOpen, "anonymous ws must be closed with policy violation")
       }
+    }
+  }
+
+  /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */
+  private class RealtimeCollector : org.springframework.web.socket.handler.TextWebSocketHandler() {
+    val messages = java.util.concurrent.ConcurrentLinkedQueue<String>()
+
+    override fun handleTextMessage(
+      session: org.springframework.web.socket.WebSocketSession,
+      message: org.springframework.web.socket.TextMessage,
+    ) {
+      messages.add(message.payload)
+    }
+  }
+
+  @Nested
+  inner class EventFabricTests {
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var eventOutboxRepository: com.squamed.core.events.EventOutboxRepository
+
+    @Test
+    fun eventFabricCoverage() {
+      val admin = adminToken()
+      val adminId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = admin))["userId"].asText()
+      val s = suffix()
+      val h1 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Events H1 $s", "code" to "EV1-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val h2 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Events H2 $s", "code" to "EV2-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+
+      // Doctors in two different hospitals.
+      val u1Email = registerHospitalUser(h1)
+      val u3Email = registerHospitalUser(h2)
+      val u1Token = hospitalLogin(u1Email)
+      val u3Token = hospitalLogin(u3Email)
+      val u1Id = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = u1Token))["userId"].asText()
+      val u3Id = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = u3Token))["userId"].asText()
+
+      // WebSocket sessions via the /realtime alias: u1 (H1 token) and u3 (H2 token).
+      val ws1 = connectRealtime(u1Token)
+      val ws3 = connectRealtime(u3Token)
+
+      // Task created in H1 assigned to u1 -> task.created frame reaches u1's H1 session.
+      val taskId =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/tasks", json("title" to "Events fabric $s", "hospitalId" to h1, "assigneeId" to u1Id), admin),
+        )["id"].asText()
+      val u1Frame = awaitEventFrame(ws1, "task.created", 30_000)
+      assertTrue(u1Frame != null, "u1 must receive the task.created frame; tail=${ws1.messages.toList().takeLast(8)}")
+      assertTrue(u1Frame!!.contains("\"entityId\":\"$taskId\""), "task.created frame carries the task id: $u1Frame")
+
+      // Cross-hospital filter: assigning to u3 (H2) must NOT reach u3's H2 session.
+      assert2xx(api(HttpMethod.POST, "/api/v1/tasks/$taskId/assign", json("assigneeId" to u3Id), admin), "assign task to u3")
+      Thread.sleep(4000)
+      assertTrue(
+        ws3.messages.none { it.contains("task.assigned") },
+        "cross-hospital task.assigned must not reach u3's H2 session: ${ws3.messages.toList().takeLast(8)}",
+      )
+
+      // Outbox rows carry the complete stamped envelope, validated against event-envelope-v1.
+      val outboxRows = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = admin))
+      val created =
+        outboxRows.firstOrNull { it["eventType"].asText() == "task.created" && it["envelope"].asText().contains(taskId) }
+      assertNotNull(created, "task.created outbox row present")
+      assertEquals("SENT", created!!["status"].asText(), "dispatcher drained the row; head=${outboxRows.take(4)}")
+      val envelope = om.readTree(created["envelope"].asText())
+      assertEquals(1, envelope["version"].asInt(), "envelope version")
+      assertEquals("user", envelope["actorType"].asText(), "actor stamped from SecurityContext")
+      assertEquals(adminId, envelope["actorId"].asText(), "actor id stamped from principal")
+      assertFalse(envelope["correlationId"].isNull, "correlationId stamped from MDC")
+      val registry =
+        com.squamed.core.events
+          .SchemaRegistry()
+      assertTrue(
+        registry.validate("event-envelope-v1.schema.json", envelope).isEmpty(),
+        "outbox envelope validates against event-envelope-v1: ${registry.validate("event-envelope-v1.schema.json", envelope)}",
+      )
+
+      // DLQ: seed a FAILED row directly (test-fixture), replay it via the admin API, poll to SENT.
+      val failedEventId = UUID.randomUUID()
+      eventOutboxRepository.save(
+        com.squamed.core.events.EventOutbox( // test-fixture
+          eventId = failedEventId,
+          eventType = "task.created",
+          occurredAt = java.time.Instant.now(),
+          source = "pit-fixture",
+          entityType = "task",
+          entityId = null,
+          payload = om.valueToTree(mapOf("title" to "dlq row")),
+          status = "FAILED",
+          attempts = 8,
+          maxAttempts = 8,
+        ),
+      )
+      val replay =
+        `data`(api(HttpMethod.POST, "/api/v1/admin/events/outbox/replay", json("eventId" to failedEventId.toString()), admin))
+      assertEquals(1, replay["requeued"].asInt(), "DLQ row requeued: $replay")
+      var replayedStatus = ""
+      val sentDeadline = System.currentTimeMillis() + 30_000
+      while (System.currentTimeMillis() < sentDeadline) {
+        val rows = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = admin))
+        val row = rows.firstOrNull { it["eventId"].asText() == failedEventId.toString() }
+        if (row != null && row["status"].asText() == "SENT") {
+          replayedStatus = "SENT"
+          break
+        }
+        Thread.sleep(500)
+      }
+      assertEquals("SENT", replayedStatus, "replayed DLQ row must reach SENT")
+
+      // Integration error queue: malformed ADT (PID-3 missing) -> AE + recorded error -> replay fails again.
+      val malformed =
+        "MSH|^~\\&|SENDING|FAC|SQUAMED|CORE|20260101||ADT^A04|CTRL$s|P|2.5\rEVN|A04|20260101\rPID|||^^^NOID||Missing^Pid3||19800101|M"
+      val hl7Resp = `data`(api(HttpMethod.POST, "/api/v1/hl7/messages", json("raw" to malformed), admin))
+      assertEquals("AE", hl7Resp["ackCode"].asText(), "malformed ADT must ack AE: $hl7Resp")
+      var errorRow: JsonNode? = null
+      val errDeadline = System.currentTimeMillis() + 15_000
+      while (System.currentTimeMillis() < errDeadline) {
+        val rows = `data`(api(HttpMethod.GET, "/api/v1/admin/events/errors?integration=hl7&status=OPEN", token = admin))
+        errorRow = rows.firstOrNull { it["error"].asText().contains("PID-3") }
+        if (errorRow != null) break
+        Thread.sleep(500)
+      }
+      assertNotNull(errorRow, "integration error recorded for the malformed ADT")
+      assertEquals(1, errorRow!!["replayCount"].asInt(), "the original failure is attempt 1")
+      val replayErr =
+        `data`(api(HttpMethod.POST, "/api/v1/admin/events/errors/${errorRow["id"].asText()}/replay", json(), admin))
+      assertEquals(2, replayErr["replayCount"].asInt(), "replay increments the attempt count: $replayErr")
+      assertFalse(replayErr["ok"].asBoolean(), "replay still fails while PID-3 is missing")
+
+      // Cursors advanced for both in-app consumers.
+      val cursors = `data`(api(HttpMethod.GET, "/api/v1/admin/events/cursors", token = admin))
+      val consumers = cursors.map { it["consumer"].asText() }
+      assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
+      assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
+
+      // Event catalog: the chunk-00 EVENTS v1 set (12 types, emitted/planned).
+      val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
+      assertEquals(12, catalog.size(), "event catalog lists the v1 set: $catalog")
+      assertTrue(catalog.any { it["name"].asText() == "NotificationDispatched" && it["status"].asText() == "EMITTED" })
+      assertTrue(catalog.any { it["name"].asText() == "TaskEscalated" && it["status"].asText() == "PLANNED" })
+
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/admin/events/outbox", token = u1Token).status, "doctor token denied event ops")
+    }
+
+    private fun registerHospitalUser(hospitalId: String): String {
+      val s = suffix()
+      val email = "events-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Doc",
+            "lastName" to "Events$s",
+            "roles" to listOf("DOCTOR"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register events doctor $email",
+      )
+      return email
+    }
+
+    private fun hospitalLogin(email: String): String {
+      val login = api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123"))
+      assert2xx(login, "login $email: ${login.body.take(200)}")
+      return `data`(login)["accessToken"].asText()
+    }
+
+    private fun connectRealtime(token: String): RealtimeCollector {
+      val collector = RealtimeCollector()
+      org.springframework.web.socket.client.standard
+        .StandardWebSocketClient()
+        .execute(collector, "ws://localhost:$port/realtime?token=$token")
+        .get(15, java.util.concurrent.TimeUnit.SECONDS)
+      return collector
+    }
+
+    private fun awaitEventFrame(
+      collector: RealtimeCollector,
+      eventType: String,
+      timeoutMs: Long,
+    ): String? {
+      val deadline = System.currentTimeMillis() + timeoutMs
+      while (System.currentTimeMillis() < deadline) {
+        collector.messages
+          .firstOrNull { it.contains("\"type\":\"event.received\"") && it.contains(eventType) }
+          ?.let { return it }
+        Thread.sleep(250)
+      }
+      return null
     }
   }
 

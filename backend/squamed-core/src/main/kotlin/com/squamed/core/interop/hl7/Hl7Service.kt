@@ -2,6 +2,8 @@ package com.squamed.core.interop.hl7
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.squamed.core.common.tenant.TenantResolver
+import com.squamed.core.events.IntegrationErrorService
+import com.squamed.core.events.IntegrationReplayer
 import com.squamed.core.interop.domain.Hl7MessageLog
 import com.squamed.core.interop.repository.Hl7MessageLogRepository
 import com.squamed.core.patient.api.PatientCreateDto
@@ -21,12 +23,18 @@ import java.util.concurrent.Executors
 class Hl7Service(
   private val hl7MessageLogRepository: Hl7MessageLogRepository,
   private val patientService: PatientService,
+  private val integrationErrorService: IntegrationErrorService,
   private val tenantResolver: TenantResolver,
   private val objectMapper: ObjectMapper,
   transactionManager: PlatformTransactionManager,
   @Value("\${squamed.hl7.mllp.port:2575}") private val mllpPort: Int,
-) {
+) : IntegrationReplayer {
   private val logger = KotlinLogging.logger {}
+
+  override val integration: String = "hl7"
+
+  /** DLQ replay (00.09): re-run a stored inbound payload through the normal receive path. */
+  override fun replay(raw: String): Boolean = (receive(raw, "replay")["ackCode"] as? String) == "AA"
 
   private val importTransactions =
     TransactionTemplate(transactionManager).apply {
@@ -157,6 +165,13 @@ class Hl7Service(
     } catch (e: Exception) {
       ackCode = "AE"
       error = e.message
+      integrationErrorService.record(
+        hospitalId = runCatching { tenantResolver.primaryHospitalId() }.getOrNull(),
+        integration = "hl7",
+        messageType = message.messageType,
+        payload = raw,
+        error = error ?: e.javaClass.simpleName,
+      )
       logger.warn(e) { "HL7 ADT import failed type=${message.messageType}" }
     }
     val ack = Hl7Messages.buildAck(message, ackCode, error)
@@ -194,6 +209,13 @@ class Hl7Service(
     } catch (e: Exception) {
       ackCode = "AE"
       error = e.message
+      integrationErrorService.record(
+        hospitalId = runCatching { tenantResolver.primaryHospitalId() }.getOrNull(),
+        integration = "hl7",
+        messageType = message.messageType,
+        payload = raw,
+        error = error ?: e.javaClass.simpleName,
+      )
       logger.warn(e) { "HL7 MLLP import failed type=${message.messageType}" }
     }
     val ack = Hl7Messages.buildAck(message, ackCode, error)

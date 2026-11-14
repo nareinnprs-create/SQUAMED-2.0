@@ -41,7 +41,9 @@ class SecurityConfig(
             "/api/v1/auth/refresh",
             "/api/v1/auth/mfa/verify",
           ).permitAll()
-          .requestMatchers("/ws")
+          .requestMatchers("/ws", "/realtime")
+          .permitAll()
+          .requestMatchers("/api/v1/events/catalog")
           .permitAll()
           .anyRequest()
           .authenticated()

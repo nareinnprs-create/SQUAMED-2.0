@@ -261,6 +261,23 @@ class PatientService(
     }
     patientRecordRepository.save(patient)
     searchIndexer.indexPatient(patient)
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "patient.updated",
+        occurredAt = Instant.now(),
+        source = "patient-service",
+        entityType = "patient",
+        entityId = patient.id,
+        hospitalId = patient.hospitalId,
+        payload =
+          mapOf(
+            "firstName" to patient.firstName,
+            "lastName" to patient.lastName,
+            "mrn" to patient.mrn,
+          ),
+      ),
+    )
     return getDetail(id)
   }
 

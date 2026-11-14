@@ -14,7 +14,7 @@ class WebSocketConfig(
 ) : WebSocketConfigurer {
   override fun registerWebSocketHandlers(registry: WebSocketHandlerRegistry) {
     registry
-      .addHandler(realtimeWebSocketHandler, "/ws")
+      .addHandler(realtimeWebSocketHandler, "/ws", "/realtime")
       .setAllowedOrigins(*allowedOrigins.split(",").toTypedArray())
   }
 }

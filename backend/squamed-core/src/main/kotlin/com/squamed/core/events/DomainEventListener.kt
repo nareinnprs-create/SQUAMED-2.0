@@ -8,12 +8,20 @@ import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Component
 import java.time.Instant
+import java.util.UUID
 
+/**
+ * Kafka consumer of the domain topic: creates in-app notifications for recipient-bearing events
+ * and republishes `notification.dispatched` (empty recipients — no loop). WebSocket `event.received`
+ * frames are owned by the Redis bridge, not here. Advances the `notification-bridge` cursor per event.
+ */
 @Component
 class DomainEventListener(
   private val objectMapper: ObjectMapper,
   private val notificationRepository: NotificationRepository,
   private val realtimeGateway: RealtimeGateway,
+  private val eventPublisher: DomainEventPublisher,
+  private val cursorService: EventCursorService,
 ) {
   private val logger = LoggerFactory.getLogger(DomainEventListener::class.java)
 
@@ -53,22 +61,23 @@ class DomainEventListener(
                   "createdAt" to notification.createdAt,
                 ),
             ),
+            event.hospitalId,
           )
         }
-        realtimeGateway.sendToUsers(
-          event.recipientIds,
-          mapOf(
-            "type" to "event.received",
-            "event" to
-              mapOf(
-                "eventType" to event.eventType,
-                "entityType" to event.entityType,
-                "entityId" to event.entityId,
-                "payload" to event.payload,
-              ),
+        eventPublisher.publish(
+          DomainEvent(
+            eventId = UUID.randomUUID(),
+            eventType = "notification.dispatched",
+            occurredAt = Instant.now(),
+            source = "event-fabric",
+            entityType = event.entityType,
+            entityId = event.entityId,
+            hospitalId = event.hospitalId,
+            payload = mapOf("originalType" to event.eventType, "recipientCount" to event.recipientIds.size),
           ),
         )
       }
+      cursorService.advance("notification-bridge", event.eventId, event.eventType, event.occurredAt)
     } catch (e: Exception) {
       logger.error("Failed to process domain event message", e)
     }

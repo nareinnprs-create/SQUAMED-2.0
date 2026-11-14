@@ -52,9 +52,11 @@ Check 'auditor reads audit logs' ($null -ne $logs.data -and $logs.data.Count -gt
 $chained = @($logs.data | Where-Object { $_.rowHash })
 Check 'audit rows hash-chained (rowHash + chainSeq)' ($chained.Count -gt 0 -and $chained[0].chainSeq -gt 0)
 
-# 6 auditor runs on-demand chain verify (clean)
+# 6 auditor runs on-demand chain verify (clean for this fresh tenant; other tenants may carry
+# legacy/tampered state in the long-lived dev DB)
 $verify = Api POST '/api/v1/audit/verify' @{} $auditor
-Check 'chain verify ok' ($verify.data.ok -eq $true -and $verify.data.checked -gt 0)
+$ownBreaches = @($verify.data.breaches | Where-Object { $_.hospitalId -eq $h })
+Check 'chain verify ok for fresh tenant' ($verify.data.checked -gt 0 -and $ownBreaches.Count -eq 0)
 
 # 7 tamper a chained row directly in the dev DB
 $tamperRow = $chained | Select-Object -First 1

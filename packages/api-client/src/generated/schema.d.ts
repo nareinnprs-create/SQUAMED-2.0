@@ -2276,6 +2276,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audit/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["verifyChain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audit/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["exportNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/appointments": {
         parameters: {
             query?: never;
@@ -7744,6 +7776,44 @@ export interface components {
             password: string;
             hospitalId?: string;
         };
+        ApiResponseAuditVerifyView: {
+            data?: components["schemas"]["AuditVerifyView"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        AuditVerifyView: {
+            ok: boolean;
+            /** Format: int32 */
+            checked: number;
+            /** Format: int32 */
+            breachedTenants: number;
+            /** Format: int32 */
+            legacyRows: number;
+            breaches: components["schemas"]["BreachView"][];
+            /** Format: date-time */
+            verifiedAt: string;
+        };
+        BreachView: {
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: int64 */
+            seq?: number;
+            reason: string;
+        };
+        ApiResponseAuditExportView: {
+            data?: components["schemas"]["AuditExportView"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        AuditExportView: {
+            /** Format: int32 */
+            exported: number;
+            objectKey?: string;
+        };
         AppointmentCreateDto: {
             /** Format: uuid */
             hospitalId?: string;
@@ -9128,6 +9198,16 @@ export interface components {
             /** Format: date-time */
             occurredAt?: string;
             ipAddress?: string;
+            /** Format: int64 */
+            chainSeq?: number;
+            previousHash?: string;
+            rowHash?: string;
+            /** Format: uuid */
+            actorSessionId?: string;
+            /** Format: uuid */
+            deviceId?: string;
+            beforeState?: string;
+            afterState?: string;
         };
         ApiResponseListAppointmentView: {
             data?: components["schemas"]["AppointmentView"][];
@@ -14750,6 +14830,46 @@ export interface operations {
             };
         };
     };
+    verifyChain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAuditVerifyView"];
+                };
+            };
+        };
+    };
+    exportNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAuditExportView"];
+                };
+            };
+        };
+    };
     listAppointments: {
         parameters: {
             query?: {
@@ -18118,4 +18238,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 80a22839929fb5072cc9a346be35a925fbf465354eb53672f14be63d8ccf4893
+// openapi snapshot sha256: d52c4c892eb23cc952a033f221f644a397f834fd2f6898469f9383dfc7ea544d

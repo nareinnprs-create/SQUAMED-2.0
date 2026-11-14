@@ -38,6 +38,23 @@ class AuditLog(
   var responseStatus: Int? = null,
   @Column(name = "response_payload")
   var responsePayload: String? = null,
+  // ADR-9 hash chain: per-tenant sequence + previous row hash + this row's hash.
+  @Column(name = "chain_seq")
+  var chainSeq: Long? = null,
+  @Column(name = "previous_hash", length = 64)
+  var previousHash: String? = null,
+  @Column(name = "row_hash", length = 64)
+  var rowHash: String? = null,
+  // Actor identity incl. device (00.10): the login session and its registered device.
+  @Column(name = "actor_session_id")
+  var actorSessionId: UUID? = null,
+  @Column(name = "device_id")
+  var deviceId: UUID? = null,
+  // Before/after capture (Hibernate interceptor drain, JSON).
+  @Column(name = "before_state", columnDefinition = "text")
+  var beforeState: String? = null,
+  @Column(name = "after_state", columnDefinition = "text")
+  var afterState: String? = null,
   @Column(name = "occurred_at", nullable = false)
   var occurredAt: Instant = Instant.now(),
 ) : BaseEntity()

@@ -28,6 +28,7 @@ object EventCatalog {
       Entry("ConsentCaptured", "consent.captured", Status.PLANNED, "Consent captured (00.12 consent engine)."),
       Entry("ConsentWithdrawn", "consent.withdrawn", Status.PLANNED, "Consent withdrawn (00.12 consent engine)."),
       Entry("ConfigChanged", "config.changed", Status.EMITTED, "Hospital config document changed."),
+      Entry("AuditChainBroken", "audit.chain_broken", Status.EMITTED, "Audit hash-chain breach detected (00.10 verify)."),
       Entry("NotificationDispatched", "notification.dispatched", Status.EMITTED, "Notification handed to its channel bridge."),
     )
 

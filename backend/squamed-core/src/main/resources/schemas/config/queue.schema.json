@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://squamed.local/schemas/config/queue.schema.json",
+  "title": "Queue configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["queues"],
+  "properties": {
+    "queues": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "name", "strategy"],
+        "properties": {
+          "code": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "servicePoint": { "type": "string", "minLength": 1 },
+          "strategy": { "enum": ["fifo", "priority"] },
+          "avgConsultMinutes": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  }
+}

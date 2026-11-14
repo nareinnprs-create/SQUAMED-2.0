@@ -1,8 +1,10 @@
 package com.squamed.core.hospitalconfig.api
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.squamed.core.hospitalconfig.domain.Bed
 import com.squamed.core.hospitalconfig.domain.Building
 import com.squamed.core.hospitalconfig.domain.Campus
+import com.squamed.core.hospitalconfig.domain.ConfigDocument
 import com.squamed.core.hospitalconfig.domain.Department
 import com.squamed.core.hospitalconfig.domain.Hospital
 import com.squamed.core.hospitalconfig.domain.HospitalService
@@ -270,3 +272,26 @@ data class RoomTreeDto(
   val room: RoomDto,
   val beds: List<BedDto> = emptyList(),
 )
+
+data class ConfigDocumentDto(
+  val id: UUID?,
+  val hospitalId: UUID?,
+  val type: String,
+  val version: Int,
+  val status: String,
+  val content: JsonNode,
+  val createdAt: String?,
+) {
+  companion object {
+    fun from(entity: ConfigDocument) =
+      ConfigDocumentDto(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        type = entity.type,
+        version = entity.documentVersion,
+        status = entity.status,
+        content = entity.content,
+        createdAt = entity.createdAt?.toString(),
+      )
+  }
+}

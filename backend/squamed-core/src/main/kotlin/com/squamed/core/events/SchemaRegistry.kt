@@ -3,12 +3,14 @@ package com.squamed.core.events
 import com.fasterxml.jackson.databind.JsonNode
 import com.networknt.schema.JsonSchemaFactory
 import com.networknt.schema.SpecVersion
+import org.springframework.stereotype.Component
 
 /**
  * Schema-registry harness (00.02 / gate 8): every published wire contract lives as a JSON Schema
  * under `schemas/` on the classpath and is validated here. Breaking a contract must fail the
  * contract tests, never reach a consumer.
  */
+@Component
 class SchemaRegistry {
   private val factory: JsonSchemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
 

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://squamed.local/schemas/config/holidays.schema.json",
+  "title": "Hospital holiday calendar",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["year", "holidays"],
+  "properties": {
+    "year": { "type": "integer", "minimum": 2000, "maximum": 2999 },
+    "holidays": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "name"],
+        "properties": {
+          "date": { "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$" },
+          "name": { "type": "string", "minLength": 1 },
+          "halfDay": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

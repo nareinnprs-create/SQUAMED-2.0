@@ -196,6 +196,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/hospital-config/hospitals/{hospitalId}/config/{type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getLatestConfig"];
+        put: operations["publishConfig"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/emergency/registrations/{id}/trauma": {
         parameters: {
             query?: never;
@@ -3188,6 +3204,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/hospital-config/hospitals/{hospitalId}/config/{type}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listConfigVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hospital-config/hospitals/{hospitalId}/config/{type}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getConfigAtVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/hl7/health": {
         parameters: {
             query?: never;
@@ -4372,6 +4420,26 @@ export interface components {
             meta: {
                 [key: string]: Record<string, never>;
             };
+        };
+        JsonNode: Record<string, never>;
+        ApiResponseConfigDocumentDto: {
+            data?: components["schemas"]["ConfigDocumentDto"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ConfigDocumentDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            type: string;
+            /** Format: int32 */
+            version: number;
+            status: string;
+            content: components["schemas"]["JsonNode"];
+            createdAt?: string;
         };
         TraumaSurveyDto: {
             surveyPhase?: string;
@@ -8089,6 +8157,13 @@ export interface components {
                 [key: string]: Record<string, never>;
             };
         };
+        ApiResponseListConfigDocumentDto: {
+            data?: components["schemas"]["ConfigDocumentDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
         ApiResponseListBedDto: {
             data?: components["schemas"]["BedDto"][];
             success: boolean;
@@ -8991,6 +9066,56 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseDepartmentDto"];
+                };
+            };
+        };
+    };
+    getLatestConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hospitalId: string;
+                type: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConfigDocumentDto"];
+                };
+            };
+        };
+    };
+    publishConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hospitalId: string;
+                type: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JsonNode"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConfigDocumentDto"];
                 };
             };
         };
@@ -15342,6 +15467,53 @@ export interface operations {
             };
         };
     };
+    listConfigVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hospitalId: string;
+                type: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListConfigDocumentDto"];
+                };
+            };
+        };
+    };
+    getConfigAtVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hospitalId: string;
+                type: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConfigDocumentDto"];
+                };
+            };
+        };
+    };
     health_2: {
         parameters: {
             query?: never;
@@ -16315,4 +16487,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: ac99c8080646297d23b05dbed0cd10e84fa8ddee6a78cfdcae2f1575b26dacc0
+// openapi snapshot sha256: 8ae6a19a7fb906daf1e57ee5bb9bba58032cf239b181d71b90bda47bd5a8b26d

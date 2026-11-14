@@ -16,12 +16,12 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantStyles: Record<ButtonVariant, CSSProperties> = {
-  primary: { backgroundColor: 'var(--sq-primary)', color: 'var(--sq-fg)', borderColor: 'var(--sq-primary)' },
+  primary: { backgroundColor: 'var(--sq-primary)', color: 'var(--sq-primary-fg)', borderColor: 'var(--sq-primary)' },
   secondary: { backgroundColor: 'var(--sq-surface)', color: 'var(--sq-fg)', borderColor: 'var(--sq-border)' },
   outline: { backgroundColor: 'transparent', color: 'var(--sq-fg)', borderColor: 'var(--sq-border)' },
   ghost: { backgroundColor: 'transparent', color: 'var(--sq-fg)', borderColor: 'transparent' },
-  danger: { backgroundColor: 'var(--sq-critical)', color: 'var(--sq-fg)', borderColor: 'var(--sq-critical)' },
-  success: { backgroundColor: 'var(--sq-success)', color: 'var(--sq-fg)', borderColor: 'var(--sq-success)' },
+  danger: { backgroundColor: 'var(--sq-critical)', color: 'var(--sq-critical-fg)', borderColor: 'var(--sq-critical)' },
+  success: { backgroundColor: 'var(--sq-success)', color: 'var(--sq-success-fg)', borderColor: 'var(--sq-success)' },
 };
 
 const sizeStyles: Record<ButtonSize, CSSProperties> = {

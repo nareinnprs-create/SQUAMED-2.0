@@ -25,32 +25,32 @@ const softStyles: Record<ChipVariant, CSSProperties> = {
   },
   primary: {
     backgroundColor: 'var(--sq-primary-soft)',
-    color: 'var(--sq-primary)',
+    color: 'var(--sq-primary-on-soft)',
     borderColor: 'color-mix(in srgb, var(--sq-primary) 35%, transparent)',
   },
   success: {
     backgroundColor: 'var(--sq-success-soft)',
-    color: 'var(--sq-success)',
+    color: 'var(--sq-success-on-soft)',
     borderColor: 'color-mix(in srgb, var(--sq-success) 35%, transparent)',
   },
   warning: {
     backgroundColor: 'var(--sq-warning-soft)',
-    color: 'var(--sq-warning)',
+    color: 'var(--sq-warning-on-soft)',
     borderColor: 'color-mix(in srgb, var(--sq-warning) 35%, transparent)',
   },
   critical: {
     backgroundColor: 'var(--sq-critical-soft)',
-    color: 'var(--sq-critical)',
+    color: 'var(--sq-critical-on-soft)',
     borderColor: 'color-mix(in srgb, var(--sq-critical) 35%, transparent)',
   },
 };
 
 const selectedStyles: Record<ChipVariant, CSSProperties> = {
   neutral: { backgroundColor: 'var(--sq-fg)', color: 'var(--sq-bg)', borderColor: 'var(--sq-fg)' },
-  primary: { backgroundColor: 'var(--sq-primary)', color: 'var(--sq-fg)', borderColor: 'var(--sq-primary)' },
-  success: { backgroundColor: 'var(--sq-success)', color: 'var(--sq-fg)', borderColor: 'var(--sq-success)' },
-  warning: { backgroundColor: 'var(--sq-warning)', color: 'var(--sq-fg)', borderColor: 'var(--sq-warning)' },
-  critical: { backgroundColor: 'var(--sq-critical)', color: 'var(--sq-fg)', borderColor: 'var(--sq-critical)' },
+  primary: { backgroundColor: 'var(--sq-primary)', color: 'var(--sq-primary-fg)', borderColor: 'var(--sq-primary)' },
+  success: { backgroundColor: 'var(--sq-success)', color: 'var(--sq-success-fg)', borderColor: 'var(--sq-success)' },
+  warning: { backgroundColor: 'var(--sq-warning)', color: 'var(--sq-warning-fg)', borderColor: 'var(--sq-warning)' },
+  critical: { backgroundColor: 'var(--sq-critical)', color: 'var(--sq-critical-fg)', borderColor: 'var(--sq-critical)' },
 };
 
 const baseStyle: CSSProperties = {

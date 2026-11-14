@@ -1,0 +1,20 @@
+{
+  "url": "/login",
+  "comment": "Budgets per .gate/GATES.md gate 7 (Lighthouse budget runs in the a11y-perf-gates job). No numeric thresholds are stated in the registry, so these encode the Calm Instrument performance intent: mobile perf >= 0.7, a11y >= 0.9, and transfer budgets sized so those scores stay honest.",
+  "categories": {
+    "performance": 0.7,
+    "accessibility": 0.9
+  },
+  "resourceCounts": {
+    "requests": 60
+  },
+  "resourceSizesKb": {
+    "total": 1300,
+    "document": 100,
+    "script": 700,
+    "stylesheet": 250,
+    "image": 300,
+    "font": 200,
+    "other": 400
+  }
+}

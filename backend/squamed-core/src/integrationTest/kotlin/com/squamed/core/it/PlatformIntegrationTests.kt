@@ -1615,6 +1615,16 @@ class PlatformIntegrationTests {
         api(HttpMethod.POST, "/api/v1/hospital-config/hospitals/$h2/departments", json("name" to "Trespass", "code" to "TR-$s", "type" to "outpatient"), doc1)
       assertEquals(403, dept.status, "foreign hospital-config write must be denied: ${dept.body.take(300)}")
 
+      // Config documents are hospital-scoped the same way (00.05).
+      val cfgPut =
+        api(
+          HttpMethod.PUT,
+          "/api/v1/hospital-config/hospitals/$h2/config/working-hours",
+          json("timezone" to "UTC", "days" to listOf(mapOf("day" to "mon", "open" to "08:00", "close" to "18:00"))),
+          doc1,
+        )
+      assertEquals(403, cfgPut.status, "foreign config publish must be denied: ${cfgPut.body.take(300)}")
+
       // Platform admin (null hospital) keeps unrestricted access to both tenants.
       assert2xx(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals/$h1/tree", token = admin), "admin tree A")
       assert2xx(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals/$h2/tree", token = admin), "admin tree B")
@@ -3020,6 +3030,98 @@ class PlatformIntegrationTests {
       assert4xx(
         api(HttpMethod.POST, "/api/v1/workflow/definitions", json("code" to " ", "name" to "x", "steps" to emptyList<Any>()), token),
         "workflow whitespace code rejected",
+      )
+    }
+
+    @Test
+    fun configDocumentLifecycleCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      // Fresh hospital per run: version counters and history asserts must be deterministic.
+      val hospitalId =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Cfg Lifecycle $s", "code" to "CL-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      val base = "/api/v1/hospital-config/hospitals/$hospitalId/config"
+
+      // Unknown type rejected before validation (00.05).
+      assert4xx(api(HttpMethod.PUT, "$base/nonexistent", json("x" to 1), token), "unknown config type")
+
+      // Content violating the per-type JSON Schema is rejected with violation detail.
+      val invalid =
+        api(
+          HttpMethod.PUT,
+          "$base/working-hours",
+          json(
+            "timezone" to "Asia/Kolkata",
+            "days" to
+              listOf(
+                mapOf("day" to "funday", "open" to "25:99", "close" to "08:00"),
+              ),
+          ),
+          token,
+        )
+      assert4xx(invalid, "schema-invalid config")
+      assertTrue(invalid.body.contains("CONFIG_VALIDATION_FAILED"), "violations must surface: ${invalid.body.take(300)}")
+
+      // Valid publish -> v1 active.
+      val v1 =
+        api(
+          HttpMethod.PUT,
+          "$base/working-hours",
+          json(
+            "timezone" to "Asia/Kolkata",
+            "days" to
+              listOf(
+                mapOf("day" to "mon", "open" to "08:00", "close" to "18:00"),
+              ),
+          ),
+          token,
+        )
+      assert2xx(v1, "publish v1")
+      assertEquals("1", `data`(v1)["version"].asText())
+      assertEquals("active", `data`(v1)["status"].asText())
+
+      // Second publish -> v2.
+      val v2 =
+        api(
+          HttpMethod.PUT,
+          "$base/working-hours",
+          json(
+            "timezone" to "Asia/Kolkata",
+            "days" to
+              listOf(
+                mapOf("day" to "mon", "open" to "09:00", "close" to "17:00"),
+              ),
+          ),
+          token,
+        )
+      assert2xx(v2, "publish v2")
+      assertEquals("2", `data`(v2)["version"].asText())
+
+      // GET latest returns v2 content.
+      val latest = api(HttpMethod.GET, "$base/working-hours", token = token)
+      assert2xx(latest, "latest config")
+      assertEquals("2", `data`(latest)["version"].asText())
+      assertEquals("09:00", `data`(latest)["content"]["days"][0]["open"].asText())
+
+      // Version history: two rows, v1 superseded, v99 missing.
+      val versions = api(HttpMethod.GET, "$base/working-hours/versions", token = token)
+      assert2xx(versions, "version list")
+      assertEquals(2, `data`(versions).size(), "two published versions")
+      val atV1 = api(HttpMethod.GET, "$base/working-hours/versions/1", token = token)
+      assert2xx(atV1, "config at v1")
+      assertEquals("superseded", `data`(atV1)["status"].asText())
+      assert4xx(api(HttpMethod.GET, "$base/working-hours/versions/99", token = token), "missing config version")
+
+      // Second type: invalid date rejected, valid publish accepted.
+      assert4xx(
+        api(HttpMethod.PUT, "$base/holidays", json("year" to 2026, "holidays" to listOf(mapOf("date" to "2026-13-40", "name" to "X"))), token),
+        "invalid holiday date",
+      )
+      assert2xx(
+        api(HttpMethod.PUT, "$base/holidays", json("year" to 2026, "holidays" to listOf(mapOf("date" to "2026-01-26", "name" to "Republic Day"))), token),
+        "valid holiday publish",
       )
     }
 

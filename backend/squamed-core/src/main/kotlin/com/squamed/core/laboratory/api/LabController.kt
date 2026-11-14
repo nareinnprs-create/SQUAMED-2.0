@@ -1,6 +1,7 @@
 package com.squamed.core.laboratory.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.laboratory.service.LabService
@@ -21,6 +22,7 @@ import java.util.UUID
 @RequestMapping("/api/v1/lab")
 class LabController(
   private val labService: LabService,
+  private val tenantResolver: TenantResolver,
 ) {
   @PostMapping("/orders")
   @ResponseStatus(HttpStatus.CREATED)
@@ -28,7 +30,16 @@ class LabController(
   @Transactional
   fun createOrder(
     @RequestBody dto: CreateLabOrderDto,
-  ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.createOrder(patientId = dto.patientId, encounterId = dto.encounterId, dto = dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<LabOrderDetailView> =
+    ApiResponse.ok(
+      labService.createOrder(
+        patientId = dto.patientId,
+        encounterId = dto.encounterId,
+        dto = dto,
+        hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId),
+      ),
+    )
 
   @GetMapping("/orders")
   @RequiresPermission("laboratory:read:lab")

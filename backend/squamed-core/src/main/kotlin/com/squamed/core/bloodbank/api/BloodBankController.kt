@@ -2,6 +2,7 @@ package com.squamed.core.bloodbank.api
 
 import com.squamed.core.bloodbank.service.BloodBankService
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import org.springframework.http.HttpStatus
@@ -22,7 +23,9 @@ import java.util.UUID
 @RequestMapping("/api/v1/blood-bank")
 class BloodBankController(
   private val bloodBankService: BloodBankService,
+  private val tenantResolver: TenantResolver,
 ) {
+  // ADR-13: hospital users are pinned to their tenant; admins may choose via dto.hospitalId.
   @PostMapping("/donors")
   @ResponseStatus(HttpStatus.CREATED)
   @RequiresPermission("bloodbank:write:bloodbank")
@@ -30,7 +33,8 @@ class BloodBankController(
   fun createDonor(
     @RequestBody dto: DonorCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<DonorView> = ApiResponse.ok(bloodBankService.createDonor(dto, principal.userId))
+  ): ApiResponse<DonorView> =
+    ApiResponse.ok(bloodBankService.createDonor(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @PatchMapping("/donors/{id}/status")
   @RequiresPermission("bloodbank:write:bloodbank")
@@ -56,7 +60,7 @@ class BloodBankController(
   fun createUnit(
     @RequestBody dto: UnitCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<UnitView> = ApiResponse.ok(bloodBankService.createUnit(dto, principal.userId))
+  ): ApiResponse<UnitView> = ApiResponse.ok(bloodBankService.createUnit(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @PatchMapping("/units/{id}/status")
   @RequiresPermission("bloodbank:write:bloodbank")
@@ -83,7 +87,8 @@ class BloodBankController(
   fun addGrouping(
     @RequestBody dto: GroupingCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<GroupingView> = ApiResponse.ok(bloodBankService.addGrouping(dto, principal.userId))
+  ): ApiResponse<GroupingView> =
+    ApiResponse.ok(bloodBankService.addGrouping(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @PatchMapping("/grouping/{id}/confirm")
   @RequiresPermission("bloodbank:write:bloodbank")
@@ -107,7 +112,8 @@ class BloodBankController(
   fun createCrossmatch(
     @RequestBody dto: CrossmatchCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<CrossmatchView> = ApiResponse.ok(bloodBankService.createCrossmatch(dto, principal.userId))
+  ): ApiResponse<CrossmatchView> =
+    ApiResponse.ok(bloodBankService.createCrossmatch(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @PatchMapping("/crossmatch/{id}/result")
   @RequiresPermission("bloodbank:write:bloodbank")
@@ -133,7 +139,8 @@ class BloodBankController(
   fun reserve(
     @RequestBody dto: ReservationCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<ReservationView> = ApiResponse.ok(bloodBankService.reserve(dto, principal.userId))
+  ): ApiResponse<ReservationView> =
+    ApiResponse.ok(bloodBankService.reserve(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @PostMapping("/reservations/{unitId}/release")
   @RequiresPermission("bloodbank:write:bloodbank")
@@ -150,7 +157,7 @@ class BloodBankController(
   fun issue(
     @RequestBody dto: IssueCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<IssueView> = ApiResponse.ok(bloodBankService.issue(dto, principal.userId))
+  ): ApiResponse<IssueView> = ApiResponse.ok(bloodBankService.issue(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/issues")
   @RequiresPermission("bloodbank:read:bloodbank")
@@ -166,7 +173,8 @@ class BloodBankController(
   fun startTransfusion(
     @RequestBody dto: TransfusionCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<TransfusionView> = ApiResponse.ok(bloodBankService.startTransfusion(dto, principal.userId))
+  ): ApiResponse<TransfusionView> =
+    ApiResponse.ok(bloodBankService.startTransfusion(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @PatchMapping("/transfusions/{id}/status")
   @RequiresPermission("bloodbank:write:bloodbank")

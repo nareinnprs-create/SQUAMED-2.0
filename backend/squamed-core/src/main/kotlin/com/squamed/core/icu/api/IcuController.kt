@@ -1,6 +1,7 @@
 package com.squamed.core.icu.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.icu.service.IcuService
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
@@ -22,7 +23,9 @@ import java.util.UUID
 @RequestMapping("/api/v1/icu")
 class IcuController(
   private val icuService: IcuService,
+  private val tenantResolver: TenantResolver,
 ) {
+  // ADR-13: hospital users are pinned to their tenant; admins may choose via dto.hospitalId.
   @PostMapping("/vitals")
   @ResponseStatus(HttpStatus.CREATED)
   @RequiresPermission("icu:write:icu")
@@ -30,7 +33,8 @@ class IcuController(
   fun recordVitals(
     @RequestBody dto: IcuVitalsCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<IcuVitalsView> = ApiResponse.ok(icuService.recordVitals(dto, principal.userId))
+  ): ApiResponse<IcuVitalsView> =
+    ApiResponse.ok(icuService.recordVitals(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/vitals")
   @RequiresPermission("icu:read:icu")
@@ -46,7 +50,8 @@ class IcuController(
   fun createFluidBalance(
     @RequestBody dto: FluidBalanceCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<FluidBalanceView> = ApiResponse.ok(icuService.createFluidBalance(dto, principal.userId))
+  ): ApiResponse<FluidBalanceView> =
+    ApiResponse.ok(icuService.createFluidBalance(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/fluid-balance")
   @RequiresPermission("icu:read:icu")
@@ -62,7 +67,8 @@ class IcuController(
   fun createVentilation(
     @RequestBody dto: VentilationCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<VentilationView> = ApiResponse.ok(icuService.createVentilation(dto, principal.userId))
+  ): ApiResponse<VentilationView> =
+    ApiResponse.ok(icuService.createVentilation(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/ventilation")
   @RequiresPermission("icu:read:icu")
@@ -78,7 +84,8 @@ class IcuController(
   fun createInfusion(
     @RequestBody dto: InfusionCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<InfusionView> = ApiResponse.ok(icuService.createInfusion(dto, principal.userId))
+  ): ApiResponse<InfusionView> =
+    ApiResponse.ok(icuService.createInfusion(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/infusions")
   @RequiresPermission("icu:read:icu")
@@ -103,7 +110,8 @@ class IcuController(
   fun createAlert(
     @RequestBody dto: CriticalAlertCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<CriticalAlertView> = ApiResponse.ok(icuService.createAlert(dto, principal.userId))
+  ): ApiResponse<CriticalAlertView> =
+    ApiResponse.ok(icuService.createAlert(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/alerts")
   @RequiresPermission("icu:read:icu")

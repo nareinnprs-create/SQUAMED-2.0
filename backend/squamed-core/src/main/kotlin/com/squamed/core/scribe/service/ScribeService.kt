@@ -42,9 +42,11 @@ class ScribeService(
     encounterId: UUID?,
     patientName: String?,
     chiefComplaint: String?,
+    hospitalId: UUID?,
   ): ScribeSession =
     repository.save(
       ScribeSession(
+        hospitalId = hospitalId,
         patientId = patientId,
         encounterId = encounterId,
         patientName = patientName,

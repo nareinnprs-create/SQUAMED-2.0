@@ -1,5 +1,6 @@
 package com.squamed.core.pharmacy.service
 
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.pharmacy.api.DispensationView
@@ -22,10 +23,11 @@ class PharmacyService(
   private val pharmacyStockRepository: PharmacyStockRepository,
   private val dispensationRepository: DispensationRepository,
   private val eventPublisher: DomainEventPublisher,
+  private val tenantResolver: TenantResolver,
 ) {
   @Transactional
   fun addStock(dto: StockRequestDto): PharmacyStockView {
-    val hospitalId = dto.hospitalId ?: UUID.fromString("00000000-0000-0000-0000-000000000001")
+    val hospitalId = dto.hospitalId ?: tenantResolver.primaryHospitalId()
     val drugId = dto.drugId
     val existing =
       if (drugId != null) {

@@ -1,6 +1,7 @@
 package com.squamed.core.scribe.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.scribe.service.ScribeSegment
@@ -50,6 +51,7 @@ data class ScribeDraftRequest(
 class ScribeController(
   private val scribeService: ScribeService,
   private val segmentCodec: SegmentJsonCodec,
+  private val tenantResolver: TenantResolver,
 ) {
   @GetMapping("/sessions")
   @RequiresPermission("ai:read:agent")
@@ -67,8 +69,7 @@ class ScribeController(
     @RequestBody req: ScribeCreateRequest,
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<Map<String, Any?>> {
-    val session = scribeService.create(req.patientId, req.encounterId, req.patientName, req.chiefComplaint)
-    session.hospitalId = principal.hospitalId
+    val session = scribeService.create(req.patientId, req.encounterId, req.patientName, req.chiefComplaint, tenantResolver.pinOrDefault(principal, null))
     return ApiResponse.ok(session.toView(segmentCodec))
   }
 

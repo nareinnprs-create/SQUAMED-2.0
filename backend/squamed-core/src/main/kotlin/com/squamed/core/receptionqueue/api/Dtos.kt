@@ -78,6 +78,7 @@ data class VisitDto(
 }
 
 data class QueueCreateDto(
+  val hospitalId: UUID? = null,
   val queueType: String? = null,
   val patientId: UUID? = null,
   val patientName: String? = null,
@@ -178,6 +179,7 @@ data class QueueStatsView(
 )
 
 data class ServicePointCreateDto(
+  val hospitalId: UUID? = null,
   val name: String? = null,
   val code: String? = null,
   val queueType: String? = null,

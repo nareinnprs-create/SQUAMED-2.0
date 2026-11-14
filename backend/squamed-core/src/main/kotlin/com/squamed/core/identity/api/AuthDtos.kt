@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
+import java.util.UUID
 
 data class RegisterDto(
   @field:Email
@@ -22,6 +23,7 @@ data class RegisterDto(
   @field:Pattern(regexp = "^[+0-9 ()-]{7,20}$")
   val phone: String? = null,
   val roles: List<String> = emptyList(),
+  val hospitalId: String? = null,
 ) {
   fun toRequest() =
     AuthService.RegisterRequest(
@@ -31,6 +33,7 @@ data class RegisterDto(
       lastName = lastName,
       phone = phone,
       roles = roles,
+      hospitalId = hospitalId?.let(UUID::fromString),
     )
 }
 

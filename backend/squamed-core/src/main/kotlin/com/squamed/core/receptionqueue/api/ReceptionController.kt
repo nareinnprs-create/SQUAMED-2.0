@@ -1,9 +1,12 @@
 package com.squamed.core.receptionqueue.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
+import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.receptionqueue.service.VisitRegistrar
 import org.springframework.http.HttpStatus
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
@@ -23,6 +26,7 @@ import java.util.UUID
 @RequestMapping("/api/v1/reception")
 class ReceptionController(
   private val visitRegistrar: VisitRegistrar,
+  private val tenantResolver: TenantResolver,
 ) {
   @PostMapping("/visits")
   @ResponseStatus(HttpStatus.CREATED)
@@ -30,9 +34,10 @@ class ReceptionController(
   @Transactional
   fun createVisit(
     @RequestBody dto: VisitCreateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<VisitCreateResult> {
     val patientId = dto.patientId ?: throw IllegalArgumentException("PATIENT_ID_REQUIRED")
-    return ApiResponse.ok(visitRegistrar.createVisit(patientId, dto))
+    return ApiResponse.ok(visitRegistrar.createVisit(patientId, dto, tenantResolver.pinOrDefault(principal, dto.hospitalId)))
   }
 
   @GetMapping("/visits/{id}")

@@ -90,6 +90,7 @@ class BillingService(
   fun postCharge(
     dto: PostChargeDto,
     postedBy: UUID? = null,
+    hospitalId: UUID,
   ): ChargeView {
     val patientId = dto.patientId ?: throw IllegalArgumentException("PATIENT_ID_REQUIRED")
     val quantity = dto.quantity ?: 1
@@ -97,6 +98,7 @@ class BillingService(
     val charge =
       chargeRepository.save(
         Charge(
+          hospitalId = hospitalId,
           patientId = patientId,
           visitId = dto.visitId,
           encounterId = dto.encounterId,

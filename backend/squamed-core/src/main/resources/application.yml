@@ -76,8 +76,6 @@ squamed:
     admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001}
-  tenant:
-    header: X-Tenant-Id
   ai:
     stt:
       provider: ${AI_STT_PROVIDER:echo}

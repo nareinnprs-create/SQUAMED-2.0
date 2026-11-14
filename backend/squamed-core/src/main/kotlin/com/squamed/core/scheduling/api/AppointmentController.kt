@@ -1,12 +1,15 @@
 package com.squamed.core.scheduling.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.identity.security.RequiresPermission
+import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.scheduling.domain.Appointment
 import com.squamed.core.scheduling.repository.AppointmentRepository
 import org.springframework.http.HttpStatus
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
@@ -26,6 +29,7 @@ import java.util.UUID
 class AppointmentController(
   private val appointmentRepository: AppointmentRepository,
   private val eventPublisher: DomainEventPublisher,
+  private val tenantResolver: TenantResolver,
 ) {
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
@@ -33,6 +37,7 @@ class AppointmentController(
   @Transactional
   fun createAppointment(
     @RequestBody dto: AppointmentCreateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<AppointmentView> {
     val start = dto.scheduledStart ?: throw IllegalArgumentException("APPOINTMENT_START_REQUIRED")
     val end = dto.scheduledEnd ?: throw IllegalArgumentException("APPOINTMENT_END_REQUIRED")
@@ -40,7 +45,7 @@ class AppointmentController(
     val appointment =
       appointmentRepository.save(
         Appointment(
-          hospitalId = dto.hospitalId,
+          hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId),
           patientId = dto.patientId ?: throw IllegalArgumentException("APPOINTMENT_PATIENT_REQUIRED"),
           departmentId = dto.departmentId,
           specialtyId = dto.specialtyId,
@@ -114,9 +119,10 @@ class AppointmentController(
   fun updateAppointment(
     @PathVariable id: UUID,
     @RequestBody dto: AppointmentUpdateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<AppointmentView> {
     val appointment = appointmentRepository.findById(id).orElseThrow { IllegalArgumentException("APPOINTMENT_NOT_FOUND") }
-    appointment.hospitalId = dto.hospitalId ?: appointment.hospitalId
+    appointment.hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId ?: appointment.hospitalId)
     appointment.patientId = dto.patientId ?: appointment.patientId
     appointment.departmentId = dto.departmentId ?: appointment.departmentId
     appointment.specialtyId = dto.specialtyId ?: appointment.specialtyId

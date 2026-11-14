@@ -32,11 +32,13 @@ class QueueService(
     priority: String?,
     servicePointId: String?,
     departmentId: UUID?,
+    hospitalId: UUID,
   ): QueueEntryView {
     val today = LocalDate.now()
     val entry =
       queueEntryRepository.save(
         QueueEntry(
+          hospitalId = hospitalId,
           queueType = queueType,
           departmentId = departmentId,
           servicePointId = servicePointId,
@@ -203,10 +205,12 @@ class QueueService(
     queueType: String,
     counterNumber: String?,
     status: String?,
+    hospitalId: UUID,
   ): ServicePointDto {
     val point =
       servicePointRepository.save(
         ServicePoint(
+          hospitalId = hospitalId,
           name = name,
           code = code,
           queueType = queueType,

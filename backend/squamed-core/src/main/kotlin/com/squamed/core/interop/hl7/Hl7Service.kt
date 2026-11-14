@@ -1,6 +1,7 @@
 package com.squamed.core.interop.hl7
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.interop.domain.Hl7MessageLog
 import com.squamed.core.interop.repository.Hl7MessageLogRepository
 import com.squamed.core.patient.api.PatientCreateDto
@@ -20,6 +21,7 @@ import java.util.concurrent.Executors
 class Hl7Service(
   private val hl7MessageLogRepository: Hl7MessageLogRepository,
   private val patientService: PatientService,
+  private val tenantResolver: TenantResolver,
   private val objectMapper: ObjectMapper,
   transactionManager: PlatformTransactionManager,
   @Value("\${squamed.hl7.mllp.port:2575}") private val mllpPort: Int,
@@ -235,6 +237,8 @@ class Hl7Service(
     require(givenName != null || familyName != null) { "ADT missing patient name (PID-5)" }
 
     return patientService.findOrCreateFromHl7(
+      // ADR-13: MLLP has no principal; ADT imports attribute to the primary hospital (stage 1).
+      hospitalId = tenantResolver.primaryHospitalId(),
       mrn = mrn,
       firstName = givenName,
       middleName = middleName,

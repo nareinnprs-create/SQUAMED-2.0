@@ -1,6 +1,7 @@
 package com.squamed.core.nursing.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.nursing.service.NursingService
@@ -22,7 +23,9 @@ import java.util.UUID
 @RequestMapping("/api/v1/nursing")
 class NursingController(
   private val nursingService: NursingService,
+  private val tenantResolver: TenantResolver,
 ) {
+  // ADR-13: hospital users are pinned to their tenant; admins may choose via dto.hospitalId.
   @PostMapping("/assessments")
   @ResponseStatus(HttpStatus.CREATED)
   @RequiresPermission("nursing:write:nursing")
@@ -30,7 +33,8 @@ class NursingController(
   fun createAssessment(
     @RequestBody dto: NursingAssessmentCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<NursingAssessmentView> = ApiResponse.ok(nursingService.createAssessment(dto, principal.userId))
+  ): ApiResponse<NursingAssessmentView> =
+    ApiResponse.ok(nursingService.createAssessment(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/assessments")
   @RequiresPermission("nursing:read:nursing")
@@ -46,7 +50,8 @@ class NursingController(
   fun createCarePlan(
     @RequestBody dto: NursingCarePlanCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<NursingCarePlanView> = ApiResponse.ok(nursingService.createCarePlan(dto, principal.userId))
+  ): ApiResponse<NursingCarePlanView> =
+    ApiResponse.ok(nursingService.createCarePlan(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/careplans")
   @RequiresPermission("nursing:read:nursing")
@@ -71,7 +76,8 @@ class NursingController(
   fun createNote(
     @RequestBody dto: NursingNoteCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<NursingNoteView> = ApiResponse.ok(nursingService.createNote(dto, principal.userId))
+  ): ApiResponse<NursingNoteView> =
+    ApiResponse.ok(nursingService.createNote(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/notes")
   @RequiresPermission("nursing:read:nursing")
@@ -87,7 +93,8 @@ class NursingController(
   fun createHandover(
     @RequestBody dto: NursingHandoverCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<NursingHandoverView> = ApiResponse.ok(nursingService.createHandover(dto, principal.userId))
+  ): ApiResponse<NursingHandoverView> =
+    ApiResponse.ok(nursingService.createHandover(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/handovers")
   @RequiresPermission("nursing:read:nursing")
@@ -103,7 +110,8 @@ class NursingController(
   fun recordVitals(
     @RequestBody dto: VitalsCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<VitalsView> = ApiResponse.ok(nursingService.recordVitals(dto, principal.userId))
+  ): ApiResponse<VitalsView> =
+    ApiResponse.ok(nursingService.recordVitals(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/vitals")
   @RequiresPermission("nursing:read:nursing")
@@ -119,7 +127,7 @@ class NursingController(
   fun createMar(
     @RequestBody dto: MarCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<MarView> = ApiResponse.ok(nursingService.createMar(dto, principal.userId))
+  ): ApiResponse<MarView> = ApiResponse.ok(nursingService.createMar(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/mar")
   @RequiresPermission("nursing:read:nursing")
@@ -144,7 +152,8 @@ class NursingController(
   fun createRiskAssessment(
     @RequestBody dto: RiskAssessmentCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<RiskAssessmentView> = ApiResponse.ok(nursingService.createRiskAssessment(dto, principal.userId))
+  ): ApiResponse<RiskAssessmentView> =
+    ApiResponse.ok(nursingService.createRiskAssessment(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/risk-assessments")
   @RequiresPermission("nursing:read:nursing")

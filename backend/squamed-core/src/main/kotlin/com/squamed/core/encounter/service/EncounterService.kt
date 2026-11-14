@@ -53,10 +53,12 @@ class EncounterService(
     departmentId: UUID? = null,
     reason: String? = null,
     chiefComplaint: String? = null,
+    hospitalId: UUID,
   ): EncounterView {
     val encounter =
       encounterRepository.save(
         Encounter(
+          hospitalId = hospitalId,
           patientId = patientId,
           visitId = visitId,
           doctorId = doctorId,
@@ -230,6 +232,7 @@ class EncounterService(
         OrderEntry(
           encounterId = encounterId,
           patientId = encounter.patientId,
+          hospitalId = encounter.hospitalId ?: throw IllegalStateException("ENCOUNTER_HOSPITAL_MISSING"),
           orderType = dto.orderType,
           orderCode = dto.orderCode,
           orderName = dto.orderName,

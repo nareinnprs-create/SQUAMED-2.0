@@ -20,12 +20,13 @@ class VisitRegistrar(
   fun createVisit(
     patientId: UUID,
     dto: VisitCreateDto,
+    hospitalId: UUID,
   ): VisitCreateResult {
     val now = Instant.now()
     val visit =
       visitRegistrationRepository.save(
         VisitRegistration(
-          hospitalId = dto.hospitalId,
+          hospitalId = hospitalId,
           patientId = patientId,
           appointmentId = dto.appointmentId,
           visitNumber = nextVisitNumber(),
@@ -51,6 +52,7 @@ class VisitRegistrar(
           priority = dto.priority,
           servicePointId = null,
           departmentId = dto.departmentId,
+          hospitalId = hospitalId,
         )
       } else {
         null

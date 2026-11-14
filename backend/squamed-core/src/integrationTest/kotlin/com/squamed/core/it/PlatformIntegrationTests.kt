@@ -5351,6 +5351,80 @@ class PlatformIntegrationTests {
   }
 
   @Nested
+  inner class OfflineIdempotencyTests {
+    @Test
+    fun offlineTaskCompletionReplayCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+
+      // Fresh hospital: the task workforce (doctor, task:manage since V50).
+      val h =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Offline H $s", "code" to "OF1-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+
+      val email = "offline-doc-$s-${UUID.randomUUID().toString().take(6)}@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Doc",
+            "lastName" to "Offline$s",
+            "roles" to listOf("DOCTOR"),
+            "hospitalId" to h,
+          ),
+        ),
+        "register offline doctor",
+      )
+      val doctor =
+        `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      val doctorId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = doctor))["userId"].asText()
+
+      val taskId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/tasks",
+            json("title" to "Offline replay $s", "priority" to "normal", "assigneeId" to doctorId, "hospitalId" to h),
+            doctor,
+          ),
+        )["id"].asText()
+
+      // The offline path: the completion is queued with a client-generated idempotency key,
+      // then flushed once from the outbox and flushed again on the next connectivity tick.
+      val body = json("status" to "completed")
+      val key = "pit-offline-$s"
+      val first = api(HttpMethod.PATCH, "/api/v1/tasks/$taskId/status", body, doctor, mapOf("Idempotency-Key" to key))
+      assert2xx(first, "first flush completes the task")
+      assertEquals("completed", `data`(first)["status"].asText(), "task completed")
+
+      val replay = api(HttpMethod.PATCH, "/api/v1/tasks/$taskId/status", body, doctor, mapOf("Idempotency-Key" to key))
+      assert2xx(replay, "queued replay lands")
+      assertEquals(first.body, replay.body, "replay is byte-identical from the idempotency store")
+      assertEquals(
+        `data`(first)["completedAt"].asText(),
+        `data`(replay)["completedAt"].asText(),
+        "replay does not move completedAt (no second execution)",
+      )
+
+      // Exactly one task.completed event despite the replay (the outbox row is written
+      // transactionally with the first flush, so it is already visible here).
+      val events =
+        `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = admin))
+          .filter { it["eventType"].asText() == "task.completed" && it["hospitalId"].asText() == h }
+      assertEquals(1, events.size, "task.completed emitted exactly once: ${events.map { it["status"].asText() }}")
+
+      // Same key with a different payload -> 409 IDEMPOTENCY_CONFLICT (payload drift guard).
+      val conflict = api(HttpMethod.PATCH, "/api/v1/tasks/$taskId/status", json("status" to "cancelled"), doctor, mapOf("Idempotency-Key" to key))
+      assertEquals(409, conflict.status, "payload change under same key -> 409, got ${conflict.body.take(200)}")
+      assertEquals("IDEMPOTENCY_CONFLICT", om.readTree(conflict.body)["error"]["code"].asText())
+    }
+  }
+
+  @Nested
   inner class Phase2InpatientTests {
     @Test
     fun inpatientAdmissionLifecycleCoverage() {

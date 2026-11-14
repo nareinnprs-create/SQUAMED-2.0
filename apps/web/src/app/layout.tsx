@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ThemeProvider } from '@squamed/ui';
 import { RootProviders } from '@/providers/RootProviders';
+import { ServiceWorkerRegistrar } from '@/components/service-worker-registrar';
 import './globals.css';
 import './themes.css';
 
@@ -27,7 +28,10 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ThemeProvider>
-          <RootProviders>{children}</RootProviders>
+          <RootProviders>
+            {children}
+            <ServiceWorkerRegistrar />
+          </RootProviders>
         </ThemeProvider>
       </body>
     </html>

@@ -31,48 +31,48 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 | Date | Chunk | Section | Status | Gates 1-12 | Tests | Coverage | Blocked | Scope changes | Report |
 |---|---|---|---|---|---|---|---|---|---|
 | 2026-11-13 | 0 | 00.01 Infrastructure scaffold | COMPLETE | 12-gate CI live (PR #1 green) | parity + stub-grep + detect green; code gates verified-skip pre-merge | — | — | — | `reports/00.01-INFRASTRUCTURE-SCAFFOLD.md` |
-| — | 0 | 00.02 Contract foundation | PLANNED | — | — | — | — | — | — |
-| — | 0 | 00.03 Identity & access | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 0 | 00.02 Contract foundation | IN PROGRESS | 1,8,12 fail · 2-7,9-11 pass (run 43548016617) | openApiExposesAllModuleSurfaces, errorResponsesFollowContract, validationErrorsUseCleanContract, client.test.ts, patient.test.ts | repo merged 80.13% instr | — | — | `reports/chunk-00/section-00.02.md` |
+| 2026-11-14 | 0 | 00.03 Identity & access | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | 7 PIT SecurityTests + authRefreshLogoutMfaAndRealtimeCoverage + login.spec.ts | repo merged 80.13% instr | — | — | `reports/chunk-00/section-00.03.md` |
 | — | 0 | 00.04 Tenancy & RLS | PLANNED | — | — | — | — | — | — |
-| — | 0 | 00.05 Org tree & config engine | PLANNED | — | — | — | — | — | — |
-| — | 0 | 00.06 Master data | PLANNED | — | — | — | — | — | — |
-| — | 0 | 00.07 Patient master | PLANNED | — | — | — | exp:E1 | — | — |
-| — | 0 | 00.08 EMPI | PLANNED | — | — | — | — | — | — |
-| — | 0 | 00.09 Event fabric | PLANNED | — | — | — | — | — | — |
-| — | 0 | 00.10 Audit | PLANNED | — | — | — | — | — | — |
-| — | 0 | 00.11 Task engine | PLANNED | — | — | — | — | — | — |
-| — | 0 | 00.12 Consent + notifications | PLANNED | — | — | — | exp:E2,E3 | — | — |
+| 2026-11-14 | 0 | 00.05 Org tree & config engine | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | catalogsAndHospitalStructureCoverage, hospitalConfigValidationBranchesCoverage | repo merged 80.13% instr | — | — | `reports/chunk-00/section-00.05.md` |
+| 2026-11-14 | 0 | 00.06 Master data | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | catalogFilterAndPaginationCoverage, catalogValidationBranchesCoverage, master-data.test.tsx | repo merged 80.13% instr | — | — | `reports/chunk-00/section-00.06.md` |
+| 2026-11-14 | 0 | 00.07 Patient master | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | fullPatientRevenueJourney, empiInputIdentifiersAndLifecycleCoverage | repo merged 80.13% instr | exp:E1 | — | `reports/chunk-00/section-00.07.md` |
+| 2026-11-14 | 0 | 00.08 EMPI | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | empiAndMergeCoverage | repo merged 80.13% instr | — | — | `reports/chunk-00/section-00.08.md` |
+| 2026-11-14 | 0 | 00.09 Event fabric | IN PROGRESS | 1,8,12 fail · 2-7,9-11 pass (run 43548016617) | authRefreshLogoutMfaAndRealtimeCoverage | repo merged 80.13% instr | — | — | `reports/chunk-00/section-00.09.md` |
+| 2026-11-14 | 0 | 00.10 Audit | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | fullPatientRevenueJourney (audit-row asserts) | repo merged 80.13% instr | — | — | `reports/chunk-00/section-00.10.md` |
+| 2026-11-14 | 0 | 00.11 Task engine | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | collaborationAndWorkflowJourney, workflowEngineBranchCoverage | repo merged 80.13% instr | — | — | `reports/chunk-00/section-00.11.md` |
+| 2026-11-14 | 0 | 00.12 Consent + notifications | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | communicationReadComplianceCoverage, collaborationAndWorkflowJourney | repo merged 80.13% instr | exp:E2,E3 | — | `reports/chunk-00/section-00.12.md` |
 | — | 0 | 00.13 Offline groundwork | PLANNED | — | — | — | — | — | — |
-| — | 0 | 00.14 Design system | PLANNED | — | — | — | — | — | — |
-| — | 0 | 00.15 App shell | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 0 | 00.14 Design system | IN PROGRESS | 1,5,8,12 fail · 2-4,6,7,9-11 pass (run 43548016617) | visual-regression.spec.ts, command-bar.test.tsx, master-data/orders/settings.test.tsx | repo merged 80.13% instr | — | — | `reports/chunk-00/section-00.14.md` |
+| 2026-11-14 | 0 | 00.15 App shell | IN PROGRESS | 1,8 fail · 2-7,9-12 pass (run 43548016617) | searchAndPatient360Journey, injectionPayloadsAreNeutralized, command-bar.test.tsx | repo merged 80.13% instr | — | — | `reports/chunk-00/section-00.15.md` |
 | — | 0 | 00.16 Observability completion | PLANNED | — | — | — | — | — | — |
 | — | 0 | 00.17 Chunk exit | PLANNED | — | — | — | — | — | — |
 
 ## Wave 2 — chunk 1 OPD & front office
 | Date | Chunk | Section | Status | Gates 1-12 | Tests | Coverage | Blocked | Scope changes | Report |
 |---|---|---|---|---|---|---|---|---|---|
-| — | 1 | 01.01 Scheduling engine | PLANNED | — | — | — | — | — | — |
-| — | 1 | 01.02 Queue & token engine | PLANNED | — | — | — | — | — | — |
-| — | 1 | 01.03 Reception workspace | PLANNED | — | — | — | — | — | — |
-| — | 1 | 01.04 OPD EMR core | PLANNED | — | — | — | exp:E5 | — | — |
-| — | 1 | 01.05 Patient 360 v1 | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 1 | 01.01 Scheduling engine | IN PROGRESS | 1,8,9,12 fail · 2-7,10-11 pass (run 43548016617) | fullPatientRevenueJourney, financialAndOperationsCoverage | repo merged 80.13% instr | — | — | `reports/chunk-01/section-01.01.md` |
+| 2026-11-14 | 1 | 01.02 Queue & token engine | IN PROGRESS | 1,8,9,12 fail · 2-7,10-11 pass (run 43548016617) | queueAndScribeAndAiCoverage, financialAndOperationsCoverage | repo merged 80.13% instr | — | — | `reports/chunk-01/section-01.02.md` |
+| 2026-11-14 | 1 | 01.03 Reception workspace | IN PROGRESS | 1,8,9,12 fail · 2-7,10-11 pass (run 43548016617) | fullPatientRevenueJourney, financialAndOperationsCoverage | repo merged 80.13% instr | — | — | `reports/chunk-01/section-01.03.md` |
+| 2026-11-14 | 1 | 01.04 OPD EMR core | IN PROGRESS | 1,5,8,9,12 fail · 2-4,6,7,10-11 pass (run 43548016617) | clinicalEncounterAndPharmacyCoverage, fullPatientRevenueJourney | repo merged 80.13% instr | exp:E5 | — | `reports/chunk-01/section-01.04.md` |
+| 2026-11-14 | 1 | 01.05 Patient 360 v1 | IN PROGRESS | 1,8,9,12 fail · 2-7,10-11 pass (run 43548016617) | searchAndPatient360Journey, fullPatientRevenueJourney | repo merged 80.13% instr | — | — | `reports/chunk-01/section-01.05.md` |
 | — | 1 | 01.06 TV display app | PLANNED | — | — | — | exp:E10 | — | — |
 | — | 1 | 01.07 Voice announcements | PLANNED | — | — | — | — | — | — |
 | — | 1 | 01.08 Kiosk-lite | PLANNED | — | — | — | exp:E10 | — | — |
-| — | 1 | 01.09 Emergency fast-path + downtime pack | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 1 | 01.09 Emergency fast-path + downtime pack | IN PROGRESS | 1,8,9,12 fail · 2-7,10-11 pass (run 43548016617) | emergencyWorkflowCoverage | repo merged 80.13% instr | — | — | `reports/chunk-01/section-01.09.md` |
 | — | 1 | 01.10 Entitlement & tenant brand | PLANNED | — | — | — | exp:E2,E5 | — | — |
-| — | 1 | 01.11 Analytics mini + shadow-run prep | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 1 | 01.11 Analytics mini + shadow-run prep | IN PROGRESS | 1,8,12 fail · 2-7,9-11 pass (run 43548016617) | financialAndOperationsCoverage | repo merged 80.13% instr | — | — | `reports/chunk-01/section-01.11.md` |
 | — | 1 | 01.12 Chunk exit | PLANNED | — | — | — | — | — | — |
 
 ## Wave 3 — chunk 2 Diagnostics & pharmacy
 | Date | Chunk | Section | Status | Gates 1-12 | Tests | Coverage | Blocked | Scope changes | Report |
 |---|---|---|---|---|---|---|---|---|---|
-| — | 2 | 02.01 Analyzer intake (Mirth) | PLANNED | — | — | — | exp:E6 | SC-1 | — |
-| — | 2 | 02.02 Lab workflow core | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 2 | 02.01 Analyzer intake (Mirth) | IN PROGRESS | 1,8,9,12 fail · 2-7,10-11 pass (run 43548016617) | hl7ReceiveVariantsAndLockoutCoverage, hl7ReceiveAndAuthFailureCoverage, interopAndFhirCoverage | repo merged 80.13% instr | exp:E6 | SC-1 | `reports/chunk-02/section-02.01.md` |
+| 2026-11-14 | 2 | 02.02 Lab workflow core | IN PROGRESS | 1,8,9,12 fail · 2-7,10-11 pass (run 43548016617) | fullPatientRevenueJourney, clinicalEncounterAndPharmacyCoverage | repo merged 80.13% instr | — | — | `reports/chunk-02/section-02.02.md` |
 | — | 2 | 02.03 Critical results + QC | PLANNED | — | — | — | — | — | — |
 | — | 2 | 02.04 Lab reports + delivery | PLANNED | — | — | — | — | — | — |
 | — | 2 | 02.05 RIS-lite + PACS | PLANNED | — | — | — | — | — | — |
-| — | 2 | 02.06 Pharmacy stock + dispensing | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 2 | 02.06 Pharmacy stock + dispensing | IN PROGRESS | 1,8,9,12 fail · 2-7,10-11 pass (run 43548016617) | clinicalEncounterAndPharmacyCoverage, fullPatientRevenueJourney | repo merged 80.13% instr | — | — | `reports/chunk-02/section-02.06.md` |
 | — | 2 | 02.07 Medication safety engine | PLANNED | — | — | — | — | — | — |
 | — | 2 | 02.08 Charge events + inventory linkage | PLANNED | — | — | — | — | — | — |
 | — | 2 | 02.09 Chunk exit | PLANNED | — | — | — | — | — | — |
@@ -80,37 +80,37 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 ## Wave 4 — chunk 3 Revenue cycle
 | Date | Chunk | Section | Status | Gates 1-12 | Tests | Coverage | Blocked | Scope changes | Report |
 |---|---|---|---|---|---|---|---|---|---|
-| — | 3 | 03.01 Charge capture ledger | PLANNED | — | — | — | — | — | — |
-| — | 3 | 03.02 Billing engine | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 3 | 03.01 Charge capture ledger | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | fullPatientRevenueJourney, financialAndOperationsCoverage | repo merged 80.13% instr | — | — | `reports/chunk-03/section-03.01.md` |
+| 2026-11-14 | 3 | 03.02 Billing engine | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | financialAndOperationsCoverage, fullPatientRevenueJourney | repo merged 80.13% instr | — | — | `reports/chunk-03/section-03.02.md` |
 | — | 3 | 03.03 Tax engine (India) | PLANNED | — | — | — | — | — | — |
 | — | 3 | 03.04 Insurance / TPA v1 | PLANNED | — | — | — | exp:E4 | — | — |
 | — | 3 | 03.05 HIM coding + integrity engine | PLANNED | — | — | — | — | — | — |
-| — | 3 | 03.06 Collections + GL export | PLANNED | — | — | — | exp:E4 | — | — |
+| 2026-11-14 | 3 | 03.06 Collections + GL export | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | fullPatientRevenueJourney | repo merged 80.13% instr | exp:E4 | — | `reports/chunk-03/section-03.06.md` |
 | — | 3 | 03.07 Chunk exit | PLANNED | — | — | — | — | — | — |
 
 ## Wave 5 — chunk 4 Inpatient, surgery & critical care
 | Date | Chunk | Section | Status | Gates 1-12 | Tests | Coverage | Blocked | Scope changes | Report |
 |---|---|---|---|---|---|---|---|---|---|
-| — | 4 | 04.01 Admission + bed management | PLANNED | — | — | — | — | — | — |
-| — | 4 | 04.02 eMAR + nursing core | PLANNED | — | — | — | — | — | — |
-| — | 4 | 04.03 Assessments + care plans + risk scores | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 4 | 04.01 Admission + bed management | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | inpatientAdmissionLifecycleCoverage | repo merged 80.13% instr | — | — | `reports/chunk-04/section-04.01.md` |
+| 2026-11-14 | 4 | 04.02 eMAR + nursing core | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | nursingDocumentationCoverage | repo merged 80.13% instr | — | — | `reports/chunk-04/section-04.02.md` |
+| 2026-11-14 | 4 | 04.03 Assessments + care plans + risk scores | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | nursingDocumentationCoverage | repo merged 80.13% instr | — | — | `reports/chunk-04/section-04.03.md` |
 | — | 4 | 04.04 Device integration v1 | PLANNED | — | — | — | exp:E7 | — | — |
-| — | 4 | 04.05 ICU charting | PLANNED | — | — | — | — | — | — |
-| — | 4 | 04.06 OT + anaesthesia | PLANNED | — | — | — | — | — | — |
-| — | 4 | 04.07 Blood bank | PLANNED | — | — | — | — | SC-2 | — |
-| — | 4 | 04.08 IPD billing + dietary + discharge | PLANNED | — | — | — | — | SC-3 | — |
+| 2026-11-14 | 4 | 04.05 ICU charting | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | icuMonitoringCoverage | repo merged 80.13% instr | — | — | `reports/chunk-04/section-04.05.md` |
+| 2026-11-14 | 4 | 04.06 OT + anaesthesia | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | surgicalWorkflowCoverage, anaesthesiaWorkflowCoverage | repo merged 80.13% instr | — | — | `reports/chunk-04/section-04.06.md` |
+| 2026-11-14 | 4 | 04.07 Blood bank | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | bloodBankWorkflowCoverage | repo merged 80.13% instr | — | SC-2 | `reports/chunk-04/section-04.07.md` |
+| 2026-11-14 | 4 | 04.08 IPD billing + dietary + discharge | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | inpatientAdmissionLifecycleCoverage | repo merged 80.13% instr | — | SC-3 | `reports/chunk-04/section-04.08.md` |
 | — | 4 | 04.09 Chunk exit | PLANNED | — | — | — | — | — | — |
 
 ## Wave 6 — chunk 5 AI intelligence
 | Date | Chunk | Section | Status | Gates 1-12 | Tests | Coverage | Blocked | Scope changes | Report |
 |---|---|---|---|---|---|---|---|---|---|
-| — | 5 | 05.01 AI gateway | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 5 | 05.01 AI gateway | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | aiGatewayAndInteropJourney, AiIntentServiceTest | repo merged 80.13% instr | — | — | `reports/chunk-05/section-05.01.md` |
 | — | 5 | 05.02 Eval framework | PLANNED | — | — | — | exp:E8 | — | — |
-| — | 5 | 05.03 Command bar (⌘K) | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 5 | 05.03 Command bar (⌘K) | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | aiGatewayAndInteropJourney, AiIntentServiceTest | repo merged 80.13% instr | — | — | `reports/chunk-05/section-05.03.md` |
 | — | 5 | 05.04 Intelligence rail | PLANNED | — | — | — | — | — | — |
-| — | 5 | 05.05 AI Scribe + report drafting | PLANNED | — | — | — | exp:E8 | SC-4 | — |
+| 2026-11-14 | 5 | 05.05 AI Scribe + report drafting | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | aiGatewayAndInteropJourney (scribe leg), ScribePipelineTest, ScribeSttTest | repo merged 80.13% instr | exp:E8 | SC-4 | `reports/chunk-05/section-05.05.md` |
 | — | 5 | 05.06 Three production agents | PLANNED | — | — | — | — | — | — |
-| — | 5 | 05.07 Governance registry | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 5 | 05.07 Governance registry | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | aiGatewayAndInteropJourney, AiIntentServiceTest | repo merged 80.13% instr | — | — | `reports/chunk-05/section-05.07.md` |
 | — | 5 | 05.08 Chunk exit | PLANNED | — | — | — | — | — | — |
 
 ## Wave 7 — chunk 6 Enterprise, scale & resilience
@@ -121,8 +121,8 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 | — | 6 | 06.03 Patient portal v2 | PLANNED | — | — | — | — | SC-5 | — |
 | — | 6 | 06.04 Workforce / HR-lite | PLANNED | — | — | — | — | — | — |
 | — | 6 | 06.05 Ops modules | PLANNED | — | — | — | — | — | — |
-| — | 6 | 06.06 BI / ClickHouse | PLANNED | — | — | — | — | — | — |
-| — | 6 | 06.07 Interop outbound FHIR | PLANNED | — | — | — | — | — | — |
+| 2026-11-14 | 6 | 06.06 BI / ClickHouse | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | aiGatewayAndInteropJourney (analytics leg), financialAndOperationsCoverage | repo merged 80.13% instr | — | — | `reports/chunk-06/section-06.06.md` |
+| 2026-11-14 | 6 | 06.07 Interop outbound FHIR | IN PROGRESS | 1,8,9 fail · 2-7,10-12 pass (run 43548016617) | aiGatewayAndInteropJourney, ContractTests, Hl7MessagesTest | repo merged 80.13% instr | — | — | `reports/chunk-06/section-06.07.md` |
 | — | 6 | 06.08 Resilience + retention + sandbox | PLANNED | — | — | — | — | — | — |
 | — | 6 | 06.09 Chunk exit | PLANNED | — | — | — | — | — | — |
 
@@ -154,8 +154,8 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 | — | 8 | 08.08 Chunk exit (platform-complete audit §1–117) | PLANNED | — | — | — | — | — | — |
 
 ## Totals
-- **89 sections: 1 COMPLETE (00.01), 88 PLANNED, 0 EXTERNAL-BLOCKED** — 00.01 closed 2026-11-13 (12-gate CI live, PR #1 green).
-- Session resume note (protocol §5.4): **wiring window CLOSED — PRs #2–#11 all merged; run 43548016617 = first all-6-gates-green run; merged instruction coverage 80.13% ≥ 0.80 (branch 52%)**. SC-1…SC-11 all approved and landed (SC-11 = timeout-minutes on all 7 jobs, drift note 5, ci.yml hash 9998ae5f…). **Next: gate-run every overlapped chunk 0–6 section (per-section reports → ledger section table), then 00.02+ per chunk-00 order (00.03 per ADR-11; 00.04 + item 15 per ADR-13).** Open externals: E1–E3 at escalation thresholds (week-1 aging above); B2 clinical lead = hard human gate before chunk-0 kickoff work beyond gates; branch protection now satisfiable without --admin (all 6 contexts green on PR #11).
+- **89 sections: 1 COMPLETE (00.01), 38 IN PROGRESS, 50 PLANNED, 0 EXTERNAL-BLOCKED** — 00.01 closed 2026-11-13 (12-gate CI live, PR #1 green); 38 overlapped sections advanced 2026-11-14 (gate-run below).
+- Session resume note (protocol §5.4): **wiring window CLOSED — PRs #2–#12 all merged; run 43548016617 = first all-6-gates-green run; merged instruction coverage 80.13% ≥ 0.80 (branch 52%)**. SC-1…SC-11 all approved and landed (SC-11 = timeout-minutes on all 7 jobs, drift note 5, ci.yml hash 9998ae5f…). **Gate-run COMPLETE (2026-11-14): 38 per-section reports written (reports/chunk-00..06/section-*.md), all 38 folded into the section tables as IN PROGRESS with per-gate evidence; none reached SECTION REVIEW — every overlapped section is PARTIAL with named gap lists in its report.** **Next: chunk-0 build per chunk-00 order — 00.02 first (schema-registry harness, unblocks repo-wide gate 8), then 00.03 hardening per ADR-11 (device registry, TOTP lib swap, key rotation), then 00.04 + item 15 (hospital_id NOT NULL per ADR-13, unblocks repo-wide gate 9), then remaining chunk-0 gaps from the section reports; gate 12 exit-demo slices scripted alongside each section.** Open externals: E1–E3 at escalation thresholds (week-1 aging above); B2 clinical lead = hard human gate before chunk-0 kickoff work beyond gates; branch protection now satisfiable without --admin (all 6 contexts green on PR #11).
 - Branch protection reality: ruleset **27243092** active since 2026-11-13 (recreated from 27199747 for SC-10's renamed contexts; deletion, non-fast-forward, 6 required status checks, bypass_actors = repo admin role 5). History: 27190834 (no bypass) → 27199747 (bypass added) → 27243092 (contexts renamed). PAT cannot PATCH rulesets (404); DELETE+POST works; GET works.
 - Request list issued (day 1): E1 ABDM sandbox, E2 DLT/WABA + BSP, E3 SMS/email provider, E4 payment gateway; reminder B2 (clinical lead) is the hard pre-build human gate; E10 hardware purchase list flagged early (TV box, thermal printer, kiosk tablet, barcode scanner).
 - Aging report (2026-11-14, week 1): E1–E3 open since day 1, all bound to **chunk 0 week 1** (E1→00.07 ABHA flows, E2/E3→00.12 channels) — already at escalation thresholds per register (E1 >10 working days → ABDM support; E2 >3 wk → swap BSP candidate); E4 open, due **chunk 3 week 1** (03.06, >2 wk → alternate PSP); B2 (clinical lead sign-off) still the hard pre-chunk-0 human gate; B1/B3–B8 not yet due per register `23`; E10 hardware list: procurement window opens with chunk-6 hardware pilot.
@@ -173,6 +173,8 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 | 2026-11-14 | #9 (ledger/pr-7-8-ruleset) | 4afa4b0 | parity ✓ · stub-grep ✓ · backend ✓ · frontend ✗ (vitest debt → #10) · a11y ✗ (scripts unwired → #10) · integration ✗ (13 PIT) | Docs-only: #7/#8 rows + ruleset 27243092 history + resume note |
 | 2026-11-14 | #10 (fix/web-gates, agent B) | 4bc0e34 | **a11y ✓ first green** (branch run 43547170012: axe 0 serious/critical + Lighthouse budget ✓ + visual regression ✓) · frontend ✓ (47/47 vitest) · backend ✓ · parity ✓ · stub-grep ✓ · integration ✗ (13 PIT pre-existing → #11) | Agent B: jsdom/@testing-library/jest-dom/axe-core/lighthouse/chrome-launcher deps + real gate scripts + UI contrast fixes in packages/ui; two a11y CI hangs root-caused and bounded (incident I-1 below) |
 | 2026-11-14 | #11 (fix/pit-seed) | 886c51c | **all 6 gates ✓ — first clean run** (branch run 43548016617; integration-gates green: PIT suite passing, merged **instruction coverage 80.13%** (38,068/47,507, branch 52%) ≥ 0.80) | ensureSeed hospital+department create-if-empty (root cause 1 of PIT triage: 12 NPEs) + AI-logs assert ≥1 with chunk-5 deferral (root cause 2, §8). Merged without --admin — all required contexts green |
+| 2026-11-14 | #12 (ledger/sc-11-final-batch) | f851f55 | **all 6 gates ✓ under new timeout bounds** (branch run 43548533708 — first run exercising SC-11 job-level timeouts) · parity ✓ (ci.yml hash 9998ae5f… matches BASELINE.sha256) | SC-11 timeout-minutes on all 7 jobs (drift note 5) + ledger batch: merge-log #9–#11, PIT triage (13→2 root causes), incident I-1, week-1 aging, resume note. Merged without --admin |
+| 2026-11-14 | #13 (docs/gate-run-reports) | TBD | 38 per-section gate-run report files (chunk-00..06) + 38 ledger section rows PLANNED→IN PROGRESS + Totals/resume-note/merge-log updates — docs-only; code-gate runs expected green as on #12 | Gate-run folded into ledger (protocol §4 reports); no section reached SECTION REVIEW — all 38 PARTIAL with named gaps; chunk-0 build starts next per chunk-00 order |
 
 ### PIT triage (2026-11-14 — integration-gates run 43539169755: 13 failures → 2 root causes)
 | # | Root cause | Failing tests | Disposition |

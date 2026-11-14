@@ -35,6 +35,7 @@ data class TariffDto(
 }
 
 data class PostChargeDto(
+  val hospitalId: UUID? = null,
   val patientId: UUID? = null,
   val visitId: UUID? = null,
   val encounterId: UUID? = null,

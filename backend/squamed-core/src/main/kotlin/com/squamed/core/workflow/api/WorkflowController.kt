@@ -1,6 +1,7 @@
 package com.squamed.core.workflow.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.workflow.service.WorkflowService
@@ -22,6 +23,7 @@ import java.util.UUID
 @RequestMapping("/api/v1/workflow")
 class WorkflowController(
   private val workflowService: WorkflowService,
+  private val tenantResolver: TenantResolver,
 ) {
   @PostMapping("/definitions")
   @ResponseStatus(HttpStatus.CREATED)
@@ -72,7 +74,7 @@ class WorkflowController(
   fun triggerWorkflow(
     @RequestBody dto: TriggerWorkflowRequest,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<WorkflowInstanceView> = ApiResponse.ok(workflowService.trigger(dto, principal.userId, principal.hospitalId))
+  ): ApiResponse<WorkflowInstanceView> = ApiResponse.ok(workflowService.trigger(dto, principal.userId, tenantResolver.pinOrDefault(principal, null)))
 
   @GetMapping("/instances")
   @RequiresPermission("workflow:read:workflow")

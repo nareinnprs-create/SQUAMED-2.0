@@ -2,6 +2,7 @@ package com.squamed.core.billing.api
 
 import com.squamed.core.billing.service.BillingService
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import org.springframework.http.HttpStatus
@@ -22,7 +23,9 @@ import java.util.UUID
 @RequestMapping("/api/v1/billing")
 class BillingController(
   private val billingService: BillingService,
+  private val tenantResolver: TenantResolver,
 ) {
+  // ADR-13: hospital users are pinned to their tenant; admins may choose via dto.hospitalId.
   @GetMapping("/tariffs")
   @RequiresPermission("billing:read:invoice")
   @Transactional(readOnly = true)
@@ -37,7 +40,8 @@ class BillingController(
   @Transactional
   fun createTariff(
     @RequestBody dto: TariffDto,
-  ): ApiResponse<TariffDto> = ApiResponse.ok(billingService.createTariff(dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<TariffDto> = ApiResponse.ok(billingService.createTariff(dto.copy(hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId))))
 
   @PutMapping("/tariffs/{id}")
   @RequiresPermission("billing:write:invoice")
@@ -45,7 +49,8 @@ class BillingController(
   fun updateTariff(
     @PathVariable id: UUID,
     @RequestBody dto: TariffDto,
-  ): ApiResponse<TariffDto> = ApiResponse.ok(billingService.updateTariff(id, dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<TariffDto> = ApiResponse.ok(billingService.updateTariff(id, dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId))))
 
   @PostMapping("/charges")
   @ResponseStatus(HttpStatus.CREATED)
@@ -54,7 +59,7 @@ class BillingController(
   fun postCharge(
     @RequestBody dto: PostChargeDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<ChargeView> = ApiResponse.ok(billingService.postCharge(dto, principal.userId))
+  ): ApiResponse<ChargeView> = ApiResponse.ok(billingService.postCharge(dto, principal.userId, tenantResolver.pinOrDefault(principal, dto.hospitalId)))
 
   @GetMapping("/charges")
   @RequiresPermission("billing:read:invoice")

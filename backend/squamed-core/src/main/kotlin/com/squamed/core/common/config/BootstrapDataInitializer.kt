@@ -1,5 +1,7 @@
 package com.squamed.core.common.config
 
+import com.squamed.core.hospitalconfig.domain.Hospital
+import com.squamed.core.hospitalconfig.repository.HospitalRepository
 import com.squamed.core.identity.domain.Role
 import com.squamed.core.identity.domain.UserAccount
 import com.squamed.core.identity.domain.UserProfile
@@ -26,11 +28,13 @@ class BootstrapDataInitializer(
   private val profileRepository: UserProfileRepository,
   private val roleRepository: RoleRepository,
   private val userRoleRepository: UserRoleRepository,
+  private val hospitalRepository: HospitalRepository,
   private val passwordEncoder: PasswordEncoder,
   @Value("\${squamed.bootstrap.admin-email:}") private val adminEmail: String,
   @Value("\${squamed.bootstrap.admin-password:}") private val adminPassword: String,
 ) : CommandLineRunner {
   override fun run(vararg args: String) {
+    seedDefaultHospital()
     val email = adminEmail.ifBlank { "admin@squamed.local" }
     val password = adminPassword.ifBlank { "Admin@12345" }
 
@@ -76,5 +80,20 @@ class BootstrapDataInitializer(
     } else {
       logger.info { "Bootstrap admin already exists: $email" }
     }
+  }
+
+  // Primary (first-created) hospital. Tenant backfill in V43 attributes all pre-tenant rows to it,
+  // and TenantResolver uses it when a platform admin writes without naming a hospital.
+  private fun seedDefaultHospital() {
+    if (hospitalRepository.findFirstByOrderByCreatedAtAsc() != null) return
+    hospitalRepository.save(
+      Hospital(
+        name = "SQUAMED General Hospital",
+        code = "SQUAMED-MAIN",
+        country = "Qatar",
+        city = "Doha",
+      ),
+    )
+    logger.info { "Bootstrap hospital created: SQUAMED-MAIN" }
   }
 }

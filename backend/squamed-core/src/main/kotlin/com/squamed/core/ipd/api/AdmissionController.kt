@@ -1,6 +1,7 @@
 package com.squamed.core.ipd.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.ipd.service.AdmissionService
@@ -22,6 +23,7 @@ import java.util.UUID
 @RequestMapping("/api/v1/admissions")
 class AdmissionController(
   private val admissionService: AdmissionService,
+  private val tenantResolver: TenantResolver,
 ) {
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
@@ -30,7 +32,7 @@ class AdmissionController(
   fun admit(
     @RequestBody dto: AdmissionCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<AdmissionView> = ApiResponse.ok(admissionService.admit(dto, principal.userId))
+  ): ApiResponse<AdmissionView> = ApiResponse.ok(admissionService.admit(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping
   @RequiresPermission("ipd:read:admission")

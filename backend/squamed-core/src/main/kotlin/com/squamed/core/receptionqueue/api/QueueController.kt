@@ -1,9 +1,12 @@
 package com.squamed.core.receptionqueue.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
+import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.receptionqueue.service.QueueService
 import org.springframework.http.HttpStatus
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
@@ -19,13 +22,16 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/v1/queue")
 class QueueController(
   private val queueService: QueueService,
+  private val tenantResolver: TenantResolver,
 ) {
+  // ADR-13: hospital users are pinned to their tenant; admins may choose via dto.hospitalId.
   @PostMapping("/entries")
   @ResponseStatus(HttpStatus.CREATED)
   @RequiresPermission("queue:manage:queue")
   @Transactional
   fun addToQueue(
     @RequestBody dto: QueueCreateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<QueueEntryView> =
     ApiResponse.ok(
       queueService.addToQueue(
@@ -36,6 +42,7 @@ class QueueController(
         priority = dto.priority,
         servicePointId = dto.servicePointId,
         departmentId = dto.departmentId,
+        hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId),
       ),
     )
 
@@ -123,6 +130,7 @@ class QueueController(
   @Transactional
   fun createServicePoint(
     @RequestBody dto: ServicePointCreateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<ServicePointDto> =
     ApiResponse.ok(
       queueService.createServicePoint(
@@ -131,6 +139,7 @@ class QueueController(
         queueType = dto.queueType ?: throw IllegalArgumentException("QUEUE_TYPE_REQUIRED"),
         counterNumber = dto.counterNumber,
         status = dto.status,
+        hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId),
       ),
     )
 

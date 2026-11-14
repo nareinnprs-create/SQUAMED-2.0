@@ -1,6 +1,7 @@
 package com.squamed.core.pharmacy.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.pharmacy.service.PharmacyService
@@ -22,6 +23,7 @@ import java.util.UUID
 @RequestMapping("/api/v1/pharmacy")
 class PharmacyController(
   private val pharmacyService: PharmacyService,
+  private val tenantResolver: TenantResolver,
 ) {
   @GetMapping("/stock")
   @RequiresPermission("pharmacy:read:stock")
@@ -37,7 +39,8 @@ class PharmacyController(
   @Transactional
   fun addStock(
     @RequestBody dto: StockRequestDto,
-  ): ApiResponse<PharmacyStockView> = ApiResponse.ok(pharmacyService.addStock(dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<PharmacyStockView> = ApiResponse.ok(pharmacyService.addStock(dto.copy(hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId))))
 
   @PutMapping("/stock/{id}")
   @RequiresPermission("pharmacy:write:stock")
@@ -54,7 +57,7 @@ class PharmacyController(
   fun dispense(
     @RequestBody dto: DispenseRequestDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<DispensationView> = ApiResponse.ok(pharmacyService.dispense(dto, principal.userId, principal.hospitalId))
+  ): ApiResponse<DispensationView> = ApiResponse.ok(pharmacyService.dispense(dto, principal.userId, tenantResolver.pinOrDefault(principal, null)))
 
   @GetMapping("/dispensations")
   @RequiresPermission("pharmacy:read:stock")

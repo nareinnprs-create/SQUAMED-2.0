@@ -17,6 +17,7 @@ data class StartEncounterDto(
   val departmentId: UUID? = null,
   val reason: String? = null,
   val chiefComplaint: String? = null,
+  val hospitalId: UUID? = null,
 )
 
 data class VitalSignRequestDto(

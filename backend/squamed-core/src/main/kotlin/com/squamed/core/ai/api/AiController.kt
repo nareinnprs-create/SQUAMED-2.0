@@ -4,6 +4,7 @@ import com.squamed.core.ai.service.AiCommandOutput
 import com.squamed.core.ai.service.AiReply
 import com.squamed.core.ai.service.AiService
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import jakarta.servlet.http.HttpServletResponse
@@ -58,6 +59,7 @@ data class AiAgentCreateRequest(
 @RequestMapping("/api/v1/ai")
 class AiController(
   private val aiService: AiService,
+  private val tenantResolver: TenantResolver,
 ) {
   @GetMapping("/models")
   @RequiresPermission("ai:read:agent")
@@ -138,7 +140,7 @@ class AiController(
             .AiChatMessage(it.role, it.content)
         },
         principal.userId,
-        principal.hospitalId,
+        tenantResolver.pinOrDefault(principal, null),
       ),
     )
 
@@ -147,7 +149,7 @@ class AiController(
   fun command(
     @RequestBody req: AiCommandRequest,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<AiCommandOutput> = ApiResponse.ok(aiService.command(req.query, principal.userId, principal.hospitalId))
+  ): ApiResponse<AiCommandOutput> = ApiResponse.ok(aiService.command(req.query, principal.userId, tenantResolver.pinOrDefault(principal, null)))
 
   @PostMapping("/chat/stream")
   @RequiresPermission("ai:chat:agent")
@@ -161,7 +163,7 @@ class AiController(
     response.setHeader("Cache-Control", "no-cache")
     response.setHeader("X-Accel-Buffering", "no")
     try {
-      val reply = aiService.generate(req.agentCode, userMessage, principal.userId, principal.hospitalId)
+      val reply = aiService.generate(req.agentCode, userMessage, principal.userId, tenantResolver.pinOrDefault(principal, null))
       val chunks = reply.reply.split(Regex("(?<=\\s)|(?=\\s)")).filter { it.isNotBlank() }
       val writer = response.writer
       chunks.forEach { chunk ->

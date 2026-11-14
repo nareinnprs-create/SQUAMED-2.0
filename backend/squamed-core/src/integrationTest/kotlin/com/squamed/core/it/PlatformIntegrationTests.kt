@@ -1519,6 +1519,109 @@ class PlatformIntegrationTests {
   }
 
   @Nested
+  inner class TenantIsolationTests {
+    // ADR-13 stage 1 denial suite: the tenant comes from user_role assignments at login,
+    // never from the client; hospital-bound users cannot read or write across tenants.
+    private fun hospitalLogin(
+      email: String,
+      claimHospitalId: String? = null,
+    ): String {
+      val login =
+        api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123", "hospitalId" to claimHospitalId))
+      assert2xx(login, "login $email: ${login.body.take(300)}")
+      return `data`(login)["accessToken"].asText()
+    }
+
+    private fun registerDoctor(hospitalId: String): String {
+      val s = suffix()
+      val email = "doctor-$s@test.local"
+      val register =
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Doc",
+            "lastName" to "Ten$s",
+            "roles" to listOf("DOCTOR"),
+            "hospitalId" to hospitalId,
+          ),
+        )
+      assert2xx(register, "register doctor $email: ${register.body.take(300)}")
+      return email
+    }
+
+    private fun createPatient(
+      token: String,
+      claimHospitalId: String? = null,
+    ): JsonNode {
+      val s = suffix()
+      val r =
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json(
+            "firstName" to "Tnt",
+            "lastName" to "Iso$s",
+            "gender" to "male",
+            "dateOfBirth" to "1990-01-01",
+            "hospitalId" to claimHospitalId,
+          ),
+          token,
+        )
+      assert2xx(r, "tenant patient create: ${r.body.take(300)}")
+      return `data`(r)["patient"]
+    }
+
+    @Test
+    fun crossTenantAccessIsDeniedAndServerPinsTenant() {
+      val admin = adminToken()
+      val s = suffix()
+      val h1r = api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Tenant A $s", "code" to "TA-$s", "country" to "Qatar"), admin)
+      assert2xx(h1r, "create hospital A")
+      val h1 = `data`(h1r)["id"].asText()
+      val h2r = api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Tenant B $s", "code" to "TB-$s", "country" to "Qatar"), admin)
+      assert2xx(h2r, "create hospital B")
+      val h2 = `data`(h2r)["id"].asText()
+
+      val doc1Email = registerDoctor(h1)
+      val doc1 = hospitalLogin(doc1Email)
+
+      // Server-side tenant resolution: create without any hospital claim.
+      val p1 = createPatient(doc1)
+      assertEquals(h1, p1["hospitalId"].asText(), "patient tenant must be resolved server-side from user_role: $p1")
+
+      // Client claiming a foreign hospital on the payload must be overridden.
+      val p2 = createPatient(doc1, h2)
+      assertEquals(h1, p2["hospitalId"].asText(), "client hospital claim must not override server-resolved tenant: $p2")
+
+      // Login claiming a foreign hospital must not widen the token's tenant.
+      val claimed = hospitalLogin(doc1Email, h2)
+      val p3 = createPatient(claimed)
+      assertEquals(h1, p3["hospitalId"].asText(), "claimed hospital at login must not widen tenant: $p3")
+
+      // Search pinned to the own hospital even when a foreign id is requested.
+      val search = api(HttpMethod.GET, "/api/v1/patients?hospitalId=$h2", token = doc1)
+      assert2xx(search, "tenant-scoped search")
+      val rows = `data`(search)
+      assertTrue(rows.isArray, "search must return an array")
+      assertTrue(rows.toList().none { it["hospitalId"].asText() == h2 }, "cross-tenant patients must not leak into search: ${search.body.take(300)}")
+
+      // Foreign hospital-config path identifiers are denied for hospital-bound users.
+      val tree = api(HttpMethod.GET, "/api/v1/hospital-config/hospitals/$h2/tree", token = doc1)
+      assertEquals(403, tree.status, "foreign hospital-config tree must be denied: ${tree.body.take(300)}")
+      val dept =
+        api(HttpMethod.POST, "/api/v1/hospital-config/hospitals/$h2/departments", json("name" to "Trespass", "code" to "TR-$s", "type" to "outpatient"), doc1)
+      assertEquals(403, dept.status, "foreign hospital-config write must be denied: ${dept.body.take(300)}")
+
+      // Platform admin (null hospital) keeps unrestricted access to both tenants.
+      assert2xx(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals/$h1/tree", token = admin), "admin tree A")
+      assert2xx(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals/$h2/tree", token = admin), "admin tree B")
+    }
+  }
+
+  @Nested
   inner class CoverageTests {
     private fun totpCode(secretBase64: String): String {
       val secret =

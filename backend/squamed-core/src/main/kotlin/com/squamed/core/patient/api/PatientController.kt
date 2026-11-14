@@ -1,6 +1,7 @@
 package com.squamed.core.patient.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.patient.service.EmpiMatcher
@@ -25,6 +26,7 @@ import java.util.UUID
 class PatientController(
   private val patientService: PatientService,
   private val empiMatcher: EmpiMatcher,
+  private val tenantResolver: TenantResolver,
 ) {
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
@@ -32,9 +34,12 @@ class PatientController(
   @Transactional
   fun create(
     @RequestBody dto: PatientCreateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<PatientCreateResponse> {
-    val matches = empiMatcher.findMatches(dto)
-    val patient = patientService.create(dto)
+    // ADR-13: hospital users are pinned to their own tenant; admins may choose or default to primary.
+    val pinned = dto.copy(hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId))
+    val matches = empiMatcher.findMatches(pinned)
+    val patient = patientService.create(pinned)
     return ApiResponse.ok(PatientCreateResponse(patient = patient, matches = matches))
   }
 
@@ -59,7 +64,8 @@ class PatientController(
   fun search(
     @RequestParam(name = "query", required = false) query: String?,
     @RequestParam(name = "hospitalId", required = false) hospitalId: UUID?,
-  ): ApiResponse<List<PatientSummaryDto>> = ApiResponse.ok(patientService.search(query, hospitalId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<PatientSummaryDto>> = ApiResponse.ok(patientService.search(query, tenantResolver.pin(principal, hospitalId)))
 
   @GetMapping("/{id}/allergies")
   @RequiresPermission("patient:read:patient")

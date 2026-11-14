@@ -46,6 +46,7 @@ class AuthService(
     val lastName: String,
     val phone: String? = null,
     val roles: List<String> = emptyList(),
+    val hospitalId: UUID? = null,
   )
 
   data class LoginResult(
@@ -106,6 +107,7 @@ class AuthService(
             UserRole(
               userId = user.id ?: throw IllegalStateException("USER_ID_MISSING"),
               role = role,
+              hospitalId = request.hospitalId,
             ),
           )
         }
@@ -154,7 +156,7 @@ class AuthService(
       return LoginResult(LoginStatus.MFA_REQUIRED, mfaRequired = true, mfaToken = mfaToken, userId = user.id)
     }
 
-    return completeLogin(user, ipAddress, userAgent, hospitalId)
+    return completeLogin(user, ipAddress, userAgent, resolveHospital(user, hospitalId))
   }
 
   @Transactional
@@ -171,7 +173,7 @@ class AuthService(
     if (!totpService.validateCode(secret, code.trim())) {
       return LoginResult(LoginStatus.INVALID_CREDENTIALS)
     }
-    return completeLogin(user, ipAddress, userAgent, hospitalId)
+    return completeLogin(user, ipAddress, userAgent, resolveHospital(user, hospitalId))
   }
 
   @Transactional
@@ -218,6 +220,27 @@ class AuthService(
       if (claims != null) {
         tokenBlacklistService.blacklistAccessToken(claims.sessionId.toString(), claims.userId, Duration.ofMinutes(15))
       }
+    }
+  }
+
+  /**
+   * ADR-13 stage 1: the tenant is derived server-side from user_role assignments, never trusted
+   * from the client. A claimed hospital is honored only for multi-hospital users who are assigned
+   * to it. Unassigned users (platform admin) keep null = unrestricted.
+   */
+  private fun resolveHospital(
+    user: UserAccount,
+    claimed: UUID?,
+  ): UUID? {
+    val assigned =
+      userRoleRepository
+        .findByUserId(user.id ?: throw IllegalStateException("USER_ID_MISSING"))
+        .mapNotNull { it.hospitalId }
+        .distinct()
+    return when {
+      assigned.size == 1 -> assigned[0]
+      assigned.size > 1 -> if (claimed != null && claimed in assigned) claimed else null
+      else -> null
     }
   }
 

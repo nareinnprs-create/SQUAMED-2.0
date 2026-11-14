@@ -1,6 +1,7 @@
 package com.squamed.core.encounter.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.encounter.service.EncounterService
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
@@ -22,6 +23,7 @@ import java.util.UUID
 @RequestMapping("/api/v1/encounters")
 class EncounterController(
   private val encounterService: EncounterService,
+  private val tenantResolver: TenantResolver,
 ) {
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
@@ -29,6 +31,7 @@ class EncounterController(
   @Transactional
   fun startEncounter(
     @RequestBody dto: StartEncounterDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<EncounterView> {
     val encounter =
       encounterService.startEncounter(
@@ -38,6 +41,7 @@ class EncounterController(
         departmentId = dto.departmentId,
         reason = dto.reason,
         chiefComplaint = dto.chiefComplaint,
+        hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId),
       )
     return ApiResponse.ok(encounter)
   }

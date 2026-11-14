@@ -17,6 +17,7 @@ data class CreateLabOrderDto(
   val priority: String? = null,
   val clinicalNote: String? = null,
   val orderedBy: UUID? = null,
+  val hospitalId: UUID? = null,
 )
 
 data class LabTestResultInput(

@@ -1,6 +1,7 @@
 package com.squamed.core.surgery.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.surgery.service.SurgeryService
@@ -22,7 +23,9 @@ import java.util.UUID
 @RequestMapping("/api/v1/surgery")
 class SurgeryController(
   private val surgeryService: SurgeryService,
+  private val tenantResolver: TenantResolver,
 ) {
+  // ADR-13: hospital users are pinned to their tenant; admins may choose via dto.hospitalId.
   @PostMapping("/ot-rooms")
   @ResponseStatus(HttpStatus.CREATED)
   @RequiresPermission("surgery:write:surgery")
@@ -30,14 +33,16 @@ class SurgeryController(
   fun createOtRoom(
     @RequestBody dto: OtRoomCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<OtRoomView> = ApiResponse.ok(surgeryService.createOtRoom(dto, principal.userId))
+  ): ApiResponse<OtRoomView> =
+    ApiResponse.ok(surgeryService.createOtRoom(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/ot-rooms")
   @RequiresPermission("surgery:read:surgery")
   @Transactional(readOnly = true)
   fun listOtRooms(
     @RequestParam(name = "hospitalId", required = false) hospitalId: UUID?,
-  ): ApiResponse<List<OtRoomView>> = ApiResponse.ok(surgeryService.listOtRooms(hospitalId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<OtRoomView>> = ApiResponse.ok(surgeryService.listOtRooms(tenantResolver.pin(principal, hospitalId)))
 
   @PostMapping("/schedules")
   @ResponseStatus(HttpStatus.CREATED)
@@ -46,7 +51,8 @@ class SurgeryController(
   fun createSchedule(
     @RequestBody dto: SurgeryScheduleCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<SurgeryScheduleView> = ApiResponse.ok(surgeryService.createSchedule(dto, principal.userId))
+  ): ApiResponse<SurgeryScheduleView> =
+    ApiResponse.ok(surgeryService.createSchedule(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/schedules")
   @RequiresPermission("surgery:read:surgery")

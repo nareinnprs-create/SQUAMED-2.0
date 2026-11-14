@@ -28,11 +28,13 @@ class LabService(
     patientId: UUID,
     encounterId: UUID? = null,
     dto: CreateLabOrderDto,
+    hospitalId: UUID,
   ): LabOrderDetailView {
     val now = Instant.now()
     val saved =
       labOrderRepository.save(
         LabOrder(
+          hospitalId = hospitalId,
           patientId = patientId,
           encounterId = encounterId,
           orderNumber = generateOrderNumber(),

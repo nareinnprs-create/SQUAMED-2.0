@@ -1,6 +1,7 @@
 package com.squamed.core.emergency.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.emergency.service.EmergencyService
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
@@ -23,6 +24,7 @@ import java.util.UUID
 @RequestMapping("/api/v1/emergency")
 class EmergencyController(
   private val emergencyService: EmergencyService,
+  private val tenantResolver: TenantResolver,
 ) {
   @PostMapping("/registrations")
   @ResponseStatus(HttpStatus.CREATED)
@@ -31,7 +33,8 @@ class EmergencyController(
   fun register(
     @RequestBody dto: EmergencyRegisterDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<EmergencyRegistrationView> = ApiResponse.ok(emergencyService.register(dto, principal.userId))
+  ): ApiResponse<EmergencyRegistrationView> =
+    ApiResponse.ok(emergencyService.register(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/registrations")
   @RequiresPermission("emergency:read:emergency")

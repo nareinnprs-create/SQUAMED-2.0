@@ -5040,6 +5040,8 @@ export interface components {
             createdAt?: string;
         };
         ServicePointCreateDto: {
+            /** Format: uuid */
+            hospitalId?: string;
             name?: string;
             code?: string;
             queueType?: string;
@@ -5065,6 +5067,8 @@ export interface components {
             status: string;
         };
         QueueCreateDto: {
+            /** Format: uuid */
+            hospitalId?: string;
             queueType?: string;
             /** Format: uuid */
             patientId?: string;
@@ -5623,6 +5627,8 @@ export interface components {
             clinicalNote?: string;
             /** Format: uuid */
             orderedBy?: string;
+            /** Format: uuid */
+            hospitalId?: string;
         };
         LabTestInput: {
             testCode: string;
@@ -6067,6 +6073,8 @@ export interface components {
             departmentId?: string;
             reason?: string;
             chiefComplaint?: string;
+            /** Format: uuid */
+            hospitalId?: string;
         };
         ApiResponseEncounterView: {
             data?: components["schemas"]["EncounterView"];
@@ -6879,6 +6887,8 @@ export interface components {
         };
         PostChargeDto: {
             /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
             patientId?: string;
             /** Format: uuid */
             visitId?: string;
@@ -6936,6 +6946,7 @@ export interface components {
             lastName: string;
             phone?: string;
             roles: string[];
+            hospitalId?: string;
         };
         RefreshDto: {
             refreshToken: string;
@@ -16304,4 +16315,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: d2b0238ec9c2622a123f119bb841c794aaa222664ce0bf35e2ba9aaf4ee750bb
+// openapi snapshot sha256: ac99c8080646297d23b05dbed0cd10e84fa8ddee6a78cfdcae2f1575b26dacc0

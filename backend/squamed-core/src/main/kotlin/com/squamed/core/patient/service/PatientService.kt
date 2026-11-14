@@ -505,6 +505,7 @@ class PatientService(
 
   @Transactional
   fun findOrCreateFromHl7(
+    hospitalId: UUID,
     mrn: String,
     firstName: String?,
     middleName: String?,
@@ -518,6 +519,7 @@ class PatientService(
     val detail =
       create(
         PatientCreateDto(
+          hospitalId = hospitalId,
           mrn = mrn,
           firstName = firstName,
           middleName = middleName,

@@ -1,6 +1,7 @@
 package com.squamed.core.task.api
 
 import com.squamed.core.common.api.ApiResponse
+import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.task.service.TaskService
@@ -23,6 +24,7 @@ import java.util.UUID
 @RequestMapping("/api/v1/tasks")
 class TaskController(
   private val taskService: TaskService,
+  private val tenantResolver: TenantResolver,
 ) {
   @GetMapping
   @RequiresPermission("task:manage:task")
@@ -39,7 +41,8 @@ class TaskController(
   fun createTask(
     @RequestBody dto: TaskCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<TaskView> = ApiResponse.ok(taskService.createTask(dto, principal.userId))
+  ): ApiResponse<TaskView> =
+    ApiResponse.ok(taskService.createTask(dto.copy(hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId)), principal.userId))
 
   @GetMapping("/{id}")
   @RequiresPermission("task:manage:task")

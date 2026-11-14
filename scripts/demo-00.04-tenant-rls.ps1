@@ -9,7 +9,7 @@ $fail = 0
 
 function Check($name, $cond, $detail) {
   if ($cond) { $script:pass++; Write-Host "PASS $name" }
-  else { $fail++; Write-Host "FAIL $name :: $detail" }
+  else { $script:fail++; Write-Host "FAIL $name :: $detail" }
 }
 
 $suffix = Get-Date -Format "yyyyMMddHHmmss"
@@ -58,13 +58,13 @@ $search = Invoke-RestMethod -Method Get -Uri "$base/patients?hospitalId=$h2" -He
 $leak = @($search.data | Where-Object { $_.hospitalId -eq $h2 })
 Check "cross-tenant search denied" ($leak.Count -eq 0) "$($leak.Count) B-tenant rows leaked"
 
-# 7. foreign hospital-config read/write -> 403 (RBAC + tenant)
-$tree = Invoke-RestMethod -Method Get -Uri "$base/hospital-config/hospitals/$h2/tree" -Headers @{ Authorization = "Bearer $doc" } -SkipHttpErrorCheck
-$dept = Invoke-RestMethod -Method Post -Uri "$base/hospital-config/hospitals/$h2/departments" -Headers @{ Authorization = "Bearer $doc" } `
+# 7. foreign hospital-config read/write -> 403 (RBAC + tenant). -SkipHttpErrorCheck returns the
+# parsed body only, so use Invoke-WebRequest for the numeric status + assert the tenant denial code.
+$treeRes = Invoke-WebRequest -Method Get -Uri "$base/hospital-config/hospitals/$h2/tree" -Headers @{ Authorization = "Bearer $doc" } -SkipHttpErrorCheck
+$deptRes = Invoke-WebRequest -Method Post -Uri "$base/hospital-config/hospitals/$h2/departments" -Headers @{ Authorization = "Bearer $doc" } `
   -ContentType "application/json" -Body (@{ name = "Trespass"; code = "TR-$suffix"; type = "outpatient" } | ConvertTo-Json) -SkipHttpErrorCheck
-# GlobalExceptionHandler returns 403 with success=false; Invoke-RestMethod surfaces it as a response object with .status
-Check "foreign tree 403" ($tree.status -eq 403 -or $tree.success -eq $false) ($tree | ConvertTo-Json -Depth 3)
-Check "foreign department write 403" ($dept.status -eq 403 -or $dept.success -eq $false) ($dept | ConvertTo-Json -Depth 3)
+Check "foreign tree 403" ($treeRes.StatusCode -eq 403 -and $treeRes.Content -match "TENANT_FORBIDDEN") ("HTTP $($treeRes.StatusCode): $($treeRes.Content)")
+Check "foreign department write 403" ($deptRes.StatusCode -eq 403 -and $deptRes.Content -match "TENANT_FORBIDDEN") ("HTTP $($deptRes.StatusCode): $($deptRes.Content)")
 
 # 8. platform admin keeps unrestricted access to both tenants
 $t1 = Invoke-RestMethod -Method Get -Uri "$base/hospital-config/hospitals/$h1/tree" -Headers @{ Authorization = "Bearer $admin" } -SkipHttpErrorCheck

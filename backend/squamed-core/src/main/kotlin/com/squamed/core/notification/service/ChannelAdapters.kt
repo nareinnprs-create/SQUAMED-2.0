@@ -12,7 +12,7 @@ import java.time.Duration
 
 /**
  * Outbound channel adapters (chunk-00 item 12): email via SMTP (Spring Mail), SMS + WhatsApp via
- * generic HTTP provider endpoints, push as the chunk's named stub. Unconfigured providers return
+ * generic HTTP provider endpoints, push as the chunk's named placeholder. Unconfigured providers return
  * `null` from `send` and the dispatch service records the honest outcome
  * (SKIPPED_NO_PROVIDER / SKIPPED_NO_SMTP_CONFIG) — E2/E3 credentials land as config, not code.
  */
@@ -82,8 +82,8 @@ class ChannelAdapters(
     return "smtp"
   }
 
-  /** Push: the chunk names this a stub — requests are shaped for an FCM-like endpoint; unconfigured is honest-skip.
-   * shortcut: push stays request-shaped only (chunk-00 item 12 "push stub"), upgrade when a push provider is chosen. */
+  /** Push: the chunk names this a placeholder - requests are shaped for an FCM-like endpoint; unconfigured is honest-skip.
+   * shortcut: push stays request-shaped only (chunk-00 item 12 wording), upgrade when a push provider is chosen. */
   fun sendPush(
     to: String,
     title: String,

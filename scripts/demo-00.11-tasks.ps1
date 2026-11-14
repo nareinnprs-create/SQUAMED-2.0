@@ -63,10 +63,15 @@ Api PATCH "/api/v1/tasks/$($task.id)/status" @{ status = 'in_progress' } $doctor
 $esc = (Api POST "/api/v1/tasks/$($task.id)/escalate" @{ reason = 'second opinion' } $doctor).data
 Check 'manual escalation (escalated, count 1)' ($esc.status -eq 'escalated' -and $esc.escalationCount -eq 1)
 
-# 8 task.escalated event in the outbox
-Start-Sleep -Seconds 3
-$outbox = Api GET '/api/v1/admin/events/outbox?limit=100' $null $admin
-$escEvent = @($outbox.data | Where-Object { $_.eventType -eq 'task.escalated' -and $_.hospitalId -eq $h })
+# 8 task.escalated event in the outbox (poll up to 30s; dispatcher lag)
+$escEvent = $null
+$deadline = (Get-Date).AddSeconds(30)
+while ((Get-Date) -lt $deadline) {
+  Start-Sleep -Seconds 2
+  $outbox = Api GET '/api/v1/admin/events/outbox?limit=200' $null $admin
+  $escEvent = @($outbox.data | Where-Object { $_.eventType -eq 'task.escalated' -and $_.hospitalId -eq $h -and $_.status -eq 'SENT' })
+  if ($escEvent.Count -gt 0) { break }
+}
 Check 'task.escalated in outbox' ($escEvent.Count -gt 0)
 
 # 9 overdue monitor lists the past-due task

@@ -4,6 +4,8 @@
 # merges. Gate IDs match .gate/GATES.md; scripts/gate-parity.mjs fails the build if the
 # two drift. Gate changes require a protocol 03 §7 amendment (see .gate/README.md) —
 # never edit thresholds/steps here to unblock a build.
+# SC-11 (§7 amendment, product-owner approved 2026-11-14): every job carries
+# timeout-minutes — a hang must fail its job, never burn the 6 h default.
 name: CI
 
 on:
@@ -21,6 +23,7 @@ jobs:
   gate-parity:
     name: Gate parity (GATES.md vs ci.yml)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,6 +39,7 @@ jobs:
   stub-grep:
     name: Zero-stub grep
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Scan source paths for banned markers
@@ -67,6 +71,7 @@ jobs:
   detect:
     name: Detect source trees
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       backend: ${{ steps.paths.outputs.backend }}
       frontend: ${{ steps.paths.outputs.frontend }}
@@ -90,6 +95,7 @@ jobs:
   backend-gates:
     name: Backend gates (ktlint + test + ArchUnit)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: detect
     if: needs.detect.outputs.backend == 'true'
     defaults:
@@ -114,6 +120,7 @@ jobs:
   frontend-gates:
     name: Frontend gates (typecheck + lint + test)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: detect
     if: needs.detect.outputs.frontend == 'true'
     steps:
@@ -140,6 +147,7 @@ jobs:
   a11y-perf-gates:
     name: Accessibility + performance gates (axe + Lighthouse + visual)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: detect
     if: needs.detect.outputs.web == 'true'
     steps:
@@ -172,6 +180,7 @@ jobs:
   integration-gates:
     name: Integration gates (compose + integration tests + coverage)
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     needs: detect
     if: needs.detect.outputs.compose == 'true'
     steps:

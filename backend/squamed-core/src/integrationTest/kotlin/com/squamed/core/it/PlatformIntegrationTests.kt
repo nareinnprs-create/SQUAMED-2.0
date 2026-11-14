@@ -1324,6 +1324,7 @@ class PlatformIntegrationTests {
           "/api/v1/pharmacy",
           "/api/v1/billing",
           "/api/v1/tasks",
+          "/api/v1/consents",
           "/api/v1/notifications",
           "/api/v1/communication",
           "/api/v1/workflow",
@@ -4752,6 +4753,8 @@ class PlatformIntegrationTests {
       assertTrue(catalog.any { it["name"].asText() == "NotificationDispatched" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "AuditChainBroken" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "TaskEscalated" && it["status"].asText() == "EMITTED" })
+      assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" })
+      assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" })
 
       assertEquals(403, api(HttpMethod.GET, "/api/v1/admin/events/outbox", token = u1Token).status, "doctor token denied event ops")
     }
@@ -5116,6 +5119,234 @@ class PlatformIntegrationTests {
 
       // Doctor (task:manage since V50) reads the inbox; the auditor role is out of scope here.
       assert2xx(api(HttpMethod.GET, "/api/v1/tasks?assigneeId=$doctorId", token = doctor), "doctor reads own inbox")
+    }
+  }
+
+  @Nested
+  inner class ConsentNotificationTests {
+    @Test
+    fun consentNotificationCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+
+      // Fresh hospitals: the consent workforce (doctor, granted via V51) + an outsider.
+      val h =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Consent H $s", "code" to "CN1-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val hOut =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Consent Out $s", "code" to "CN2-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+
+      fun doctorIn(hospitalId: String): Pair<String, String> {
+        val email = "consent-doc-$s-${UUID.randomUUID().toString().take(6)}@test.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to "Doc",
+              "lastName" to "Consent$s",
+              "roles" to listOf("DOCTOR"),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register consent doctor",
+        )
+        val token =
+          `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+        val userId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = token))["userId"].asText()
+        return token to userId
+      }
+
+      fun pollSent(eventType: String) {
+        var row: JsonNode? = null
+        val deadline = System.currentTimeMillis() + 30_000
+        while (System.currentTimeMillis() < deadline) {
+          val rows = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = admin))
+          row = rows.firstOrNull { it["eventType"].asText() == eventType && it["hospitalId"].asText() == h }
+          if (row != null && row["status"].asText() == "SENT") return
+          Thread.sleep(500)
+        }
+        assertNotNull(row, "$eventType published to the outbox")
+        assertEquals("SENT", row!!["status"].asText(), "$eventType relayed by the dispatcher")
+      }
+
+      val (doctor, doctorId) = doctorIn(h)
+      val (outsider, _) = doctorIn(hOut)
+
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Consent",
+              "lastName" to "Subject$s",
+              "gender" to "male",
+              "dateOfBirth" to "1990-02-02",
+              "phone" to "560$s".take(12),
+              "qid" to "9$s".take(11),
+              "nationality" to "Qatar",
+              "city" to "Doha",
+            ),
+            doctor,
+          ),
+        )["patient"]["id"].asText()
+
+      // Capture a COMMUNICATIONS consent (item 11): eSign-ready signature + per-channel opt-ins.
+      val consent =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/consents",
+            json(
+              "patientId" to patient,
+              "purpose" to "communications",
+              "scope" to "appointment reminders via sms/email",
+              "signatureData" to "data:image/png;base64,iVBORw0KGgo=",
+              "signedByName" to "Consent Subject$s",
+              "channelOptIns" to
+                listOf(
+                  mapOf("channel" to "sms", "optedIn" to true),
+                  mapOf("channel" to "email", "optedIn" to true),
+                ),
+            ),
+            doctor,
+          ),
+        )
+      val consentId = consent["id"].asText()
+      assertEquals("granted", consent["status"].asText(), "captured consent granted")
+      assertTrue(consent["signaturePresent"].asBoolean(), "signature captured (eSign-ready)")
+      assertEquals(2, consent["channelOptIns"].size(), "per-channel opt-ins stored")
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/consents", json("patientId" to patient, "purpose" to "banana"), doctor).status,
+        "invalid purpose rejected",
+      )
+
+      // consent.captured fans out through the fabric (00.09 outbox).
+      pollSent("consent.captured")
+
+      fun send(
+        channel: String,
+        title: String,
+        extra: Map<String, Any?> = mapOf("recipientAddress" to "+974560000000"),
+      ): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/notifications/send",
+            json(
+              "patientId" to patient,
+              "channel" to channel,
+              "type" to "appointment",
+              "title" to title,
+              "body" to "Visit update $s",
+              *extra.entries.map { it.key to it.value!! }.toTypedArray(),
+            ),
+            doctor,
+          ),
+        )["status"].asText()
+
+      // DND hours from config (item 12): publish a window that always covers "now" in UTC
+      // (wraps midnight when the hour is 23), so the gate defers regardless of run time.
+      val utcHour =
+        java.time.OffsetDateTime
+          .now(java.time.ZoneOffset.UTC)
+          .hour
+      assert2xx(
+        api(
+          HttpMethod.PUT,
+          "/api/v1/hospital-config/hospitals/$h/config/dnd-hours",
+          json("enabled" to true, "startHour" to utcHour, "endHour" to (utcHour + 1) % 24),
+          admin,
+        ),
+        "publish dnd-hours config",
+      )
+      assertEquals("DEFERRED_DND", send("sms", "DND block $s"), "send inside the DND window defers")
+
+      // DND off: providers are unconfigured in this environment -> honest skips (E2/E3 pending).
+      assert2xx(
+        api(HttpMethod.PUT, "/api/v1/hospital-config/hospitals/$h/config/dnd-hours", json("enabled" to false, "startHour" to 0, "endHour" to 0), admin),
+        "disable dnd-hours config",
+      )
+      assertEquals("SKIPPED_NO_PROVIDER", send("sms", "No provider $s"), "unconfigured sms provider skips")
+      assertEquals(
+        "SKIPPED_NO_SMTP_CONFIG",
+        send("email", "No smtp $s", mapOf("recipientAddress" to "consent-$s@test.local")),
+        "no SMTP host -> honest skip",
+      )
+
+      // in_app dispatch writes the in-app row directly (the 00.09 event-driven path is untouched).
+      val inApp =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/notifications/send",
+            json(
+              "patientId" to patient,
+              "recipientId" to doctorId,
+              "channel" to "in_app",
+              "type" to "general",
+              "title" to "In-app hello $s",
+              "body" to "direct dispatch",
+            ),
+            doctor,
+          ),
+        )
+      assertEquals("SENT", inApp["status"].asText(), "in_app dispatch sent")
+      val inbox = `data`(api(HttpMethod.GET, "/api/v1/notifications", token = doctor))
+      assertTrue(inbox.any { it["title"].asText() == "In-app hello $s" }, "in_app row lands in the doctor inbox")
+
+      // Withdrawal (item 11): effective status flips, the channel gate closes, consent.withdrawn fans out.
+      val withdrawn = `data`(api(HttpMethod.POST, "/api/v1/consents/$consentId/withdraw", json("reason" to "patient opted out"), doctor))
+      assertEquals("withdrawn", withdrawn["status"].asText(), "withdrawal recorded")
+      pollSent("consent.withdrawn")
+      assertEquals("BLOCKED_NO_CONSENT", send("sms", "After withdraw $s"), "consent gate blocks after withdrawal")
+
+      // Expiry is derived at read time (no sweep job): an already-past expiresAt reads as expired.
+      val expired =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/consents",
+            json(
+              "patientId" to patient,
+              "purpose" to "communications",
+              "expiresAt" to Instant.now().minusSeconds(60).toString(),
+              "channelOptIns" to listOf(mapOf("channel" to "sms", "optedIn" to true)),
+            ),
+            doctor,
+          ),
+        )
+      assertEquals("expired", expired["status"].asText(), "expiry derived, not swept")
+      assertEquals("BLOCKED_NO_CONSENT", send("sms", "After expiry $s"), "consent gate blocks expired consent")
+
+      // Ledger: every outbound attempt recorded with its gate outcome (item 12).
+      val ledger = `data`(api(HttpMethod.GET, "/api/v1/notifications/requests?patientId=$patient", token = doctor))
+      val ledgerStatuses = ledger.map { it["status"].asText() }.toSet()
+      assertTrue(
+        ledgerStatuses.containsAll(setOf("SENT", "BLOCKED_NO_CONSENT", "DEFERRED_DND", "SKIPPED_NO_PROVIDER", "SKIPPED_NO_SMTP_CONFIG")),
+        "ledger lists all gate outcomes: $ledgerStatuses",
+      )
+
+      // Cross-tenant: the outsider sees neither the consent, the list, nor the ledger (no leak).
+      assertEquals(400, api(HttpMethod.GET, "/api/v1/consents/$consentId", token = outsider).status, "cross-hospital consent read denied")
+      assertTrue(`data`(api(HttpMethod.GET, "/api/v1/consents?patientId=$patient", token = outsider)).isEmpty(), "cross-hospital consent list leak denied")
+      assertTrue(
+        `data`(api(HttpMethod.GET, "/api/v1/notifications/requests?patientId=$patient", token = outsider)).isEmpty(),
+        "cross-hospital ledger leak denied",
+      )
+
+      // Catalog: consent.* now EMITTED in the 13-type v1 set.
+      val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
+      assertEquals(13, catalog.size(), "event catalog lists the v1 set: $catalog")
+      assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
+      assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")
     }
   }
 

@@ -29,7 +29,11 @@ export type CatalogKey =
   | 'imaging-procedures'
   | 'procedure-codes'
   | 'diagnosis-codes'
-  | 'charge-items';
+  | 'charge-items'
+  | 'vendors'
+  | 'equipment'
+  | 'employees'
+  | 'price-lists';
 
 export type CatalogFieldKind = 'text' | 'number';
 
@@ -110,13 +114,56 @@ export const CATALOGS: CatalogSpec[] = [
     ],
     fields: [CODE_FIELD, NAME_FIELD, { key: 'priceQar', label: 'Price (QAR)', kind: 'number' }],
   },
+  {
+    key: 'vendors',
+    label: 'Vendors',
+    details: [
+      { key: 'contactPerson', label: 'Contact' },
+      { key: 'phone', label: 'Phone' },
+    ],
+    fields: [CODE_FIELD, NAME_FIELD, { key: 'contactPerson', label: 'Contact person' }, { key: 'phone', label: 'Phone' }, { key: 'taxId', label: 'Tax ID' }],
+  },
+  {
+    key: 'equipment',
+    label: 'Equipment',
+    details: [
+      { key: 'category', label: 'Category' },
+      { key: 'serialNumber', label: 'Serial no.' },
+    ],
+    fields: [CODE_FIELD, NAME_FIELD, { key: 'category', label: 'Category' }, { key: 'serialNumber', label: 'Serial number' }, { key: 'location', label: 'Location' }],
+  },
+  {
+    key: 'employees',
+    label: 'Employees',
+    details: [
+      { key: 'designation', label: 'Designation' },
+      { key: 'licenseNumber', label: 'License no.' },
+    ],
+    fields: [
+      CODE_FIELD,
+      { key: 'firstName', label: 'First name', required: true },
+      { key: 'lastName', label: 'Last name', required: true },
+      { key: 'designation', label: 'Designation' },
+      { key: 'qualification', label: 'Qualification' },
+      { key: 'licenseNumber', label: 'License number' },
+    ],
+  },
+  {
+    key: 'price-lists',
+    label: 'Price lists',
+    details: [
+      { key: 'currency', label: 'Currency' },
+      { key: 'validFrom', label: 'Valid from' },
+    ],
+    fields: [CODE_FIELD, NAME_FIELD, { key: 'currency', label: 'Currency' }],
+  },
 ];
 
 export const PAGE_SIZE = 20;
 
 export type ActiveFilter = 'all' | 'active' | 'inactive';
 
-/** One wide shape covering the six master-data catalog DTOs. */
+/** One wide shape covering the master-data catalog and registry DTOs. */
 export interface CatalogDto {
   id: string | null;
   code: string | null;
@@ -131,6 +178,18 @@ export interface CatalogDto {
   system?: string | null;
   chapter?: string | null;
   priceQar?: number | null;
+  contactPerson?: string | null;
+  phone?: string | null;
+  taxId?: string | null;
+  serialNumber?: string | null;
+  location?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  designation?: string | null;
+  qualification?: string | null;
+  licenseNumber?: string | null;
+  currency?: string | null;
+  validFrom?: string | null;
   isActive: boolean | null;
 }
 
@@ -166,7 +225,7 @@ export function catalogRowFrom(catalog: CatalogKey, dto: CatalogDto): CatalogRow
   return {
     id: dto.id,
     code: dto.code ?? '',
-    name: dto.name ?? '',
+    name: dto.name ?? [dto.firstName, dto.lastName].filter((v): v is string => !!v).join(' '),
     detail,
     isActive: dto.isActive ?? true,
   };

@@ -41,12 +41,15 @@ async function scanRoute(context, route) {
     await page.addScriptTag({
       path: require.resolve('axe-core/axe.min.js'),
     });
-    const results = await page.evaluate(() =>
-      window.axe.run(document, {
-        resultTypes: ['violations'],
-        elementRef: false,
-      }),
-    );
+    const results = await Promise.race([
+      page.evaluate(() =>
+        window.axe.run(document, {
+          resultTypes: ['violations'],
+          elementRef: false,
+        }),
+      ),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('axe.run did not settle within 90s')), 90_000)),
+    ]);
     return results;
   } finally {
     await page.close();
@@ -67,6 +70,14 @@ function violationRows(results) {
 }
 
 async function main() {
+  // Bound the whole gate — evaluate() and addScriptTag() have no timeout, a wedged
+  // runner must never hold the CI step open.
+  setTimeout(() => {
+    console.error('GATE WATCHDOG: axe scan exceeded 8 minutes, terminating (hang guard)');
+    process.exit(1);
+  }, 8 * 60_000).unref();
+
+  console.log('starting production server');
   ensureChromium();
   const server = await startWebServer();
   const browser = await chromium.launch();
@@ -78,7 +89,10 @@ async function main() {
     console.log(`axe-core ${axeVersion} — scanning ${SCAN_ROUTES.map((route) => route.path).join(', ')}`);
     const allResults = [];
     for (const route of SCAN_ROUTES) {
+      console.log(`scanning ${route.path}`);
+      const startedAt = Date.now();
       const results = await scanRoute(context, route);
+      console.log(`axe run ${route.path} done in ${Date.now() - startedAt}ms`);
       allResults.push({ route, results });
     }
 
@@ -110,6 +124,9 @@ async function main() {
     await browser.close();
     server.stop();
   }
+  // 250ms grace lets piped stdout flush, then hard-exits so orphaned
+  // `next start` pipes can never keep the step alive.
+  setTimeout(() => process.exit(process.exitCode ?? 0), 250).unref();
 }
 
 main().catch((error) => {

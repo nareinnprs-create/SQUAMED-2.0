@@ -36,6 +36,13 @@ function printTable(headers, rows) {
 }
 
 async function main() {
+  // Bound the whole gate — Lighthouse internals have no timeout, a wedged
+  // runner must never hold the CI step open.
+  setTimeout(() => {
+    console.error('GATE WATCHDOG: lighthouse budget check exceeded 8 minutes, terminating (hang guard)');
+    process.exit(1);
+  }, 8 * 60_000).unref();
+
   ensureChromium();
   const budgets = JSON.parse(await readFile(budgetsPath, 'utf8'));
   const target = `${BASE_URL}${budgets.url}`;
@@ -110,6 +117,9 @@ async function main() {
     if (chrome) await chrome.kill();
     server.stop();
   }
+  // 250ms grace lets piped stdout flush, then hard-exits so orphaned
+  // `next start` pipes can never keep the step alive.
+  setTimeout(() => process.exit(process.exitCode ?? 0), 250).unref();
 }
 
 main().catch((error) => {

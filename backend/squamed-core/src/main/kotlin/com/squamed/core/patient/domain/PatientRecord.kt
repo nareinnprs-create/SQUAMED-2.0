@@ -4,6 +4,7 @@ import com.squamed.core.common.domain.BaseEntity
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Table
+import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
@@ -96,4 +97,9 @@ class PatientRecord(
   var recordsStatus: String = "active",
   @Column(name = "is_unknown", nullable = false)
   var isUnknown: Boolean = false,
+  /** V47 merge archive: survivor this record was merged into (row kept for reversibility). */
+  @Column(name = "merged_into")
+  var mergedInto: UUID? = null,
+  @Column(name = "merged_at")
+  var mergedAt: Instant? = null,
 ) : BaseEntity()

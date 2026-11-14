@@ -19,8 +19,12 @@ class EmpiMatcher(
     private const val POSSIBLE_MATCH_THRESHOLD = 60
   }
 
-  fun findMatches(dto: PatientCreateDto): List<MatchCandidateDto> {
-    val candidates = collectCandidates(dto)
+  fun findMatches(
+    dto: PatientCreateDto,
+    hospitalId: UUID?,
+  ): List<MatchCandidateDto> {
+    // ADR-13: candidate pool is pinned to the caller's hospital — no cross-tenant leak.
+    val candidates = collectCandidates(dto).filter { hospitalId == null || it.hospitalId == hospitalId }
     val identifierByPatientId =
       candidates
         .mapNotNull { it.id }

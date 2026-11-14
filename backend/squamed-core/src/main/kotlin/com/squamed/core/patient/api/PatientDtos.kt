@@ -3,8 +3,10 @@ package com.squamed.core.patient.api
 import com.squamed.core.patient.domain.Address
 import com.squamed.core.patient.domain.Allergy
 import com.squamed.core.patient.domain.ContactPoint
+import com.squamed.core.patient.domain.EmpiReview
 import com.squamed.core.patient.domain.MedicalHistory
 import com.squamed.core.patient.domain.PatientIdentifier
+import com.squamed.core.patient.domain.PatientMergeLog
 import com.squamed.core.patient.domain.PatientNote
 import com.squamed.core.patient.domain.PatientRecord
 import com.squamed.core.patient.domain.PatientRelationship
@@ -448,12 +450,92 @@ data class MergeResponseDto(
   val patient: PatientDetailDto,
   val moved: Map<String, Int> = emptyMap(),
   val skipped: List<String> = emptyList(),
+  /** patient_merge_log row executing the merge (null only in legacy callers). */
+  val mergeId: UUID? = null,
 )
 
 data class MergePatientsDto(
   val targetId: UUID,
   val duplicateId: UUID,
 )
+
+data class EmpiReviewDto(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val targetPatientId: UUID,
+  val duplicatePatientId: UUID,
+  val score: Int,
+  val matchedOn: List<String>,
+  val status: String,
+  val submittedBy: UUID,
+  val decidedBy: UUID? = null,
+  val decidedAt: Instant? = null,
+  val mergeId: UUID? = null,
+  val createdAt: Instant? = null,
+) {
+  companion object {
+    fun from(entity: EmpiReview) =
+      EmpiReviewDto(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        targetPatientId = entity.targetPatientId,
+        duplicatePatientId = entity.duplicatePatientId,
+        score = entity.score,
+        matchedOn = entity.matchedOn.split(",").filter { it.isNotBlank() },
+        status = entity.status,
+        submittedBy = entity.submittedBy,
+        decidedBy = entity.decidedBy,
+        decidedAt = entity.decidedAt,
+        mergeId = entity.mergeId,
+        createdAt = entity.createdAt,
+      )
+  }
+}
+
+data class MergeLogDto(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val targetPatientId: UUID,
+  val duplicatePatientId: UUID,
+  val mergeVersion: Int,
+  val status: String,
+  val mergedBy: UUID,
+  val mergedAt: Instant? = null,
+  val unmergedBy: UUID? = null,
+  val unmergedAt: Instant? = null,
+  val moved: Map<String, Int> = emptyMap(),
+) {
+  companion object {
+    fun from(
+      entity: PatientMergeLog,
+      snapshot: Map<String, List<String>>? = null,
+    ) = MergeLogDto(
+      id = entity.id,
+      hospitalId = entity.hospitalId,
+      targetPatientId = entity.targetPatientId,
+      duplicatePatientId = entity.duplicatePatientId,
+      mergeVersion = entity.mergeVersion,
+      status = entity.status,
+      mergedBy = entity.mergedBy,
+      mergedAt = entity.mergedAt,
+      unmergedBy = entity.unmergedBy,
+      unmergedAt = entity.unmergedAt,
+      moved =
+        snapshot?.let { snap ->
+          mapOf(
+            "identifiers" to snap["identifiers"].orEmpty().size,
+            "contacts" to snap["contacts"].orEmpty().size,
+            "addresses" to snap["addresses"].orEmpty().size,
+            "allergies" to snap["allergies"].orEmpty().size,
+            "notes" to snap["notes"].orEmpty().size,
+            "history" to snap["history"].orEmpty().size,
+            "episodes" to snap["episodes"].orEmpty().size,
+            "relationships" to snap["relationshipsOut"].orEmpty().size + snap["relationshipsIn"].orEmpty().size,
+          )
+        } ?: emptyMap(),
+    )
+  }
+}
 
 data class PatientCreateResponse(
   val patient: PatientDetailDto,

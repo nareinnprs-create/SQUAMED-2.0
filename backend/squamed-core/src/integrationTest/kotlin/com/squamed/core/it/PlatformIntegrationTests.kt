@@ -25,6 +25,7 @@ import org.testcontainers.containers.GenericContainer
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.containers.wait.strategy.Wait
 import java.time.Duration
+import java.time.LocalDate
 import java.util.UUID
 import kotlin.random.Random
 
@@ -2778,6 +2779,34 @@ class PlatformIntegrationTests {
     fun empiAndMergeCoverage() {
       val token = adminToken()
       val s = suffix()
+
+      // Fresh hospital per run: the dev database persists rows across runs.
+      val hospitalId =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "EMPI-A $s", "code" to "PE-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      // Second person for the two-person rule: an auditor (READ_ONLY_VIEWER holds patient:merge:cosign).
+      val cosignerEmail = "auditor-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to cosignerEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Aud",
+            "lastName" to "Itor$s",
+            "roles" to listOf("READ_ONLY_VIEWER"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register auditor cosigner",
+      )
+      val cosigner =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/auth/login", json("username" to cosignerEmail, "password" to "Passw0rd!123", "hospitalId" to hospitalId), token),
+        )["accessToken"].asText()
+
       val qidA = "10000000$s".take(11)
       val phoneA = "59$s".take(11)
 
@@ -2794,6 +2823,7 @@ class PlatformIntegrationTests {
             "qid" to qidA,
             "nationality" to "QA",
             "city" to "Doha",
+            "hospitalId" to hospitalId,
           ),
           token,
         )
@@ -2892,6 +2922,7 @@ class PlatformIntegrationTests {
             "qid" to qidA,
             "nationality" to "QA",
             "city" to "Doha",
+            "hospitalId" to hospitalId,
           ),
           token,
         )
@@ -2911,6 +2942,7 @@ class PlatformIntegrationTests {
             "qid" to "DIFFERENT-$s",
             "nationality" to "QA",
             "city" to "Doha",
+            "hospitalId" to hospitalId,
           ),
           token,
         )
@@ -2927,15 +2959,17 @@ class PlatformIntegrationTests {
             "gender" to "male",
             "dateOfBirth" to "1988-08-08",
             "phone" to phoneA,
-            "qid" to "10000002$s".take(11),
+            "qid" to qidA,
             "nationality" to "QA",
             "city" to "Doha",
+            "hospitalId" to hospitalId,
           ),
           token,
         )
       assert2xx(dupResp, "create duplicate")
       val dup = `data`(dupResp)
       assertTrue(dup["matches"].size() >= 1, "duplicate create returns match candidates: ${dupResp.body.take(300)}")
+      assertTrue(dup["matches"][0]["score"].asInt() >= 96, "identical QID scores deterministic: ${dup["matches"][0]}")
       val p2Id = dup["patient"]["id"].asText()
 
       assert2xx(
@@ -2952,19 +2986,307 @@ class PlatformIntegrationTests {
         "allergy on duplicate to move",
       )
 
+      // The identical-QID duplicate was auto-enqueued as a PENDING review (two-person rule).
+      val queueJson = api(HttpMethod.GET, "/api/v1/patients/empi/reviews?hospitalId=$hospitalId&status=PENDING", token = token)
+      assert2xx(queueJson, "list pending reviews")
+      val review = `data`(queueJson).first { it["duplicatePatientId"].asText() == p2Id }
+      val reviewId = review["id"].asText()
+      assertEquals(100, review["score"].asInt(), "auto-enqueued review carries the matcher score")
+
       val mergeSelf = api(HttpMethod.POST, "/api/v1/patients/merge", json("targetId" to p1Id, "duplicateId" to p1Id), token)
       assertEquals(400, mergeSelf.status, "self merge rejected")
       assertEquals("CANNOT_MERGE_PATIENT_WITH_ITSELF", om.readTree(mergeSelf.body)["error"]["code"].asText())
 
-      val merged = api(HttpMethod.POST, "/api/v1/patients/merge", json("targetId" to p1Id, "duplicateId" to p2Id), token)
-      assert2xx(merged, "merge duplicate into target")
-      val moved = `data`(merged)["moved"]
-      val movedCount =
-        listOf("identifiers", "contacts", "addresses", "allergies", "notes", "history", "episodes")
-          .map { moved[it].asInt() }
-          .sum()
-      assertTrue(movedCount > 0, "records moved on merge: $moved")
-      assert2xx(api(HttpMethod.GET, "/api/v1/patients/$p1Id", token = token), "target detail after merge")
+      // Two-person rule: the submitter cannot approve, even while holding the cosign permission.
+      val selfApproval = api(HttpMethod.POST, "/api/v1/patients/empi/reviews/$reviewId/approve", null, token)
+      assertEquals(400, selfApproval.status, "two-person rule: submitter cannot approve")
+      assertEquals("TWO_PERSON_RULE_SELF_APPROVAL", om.readTree(selfApproval.body)["error"]["code"].asText())
+
+      // Approving without the cosign permission is denied.
+      val doctorEmail = "doctor-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to doctorEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Doc",
+            "lastName" to "Tor$s",
+            "roles" to listOf("DOCTOR"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register doctor (no cosign)",
+      )
+      val doctorToken =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/auth/login", json("username" to doctorEmail, "password" to "Passw0rd!123", "hospitalId" to hospitalId), token),
+        )["accessToken"].asText()
+      val noCosign = api(HttpMethod.POST, "/api/v1/patients/empi/reviews/$reviewId/approve", null, doctorToken)
+      assertEquals(403, noCosign.status, "cosign permission required: ${noCosign.body.take(200)}")
+
+      // Cosigner approves → merge executes (versioned log, archived duplicate).
+      val approved = api(HttpMethod.POST, "/api/v1/patients/empi/reviews/$reviewId/approve", null, cosigner)
+      assert2xx(approved, "cosigner approves review")
+      val approvedReview = `data`(approved)
+      assertEquals("APPROVED", approvedReview["status"].asText(), "review approved: $approvedReview")
+      val mergeId = approvedReview["mergeId"].asText()
+      assertTrue(mergeId.isNotBlank(), "approved review links the merge log")
+
+      val survivorAllergies = `data`(api(HttpMethod.GET, "/api/v1/patients/$p1Id/allergies", token = token))
+      assertTrue(
+        survivorAllergies.any { it["allergen"].asText() == "Ibuprofen" },
+        "allergy moved to survivor: $survivorAllergies",
+      )
+      val dupAfter = `data`(api(HttpMethod.GET, "/api/v1/patients/$p2Id", token = token))
+      assertEquals("merged", dupAfter["recordsStatus"].asText(), "duplicate archived, not deleted: $dupAfter")
+      val searchAfterMerge = `data`(api(HttpMethod.GET, "/api/v1/patients?query=$phoneA", token = token))
+      assertTrue(
+        searchAfterMerge.none { it["id"].asText() == p2Id },
+        "archived duplicate hidden from search: $searchAfterMerge",
+      )
+
+      // Unmerge: children re-pointed back, duplicate restored, log UNMERGED.
+      val unmerged = api(HttpMethod.POST, "/api/v1/patients/merges/$mergeId/unmerge", null, token)
+      assert2xx(unmerged, "unmerge restores duplicate")
+      assertEquals("UNMERGED", `data`(unmerged)["status"].asText(), "merge log flipped to UNMERGED")
+      val dupRestored = `data`(api(HttpMethod.GET, "/api/v1/patients/$p2Id", token = token))
+      assertEquals("active", dupRestored["recordsStatus"].asText(), "duplicate restored: $dupRestored")
+      val allergiesBack = `data`(api(HttpMethod.GET, "/api/v1/patients/$p2Id/allergies", token = token))
+      assertTrue(allergiesBack.any { it["allergen"].asText() == "Ibuprofen" }, "allergy re-pointed to duplicate: $allergiesBack")
+      val unmergeAgain = api(HttpMethod.POST, "/api/v1/patients/merges/$mergeId/unmerge", null, token)
+      assertEquals(400, unmergeAgain.status, "double unmerge rejected")
+      assertEquals("MERGE_NOT_UNMERGEABLE", om.readTree(unmergeAgain.body)["error"]["code"].asText())
+
+      // Re-merge the same pair: merge_version increments to 2.
+      val intent2 = api(HttpMethod.POST, "/api/v1/patients/merge", json("targetId" to p1Id, "duplicateId" to p2Id), token)
+      assert2xx(intent2, "re-submit merge intent")
+      val review2Id = `data`(intent2)["id"].asText()
+      assert2xx(api(HttpMethod.POST, "/api/v1/patients/empi/reviews/$review2Id/approve", null, cosigner), "cosigner approves re-merge")
+      val logs = `data`(api(HttpMethod.GET, "/api/v1/patients/merges?hospitalId=$hospitalId", token = token))
+      val versions = logs.map { it["mergeVersion"].asInt() }.sorted()
+      assertEquals(listOf(1, 2), versions, "merge log versioned per pair: $logs")
+
+      // Reject path: a manual intent the reviewer declines cannot be approved afterwards.
+      val p3Resp =
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json(
+            "firstName" to "Empi",
+            "lastName" to "Match$s",
+            "gender" to "male",
+            "dateOfBirth" to "1975-01-01",
+            "phone" to "59$s".take(11) + "x",
+            "nationality" to "QA",
+            "city" to "Doha",
+            "hospitalId" to hospitalId,
+          ),
+          token,
+        )
+      assert2xx(p3Resp, "create p3")
+      val p3Id = `data`(p3Resp)["patient"]["id"].asText()
+      val intent3 = api(HttpMethod.POST, "/api/v1/patients/merge", json("targetId" to p1Id, "duplicateId" to p3Id), token)
+      assert2xx(intent3, "submit intent for p3")
+      val review3Id = `data`(intent3)["id"].asText()
+      val rejected = api(HttpMethod.POST, "/api/v1/patients/empi/reviews/$review3Id/reject", null, token)
+      assert2xx(rejected, "review rejected")
+      assertEquals("REJECTED", `data`(rejected)["status"].asText())
+      val approveRejected = api(HttpMethod.POST, "/api/v1/patients/empi/reviews/$review3Id/approve", null, cosigner)
+      assertEquals(400, approveRejected.status, "cannot approve a rejected review")
+      assertEquals("REVIEW_NOT_PENDING", om.readTree(approveRejected.body)["error"]["code"].asText())
+
+      // Matcher tenant pin: probing the same QID from another hospital must not leak p1.
+      val otherHospital =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "EMPI-B $s", "code" to "PF-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      val crossProbe =
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients/match",
+          json(
+            "firstName" to "Empi",
+            "lastName" to "Match$s",
+            "gender" to "male",
+            "dateOfBirth" to "1988-08-08",
+            "phone" to phoneA,
+            "qid" to qidA,
+            "nationality" to "QA",
+            "city" to "Doha",
+            "hospitalId" to otherHospital,
+          ),
+          token,
+        )
+      assert2xx(crossProbe, "cross-hospital probe allowed")
+      assertTrue(`data`(crossProbe).none { it["patientId"].asText() == p1Id }, "matcher pinned to probing hospital")
+    }
+
+    /** 00.08 synthetic eval: 210 generated cases (60 deterministic / 70 probabilistic / 70 false-merge probes). */
+    @Test
+    fun empiSyntheticEvalCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val millis = System.currentTimeMillis()
+
+      val hospitalId =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "EMPI-EVAL $s", "code" to "EG-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+
+      // 60 deterministic cases: unique QID per case → score 100, certain link for one-click approval.
+      for (i in 0 until 60) {
+        val qid = "9" + "%09d".format(millis % 1_000_000_000) + "%02d".format(i)
+        val dob = LocalDate.of(1990, 1, 1).plusDays(i.toLong()).toString()
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json("firstName" to "Det%02d".format(i), "lastName" to "Case", "gender" to "male", "dateOfBirth" to dob, "qid" to qid, "hospitalId" to hospitalId),
+            token,
+          ),
+          "deterministic base $i",
+        )
+        val dup =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/patients",
+              json(
+                "firstName" to "Det%02d".format(i),
+                "lastName" to "Case",
+                "gender" to "male",
+                "dateOfBirth" to dob,
+                "qid" to qid,
+                "hospitalId" to hospitalId,
+              ),
+              token,
+            ),
+          )
+        val matches = dup["matches"]
+        assertEquals(1, matches.size(), "deterministic case $i must surface exactly one candidate")
+        val score = matches[0]["score"].asInt()
+        assertTrue(score >= 96, "deterministic case $i score $score must be >= 96")
+      }
+
+      // 70 probabilistic cases: same name+DOB+gender → 85 in [60,96), routed to the queue.
+      for (i in 0 until 70) {
+        val dob = LocalDate.of(1992, 3, 1).plusDays(i.toLong()).toString()
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json("firstName" to "Prob%02d".format(i), "lastName" to "Same", "gender" to "female", "dateOfBirth" to dob, "hospitalId" to hospitalId),
+            token,
+          ),
+          "probabilistic base $i",
+        )
+        val dup =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/patients",
+              json("firstName" to "Prob%02d".format(i), "lastName" to "Same", "gender" to "female", "dateOfBirth" to dob, "hospitalId" to hospitalId),
+              token,
+            ),
+          )
+        val matches = dup["matches"]
+        assertEquals(1, matches.size(), "probabilistic case $i must surface one candidate")
+        val score = matches[0]["score"].asInt()
+        assertTrue(score in 60..95, "probabilistic case $i score $score must fall in [60,96)")
+        assertTrue(
+          matches[0]["matchedOn"].any { it.asText() == "NAME_DOB_GENDER" },
+          "probabilistic case $i matched on name+dob+gender: $matches",
+        )
+      }
+
+      // 70 false-merge probes: shared phone, different identity → 95 < 96; queued, never merged.
+      for (i in 0 until 70) {
+        val phone = "59" + "%09d".format(millis % 1_000_000_000) + "%02d".format(i)
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Real%02d".format(i),
+              "lastName" to "Person",
+              "gender" to "male",
+              "dateOfBirth" to LocalDate.of(1985, 5, 1).plusDays(i.toLong()).toString(),
+              "phone" to phone,
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+          "probe base $i",
+        )
+        val dup =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/patients",
+              json(
+                "firstName" to "Different%02d".format(i),
+                "lastName" to "Name",
+                "gender" to "female",
+                "dateOfBirth" to LocalDate.of(2001, 7, 7).plusDays(i.toLong()).toString(),
+                "phone" to phone,
+                "hospitalId" to hospitalId,
+              ),
+              token,
+            ),
+          )
+        val matches = dup["matches"]
+        assertEquals(1, matches.size(), "probe case $i must surface one candidate")
+        val score = matches[0]["score"].asInt()
+        assertTrue(score < 96, "probe case $i score $score must stay below the auto-link threshold")
+        assertTrue(matches[0]["matchedOn"].all { it.asText() == "PHONE" }, "probe case $i matched on phone only: $matches")
+      }
+
+      // Every case landed in the queue; nothing merged itself.
+      val queue = `data`(api(HttpMethod.GET, "/api/v1/patients/empi/reviews?hospitalId=$hospitalId&status=PENDING", token = token))
+      assertEquals(200, queue.size(), "all synthetic cases queued for review")
+      val mergeLogs = `data`(api(HttpMethod.GET, "/api/v1/patients/merges?hospitalId=$hospitalId", token = token))
+      assertEquals(0, mergeLogs.size(), "no synthetic case may auto-merge: $mergeLogs")
+
+      // A deterministic row is approved by a distinct cosign-holder, then reversed via unmerge.
+      val cosignerEmail = "auditor-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to cosignerEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Eval",
+            "lastName" to "Auditor",
+            "roles" to listOf("READ_ONLY_VIEWER"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register eval cosigner",
+      )
+      val cosigner =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/auth/login", json("username" to cosignerEmail, "password" to "Passw0rd!123", "hospitalId" to hospitalId), token),
+        )["accessToken"].asText()
+
+      val detReview = queue.first { it["matchedOn"].any { m -> m.asText() == "QID" } }
+      val approvedDet = api(HttpMethod.POST, "/api/v1/patients/empi/reviews/${detReview["id"].asText()}/approve", null, cosigner)
+      assert2xx(approvedDet, "deterministic review approved by cosigner")
+      val detMergeId = `data`(approvedDet)["mergeId"].asText()
+      val unmergeDet = api(HttpMethod.POST, "/api/v1/patients/merges/$detMergeId/unmerge", null, token)
+      assert2xx(unmergeDet, "approved merge reversed via unmerge")
+      assertEquals("UNMERGED", `data`(unmergeDet)["status"].asText())
+
+      // A false-merge probe is rejected — the queue absorbs the false positive.
+      val probeReview = queue.first { it["matchedOn"].any { m -> m.asText() == "PHONE" } }
+      val rejectedProbe = api(HttpMethod.POST, "/api/v1/patients/empi/reviews/${probeReview["id"].asText()}/reject", null, token)
+      assert2xx(rejectedProbe, "probe review rejected")
+      assertEquals("REJECTED", `data`(rejectedProbe)["status"].asText())
+
+      val queueAfter = `data`(api(HttpMethod.GET, "/api/v1/patients/empi/reviews?hospitalId=$hospitalId&status=PENDING", token = token))
+      assertEquals(198, queueAfter.size(), "one approved + one rejected leave 198 pending")
     }
 
     @Test

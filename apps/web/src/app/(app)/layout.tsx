@@ -11,6 +11,7 @@ import { CommandBar } from '@/components/ai/command-bar';
 const navItems: SidebarItem[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'patients', label: 'Patients' },
+  { id: 'empi', label: 'EMPI Review' },
   { id: 'appointments', label: 'Appointments' },
   { id: 'reception', label: 'Reception & Triage' },
   { id: 'queue', label: 'Queue' },

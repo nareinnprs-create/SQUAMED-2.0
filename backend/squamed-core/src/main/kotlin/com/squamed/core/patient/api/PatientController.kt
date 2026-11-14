@@ -5,6 +5,7 @@ import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.patient.service.EmpiMatcher
+import com.squamed.core.patient.service.EmpiReviewService
 import com.squamed.core.patient.service.PatientService
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -30,6 +31,7 @@ import java.util.UUID
 class PatientController(
   private val patientService: PatientService,
   private val empiMatcher: EmpiMatcher,
+  private val empiReviewService: EmpiReviewService,
   private val tenantResolver: TenantResolver,
 ) {
   @PostMapping
@@ -41,9 +43,17 @@ class PatientController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<PatientCreateResponse> {
     // ADR-13: hospital users are pinned to their own tenant; admins may choose or default to primary.
-    val pinned = dto.copy(hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId))
-    val matches = empiMatcher.findMatches(pinned)
+    val hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId)
+    val pinned = dto.copy(hospitalId = hospitalId)
+    val matches = empiMatcher.findMatches(pinned, hospitalId)
     val patient = patientService.create(pinned)
+    // Auto-enqueue scored matches as manual-review rows (the new record is the duplicate).
+    empiReviewService.enqueueFromMatches(
+      matches,
+      patient.id ?: throw IllegalStateException("PATIENT_ID_MISSING"),
+      hospitalId,
+      principal.userId,
+    )
     return ApiResponse.ok(PatientCreateResponse(patient = patient, matches = matches))
   }
 
@@ -137,7 +147,12 @@ class PatientController(
   @Transactional(readOnly = true)
   fun match(
     @RequestBody dto: PatientCreateDto,
-  ): ApiResponse<List<MatchCandidateDto>> = ApiResponse.ok(empiMatcher.findMatches(dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<MatchCandidateDto>> {
+    // ADR-13: candidate pool pinned to the caller's hospital (admins may choose explicitly).
+    val pinned = tenantResolver.pinOrDefault(principal, dto.hospitalId)
+    return ApiResponse.ok(empiMatcher.findMatches(dto, pinned))
+  }
 
   @PostMapping("/merge")
   @RequiresPermission("patient:merge:patient")
@@ -145,10 +160,64 @@ class PatientController(
   fun merge(
     @RequestBody dto: MergePatientsDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<MergeResponseDto> {
-    requireSameHospital(principal, patientService.getHospitalId(dto.targetId))
-    return ApiResponse.ok(patientService.mergePatient(dto.targetId, dto.duplicateId))
+  ): ApiResponse<EmpiReviewDto> {
+    // Two-person rule: this only creates a review intent; a distinct cosign-holder approves.
+    val targetHospital = patientService.getHospitalId(dto.targetId)
+    requireSameHospital(principal, targetHospital)
+    val duplicateHospital = patientService.getHospitalId(dto.duplicateId)
+    if (targetHospital != null && duplicateHospital != null && targetHospital != duplicateHospital) {
+      throw IllegalArgumentException("MERGE_CROSS_HOSPITAL")
+    }
+    return ApiResponse.ok(
+      empiReviewService.submitIntent(
+        dto.targetId,
+        dto.duplicateId,
+        targetHospital ?: tenantResolver.pinOrDefault(principal, null),
+        principal.userId,
+      ),
+    )
   }
+
+  @GetMapping("/empi/reviews")
+  @RequiresPermission("patient:read:patient")
+  @Transactional(readOnly = true)
+  fun listEmpiReviews(
+    @RequestParam(required = false) status: String?,
+    @RequestParam(required = false) hospitalId: UUID?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<EmpiReviewDto>> = ApiResponse.ok(empiReviewService.listReviews(tenantResolver.pinOrDefault(principal, hospitalId), status))
+
+  @PostMapping("/empi/reviews/{id}/approve")
+  @RequiresPermission("patient:merge:cosign")
+  @Transactional
+  fun approveEmpiReview(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<EmpiReviewDto> = ApiResponse.ok(empiReviewService.approve(id, principal.userId, principal.hospitalId))
+
+  @PostMapping("/empi/reviews/{id}/reject")
+  @RequiresPermission("patient:merge:patient")
+  @Transactional
+  fun rejectEmpiReview(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<EmpiReviewDto> = ApiResponse.ok(empiReviewService.reject(id, principal.userId, principal.hospitalId))
+
+  @GetMapping("/merges")
+  @RequiresPermission("patient:read:patient")
+  @Transactional(readOnly = true)
+  fun listMerges(
+    @RequestParam(required = false) hospitalId: UUID?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<MergeLogDto>> = ApiResponse.ok(empiReviewService.listMerges(tenantResolver.pinOrDefault(principal, hospitalId)))
+
+  @PostMapping("/merges/{mergeId}/unmerge")
+  @RequiresPermission("patient:merge:patient")
+  @Transactional
+  fun unmerge(
+    @PathVariable mergeId: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<MergeLogDto> = ApiResponse.ok(empiReviewService.unmerge(mergeId, principal.userId, principal.hospitalId))
 
   @PostMapping("/{id}/identifiers")
   @ResponseStatus(HttpStatus.CREATED)

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://squamed.local/schemas/event-envelope-v1.schema.json",
+  "title": "SQUAMED domain event envelope v1",
+  "description": "Wire format of every event published to squamed.domain-events and the per-type topics. Mirrors com.squamed.core.events.DomainEvent. Breaking changes require a new schema version (v2), never an edit to v1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "eventType", "occurredAt", "source", "entityType", "entityId"],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "description": "Unique event id; dedupe/replay key for consumers."
+    },
+    "eventType": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(\\.[a-z0-9-]+)+$",
+      "description": "Lowercase dotted domain event name, e.g. patient.created, task.assigned."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC instant the event was raised."
+    },
+    "source": {
+      "type": "string",
+      "description": "Publishing service/module, e.g. squamed-core."
+    },
+    "entityType": {
+      "type": "string",
+      "description": "Domain entity kind the event is about, e.g. patient, task."
+    },
+    "entityId": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        { "type": "null" }
+      ],
+      "description": "Entity the event is about; null for system-level events."
+    },
+    "hospitalId": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        { "type": "null" }
+      ],
+      "description": "Tenant (hospital) scope of the event; null until tenancy backfill (00.04, ADR-13)."
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Free-form per-event-type data; consumers must tolerate unknown keys."
+    },
+    "recipientIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+      },
+      "description": "Users the event should surface to (in-app notification + realtime push). Empty = broadcast-suppressed."
+    }
+  }
+}

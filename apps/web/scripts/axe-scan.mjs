@@ -30,6 +30,8 @@ function printTable(headers, rows) {
 
 async function scanRoute(context, route) {
   const page = await context.newPage();
+  // Belt and braces: every Playwright wait gets a default ceiling if it doesn't set one.
+  page.setDefaultTimeout(30000);
   seedScanSession(page);
   await installApiFixtures(page);
   try {

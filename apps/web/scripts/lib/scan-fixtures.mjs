@@ -120,5 +120,6 @@ export async function settleForScan(page, { authenticated = true } = {}) {
   } else {
     await page.getByRole('heading', { name: 'SQUAMED' }).waitFor({ state: 'visible', timeout: 20000 });
   }
-  await page.evaluate(() => document.fonts.ready);
+  // Bound fonts.ready — evaluate has no timeout, a stuck font request must never hang the gate.
+  await page.evaluate(() => Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 10000))]));
 }

@@ -52,6 +52,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/master-data/vendors/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateVendor"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/master-data/procedure-codes/{id}": {
         parameters: {
             query?: never;
@@ -61,6 +77,22 @@ export interface paths {
         };
         get?: never;
         put: operations["updateProcedureCode"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/master-data/price-lists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updatePriceList"];
         post?: never;
         delete?: never;
         options?: never;
@@ -93,6 +125,38 @@ export interface paths {
         };
         get?: never;
         put: operations["updateImagingProcedure"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/master-data/equipment/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateEquipment"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/master-data/employees/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateEmployee"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1044,6 +1108,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/master-data/vendors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listVendors"];
+        put?: never;
+        post: operations["createVendor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/master-data/procedure-codes": {
         parameters: {
             query?: never;
@@ -1054,6 +1134,38 @@ export interface paths {
         get: operations["listProcedureCodes"];
         put?: never;
         post: operations["createProcedureCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/master-data/price-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPriceLists"];
+        put?: never;
+        post: operations["createPriceList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/master-data/price-lists/{id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPriceListItems"];
+        put?: never;
+        post: operations["addPriceListItem"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1086,6 +1198,38 @@ export interface paths {
         get: operations["listImagingProcedures"];
         put?: never;
         post: operations["createImagingProcedure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/master-data/equipment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listEquipment"];
+        put?: never;
+        post: operations["createEquipment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/master-data/employees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listEmployees"];
+        put?: never;
+        post: operations["createEmployee"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2548,6 +2692,22 @@ export interface paths {
         patch: operations["updateCarePlanStatus"];
         trace?: never;
     };
+    "/api/v1/master-data/vendors/{id}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["setVendorActive"];
+        trace?: never;
+    };
     "/api/v1/master-data/procedure-codes/{id}/active": {
         parameters: {
             query?: never;
@@ -2562,6 +2722,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["setProcedureCodeActive"];
+        trace?: never;
+    };
+    "/api/v1/master-data/price-lists/{id}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["setPriceListActive"];
         trace?: never;
     };
     "/api/v1/master-data/lab-tests/{id}/active": {
@@ -2594,6 +2770,38 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["setImagingProcedureActive"];
+        trace?: never;
+    };
+    "/api/v1/master-data/equipment/{id}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["setEquipmentActive"];
+        trace?: never;
+    };
+    "/api/v1/master-data/employees/{id}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["setEmployeeActive"];
         trace?: never;
     };
     "/api/v1/master-data/drugs/{id}/active": {
@@ -4247,6 +4455,27 @@ export interface components {
             issuingAuthority?: string;
             primaryFlag?: boolean;
         };
+        VendorDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            code?: string;
+            name?: string;
+            contactPerson?: string;
+            phone?: string;
+            email?: string;
+            address?: string;
+            taxId?: string;
+            isActive?: boolean;
+        };
+        ApiResponseVendorDto: {
+            data?: components["schemas"]["VendorDto"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
         ProcedureCodeDto: {
             /** Format: uuid */
             id?: string;
@@ -4258,6 +4487,27 @@ export interface components {
         };
         ApiResponseProcedureCodeDto: {
             data?: components["schemas"]["ProcedureCodeDto"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        PriceListDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            code?: string;
+            name?: string;
+            currency?: string;
+            /** Format: date */
+            validFrom?: string;
+            /** Format: date */
+            validTo?: string;
+            isActive?: boolean;
+        };
+        ApiResponsePriceListDto: {
+            data?: components["schemas"]["PriceListDto"];
             success: boolean;
             meta: {
                 [key: string]: Record<string, never>;
@@ -4295,6 +4545,59 @@ export interface components {
         };
         ApiResponseImagingProcedureDto: {
             data?: components["schemas"]["ImagingProcedureDto"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        EquipmentDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            code?: string;
+            name?: string;
+            category?: string;
+            /** Format: uuid */
+            vendorId?: string;
+            serialNumber?: string;
+            location?: string;
+            /** Format: date */
+            purchaseDate?: string;
+            /** Format: date */
+            warrantyUntil?: string;
+            isActive?: boolean;
+        };
+        ApiResponseEquipmentDto: {
+            data?: components["schemas"]["EquipmentDto"];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        EmployeeDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            code?: string;
+            firstName?: string;
+            lastName?: string;
+            gender?: string;
+            /** Format: date */
+            dateOfBirth?: string;
+            phone?: string;
+            email?: string;
+            designation?: string;
+            department?: string;
+            qualification?: string;
+            licenseNumber?: string;
+            /** Format: date */
+            licenseExpiry?: string;
+            isActive?: boolean;
+        };
+        ApiResponseEmployeeDto: {
+            data?: components["schemas"]["EmployeeDto"];
             success: boolean;
             meta: {
                 [key: string]: Record<string, never>;
@@ -5680,6 +5983,23 @@ export interface components {
         ApiResponseLong: {
             /** Format: int64 */
             data?: number;
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        PriceListItemDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            priceListId?: string;
+            /** Format: uuid */
+            chargeItemId?: string;
+            priceQar?: number;
+            isActive?: boolean;
+        };
+        ApiResponsePriceListItemDto: {
+            data?: components["schemas"]["PriceListItemDto"];
             success: boolean;
             meta: {
                 [key: string]: Record<string, never>;
@@ -7946,8 +8266,29 @@ export interface components {
                 [key: string]: Record<string, never>;
             };
         };
+        ApiResponseListVendorDto: {
+            data?: components["schemas"]["VendorDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
         ApiResponseListProcedureCodeDto: {
             data?: components["schemas"]["ProcedureCodeDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ApiResponseListPriceListDto: {
+            data?: components["schemas"]["PriceListDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ApiResponseListPriceListItemDto: {
+            data?: components["schemas"]["PriceListItemDto"][];
             success: boolean;
             meta: {
                 [key: string]: Record<string, never>;
@@ -7962,6 +8303,20 @@ export interface components {
         };
         ApiResponseListImagingProcedureDto: {
             data?: components["schemas"]["ImagingProcedureDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ApiResponseListEquipmentDto: {
+            data?: components["schemas"]["EquipmentDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: Record<string, never>;
+            };
+        };
+        ApiResponseListEmployeeDto: {
+            data?: components["schemas"]["EmployeeDto"][];
             success: boolean;
             meta: {
                 [key: string]: Record<string, never>;
@@ -8769,6 +9124,32 @@ export interface operations {
             };
         };
     };
+    updateVendor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VendorDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVendorDto"];
+                };
+            };
+        };
+    };
     updateProcedureCode: {
         parameters: {
             query?: never;
@@ -8791,6 +9172,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseProcedureCodeDto"];
+                };
+            };
+        };
+    };
+    updatePriceList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceListDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePriceListDto"];
                 };
             };
         };
@@ -8843,6 +9250,58 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseImagingProcedureDto"];
+                };
+            };
+        };
+    };
+    updateEquipment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EquipmentDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEquipmentDto"];
+                };
+            };
+        };
+    };
+    updateEmployee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmployeeDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEmployeeDto"];
                 };
             };
         };
@@ -11037,6 +11496,56 @@ export interface operations {
             };
         };
     };
+    listVendors: {
+        parameters: {
+            query?: {
+                hospitalId?: string;
+                search?: string;
+                active?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListVendorDto"];
+                };
+            };
+        };
+    };
+    createVendor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VendorDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVendorDto"];
+                };
+            };
+        };
+    };
     listProcedureCodes: {
         parameters: {
             query?: {
@@ -11082,6 +11591,104 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseProcedureCodeDto"];
+                };
+            };
+        };
+    };
+    listPriceLists: {
+        parameters: {
+            query?: {
+                hospitalId?: string;
+                search?: string;
+                active?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPriceListDto"];
+                };
+            };
+        };
+    };
+    createPriceList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceListDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePriceListDto"];
+                };
+            };
+        };
+    };
+    listPriceListItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPriceListItemDto"];
+                };
+            };
+        };
+    };
+    addPriceListItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceListItemDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePriceListItemDto"];
                 };
             };
         };
@@ -11180,6 +11787,106 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseImagingProcedureDto"];
+                };
+            };
+        };
+    };
+    listEquipment: {
+        parameters: {
+            query?: {
+                hospitalId?: string;
+                search?: string;
+                active?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListEquipmentDto"];
+                };
+            };
+        };
+    };
+    createEquipment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EquipmentDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEquipmentDto"];
+                };
+            };
+        };
+    };
+    listEmployees: {
+        parameters: {
+            query?: {
+                hospitalId?: string;
+                search?: string;
+                active?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListEmployeeDto"];
+                };
+            };
+        };
+    };
+    createEmployee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmployeeDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEmployeeDto"];
                 };
             };
         };
@@ -14480,6 +15187,32 @@ export interface operations {
             };
         };
     };
+    setVendorActive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogActiveDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVendorDto"];
+                };
+            };
+        };
+    };
     setProcedureCodeActive: {
         parameters: {
             query?: never;
@@ -14502,6 +15235,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseProcedureCodeDto"];
+                };
+            };
+        };
+    };
+    setPriceListActive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogActiveDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePriceListDto"];
                 };
             };
         };
@@ -14554,6 +15313,58 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseImagingProcedureDto"];
+                };
+            };
+        };
+    };
+    setEquipmentActive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogActiveDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEquipmentDto"];
+                };
+            };
+        };
+    };
+    setEmployeeActive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogActiveDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEmployeeDto"];
                 };
             };
         };
@@ -16487,4 +17298,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 8ae6a19a7fb906daf1e57ee5bb9bba58032cf239b181d71b90bda47bd5a8b26d
+// openapi snapshot sha256: dd282b0a195b8f75de6f96a886af53ca1bb7be88078855b7c1276aef4103e02f

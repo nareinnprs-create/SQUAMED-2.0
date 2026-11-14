@@ -92,6 +92,20 @@ describe('catalogRowFrom', () => {
   it('drops entries without an id', () => {
     expect(catalogRowFrom('drugs', { ...drug, id: null })).toBeNull();
   });
+
+  it('derives employee display name from first and last name', () => {
+    const row = catalogRowFrom('employees', { id: 'e1', code: 'EMP-1', name: null, firstName: 'Asha', lastName: 'Rao', isActive: true });
+    expect(row?.name).toBe('Asha Rao');
+  });
+});
+
+describe('registry specs', () => {
+  it('includes the four hospital registries with required fields', () => {
+    const keys = CATALOGS.map((spec) => spec.key);
+    expect(keys).toEqual(expect.arrayContaining(['vendors', 'equipment', 'employees', 'price-lists']));
+    const employee = CATALOGS.find((spec) => spec.key === 'employees');
+    expect(missingRequired(employee as NonNullable<typeof employee>, {})).toEqual(['Code', 'First name', 'Last name']);
+  });
 });
 
 describe('CatalogCreateForm', () => {

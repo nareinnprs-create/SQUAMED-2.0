@@ -1949,6 +1949,143 @@ class PlatformIntegrationTests {
     }
 
     @Test
+    fun masterDataRegistriesCoverage() {
+      val token = adminToken()
+      val s = suffix()
+
+      // Fresh hospitals per run: the dev database persists rows across runs.
+      val h1 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Reg A $s", "code" to "RA-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      val h2 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Reg B $s", "code" to "RB-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+
+      // Vendor: server-side pin from the explicit hospital id, per-hospital uniqueness.
+      val vendor =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/vendors",
+            json("code" to "VN-$s", "name" to "MedSupply $s", "contactPerson" to "Rep", "phone" to "55111111", "hospitalId" to h1),
+            token,
+          ),
+        )
+      assertEquals(h1, vendor["hospitalId"].asText(), "vendor must be pinned to the requested hospital: $vendor")
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/master-data/vendors", json("code" to "VN-$s", "name" to "Dup $s", "hospitalId" to h1), token),
+        "duplicate vendor code must be rejected",
+      )
+      assert2xx(
+        api(HttpMethod.PUT, "/api/v1/master-data/vendors/${vendor["id"].asText()}", json("phone" to "55222222"), token),
+        "update vendor",
+      )
+
+      // Equipment referencing the vendor.
+      val equipment =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/equipment",
+            json(
+              "code" to "EQ-$s",
+              "name" to "Ventilator $s",
+              "category" to "ICU",
+              "vendorId" to vendor["id"].asText(),
+              "serialNumber" to "SN-$s",
+              "location" to "ICU-1",
+              "purchaseDate" to "2025-01-15",
+              "warrantyUntil" to "2028-01-15",
+              "hospitalId" to h1,
+            ),
+            token,
+          ),
+        )
+      assertEquals(vendor["id"].asText(), equipment["vendorId"].asText(), "equipment vendor link must persist: $equipment")
+      assert2xx(
+        api(HttpMethod.PATCH, "/api/v1/master-data/equipment/${equipment["id"].asText()}/active", json("isActive" to false), token),
+        "toggle equipment active",
+      )
+
+      // Employee master: demographic + credential fields.
+      val employee =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/employees",
+            json(
+              "code" to "EMP-$s",
+              "firstName" to "Asha",
+              "lastName" to "Rao",
+              "gender" to "female",
+              "dateOfBirth" to "1988-03-03",
+              "phone" to "55333333",
+              "email" to "asha-$s@hospital.local",
+              "designation" to "Consultant",
+              "department" to "Cardiology",
+              "qualification" to "MBBS, MD",
+              "licenseNumber" to "LIC-$s",
+              "licenseExpiry" to "2027-06-30",
+              "hospitalId" to h1,
+            ),
+            token,
+          ),
+        )
+      assertEquals("1988-03-03", employee["dateOfBirth"].asText(), "employee demographics must persist: $employee")
+      assertEquals("LIC-$s", employee["licenseNumber"].asText(), "employee credentials must persist: $employee")
+      assert2xx(
+        api(HttpMethod.PUT, "/api/v1/master-data/employees/${employee["id"].asText()}", json("designation" to "Senior Consultant"), token),
+        "update employee",
+      )
+      assert2xx(api(HttpMethod.GET, "/api/v1/master-data/employees?search=Asha", token = token), "search employees by name")
+
+      // Price list + items (charge item is a global catalog row).
+      val chargeItem =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/charge-items",
+            json("code" to "CI-REG-$s", "name" to "Registry Charge $s", "priceQar" to 100.0),
+            token,
+          ),
+        )
+      val priceList =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/price-lists",
+            json("code" to "PL-$s", "name" to "Standard $s", "currency" to "QAR", "validFrom" to "2026-01-01", "hospitalId" to h1),
+            token,
+          ),
+        )
+      val plId = priceList["id"].asText()
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/master-data/price-lists/$plId/items", json("chargeItemId" to chargeItem["id"].asText(), "priceQar" to 85.5), token),
+        "add price list item",
+      )
+      // Upsert: same pair re-prices instead of failing.
+      val repriced =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/master-data/price-lists/$plId/items", json("chargeItemId" to chargeItem["id"].asText(), "priceQar" to 90.0), token),
+        )
+      assertEquals(0, java.math.BigDecimal("90.0").compareTo(repriced["priceQar"].decimalValue()), "price list upsert must reprice: $repriced")
+
+      // Isolation: hospital-filtered lists never leak the other hospital's rows.
+      val h1Vendors = `data`(api(HttpMethod.GET, "/api/v1/master-data/vendors?hospitalId=$h1&search=MedSupply", token = token))
+      assertTrue(
+        h1Vendors.size() >= 1 && h1Vendors.toList().all { it["hospitalId"].asText() == h1 },
+        "h1 vendor filter must return only h1 rows: $h1Vendors",
+      )
+      val h2Vendors = `data`(api(HttpMethod.GET, "/api/v1/master-data/vendors?hospitalId=$h2", token = token))
+      assertTrue(h2Vendors.toList().none { it["code"].asText() == "VN-$s" }, "h2 vendor list must not contain h1 rows: $h2Vendors")
+      assert2xx(api(HttpMethod.GET, "/api/v1/master-data/equipment?hospitalId=$h1", token = token), "hospital-filtered equipment")
+      assert2xx(api(HttpMethod.GET, "/api/v1/master-data/employees?hospitalId=$h1&active=true", token = token), "hospital-filtered employees")
+      assert2xx(api(HttpMethod.GET, "/api/v1/master-data/price-lists?hospitalId=$h1", token = token), "hospital-filtered price lists")
+    }
+
+    @Test
     fun empiInputIdentifiersAndLifecycleCoverage() {
       val token = adminToken()
       val s = suffix()

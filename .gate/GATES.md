@@ -5,10 +5,10 @@ Enforcement source: `03-BUILD-PROTOCOL.md` §1. `scripts/gate-parity.mjs` (CI jo
 | Gate # | Name | Pass condition (03 §1) | CI job |
 |---|---|---|---|
 | 1 | Functional completeness | Every code path works end-to-end against real data flow; the section's user journey works live | integration-gates |
-| 2 | Zero-stub scan | grep over backend/, apps/, packages/, services/, scripts/ for `TODO, FIXME, stub, placeholder, mock, "not implemented", "for now"` — zero hits (allowlist: lines tagged `// test-fixture` / `# test-fixture`, .md excluded) | stub-grep |
+| 2 | Zero-stub scan | grep over backend/, apps/, packages/, services/, scripts/ for `TODO, FIXME, stub, placeholder, mock, "not implemented", "for now"` — zero hits (allowlist per §7 amendment SC-9, 2026-11-13: lines tagged `// test-fixture` / `# test-fixture`; `\.toDouble(OrNull)?\(` calls; lowercase `placeholder` token = UI attr/prop plumbing — `Placeholder*` identifiers NOT allowlisted; `mockk` test-library token; .md excluded) | stub-grep |
 | 3 | Types | Compiler clean, zero `any`/`!` escapes on new code (Kotlin warnings-as-errors / TS strict) | backend-gates, frontend-gates |
 | 4 | Lint + format | Clean lint/format incl. whitelabel string-lint and ArchUnit/boundary rules | backend-gates, frontend-gates |
-| 5 | Tests | All pass; every new behavior tested; clinical-safety cases green; coverage ≥ 80% (JaCoCo instruction) | backend-gates, frontend-gates |
+| 5 | Tests | All pass; every new behavior tested; clinical-safety cases green; coverage ≥ 80% (JaCoCo instruction — backend coverage verified in integration-gates on merged unit+PIT exec per SC-10, 2026-11-13) | backend-gates, frontend-gates, integration-gates |
 | 6 | Accessibility | axe-core: zero critical/serious; keyboard path per new task; focus visible | a11y-perf-gates |
 | 7 | Design system | No hardcoded hex/strings; full state coverage; visual-regression screenshots match (Lighthouse budget runs in same job) | a11y-perf-gates |
 | 8 | Contracts | OpenAPI/event schemas committed before code; generated clients regenerated; schema-registry tests green | backend-gates, frontend-gates |

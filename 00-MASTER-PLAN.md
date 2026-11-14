@@ -36,6 +36,10 @@ The original document is a strong **vision**. It is not buildable: no data model
 | ADR-8 | **EMPI:** deterministic match (ABHA ID, mobile+DOB+name-exact) → auto-link; probabilistic match (fuzzy name+DOB+phone, threshold ≥0.9) → **manual review queue**, never auto-merge; merges are versioned and reversible | Wrong-patient merge is a clinical-safety hazard |
 | ADR-9 | **Audit:** append-only table, hash-chained per tenant (`prev_hash` in each row), exported nightly to WORM object storage, retention 10 years | "Tamper-resistant" with an actual mechanism |
 | ADR-10 | **Consent:** explicit, per-purpose, per-channel, versioned, digitally signed (IT Act 2000 §3A). Treatment consent is implied-by-context for emergency care with mandatory post-hoc recording | DPDP compliance; emergency reality |
+| ADR-11 | **Identity:** baseline JWT(HS256)+refresh, TOTP MFA, RBAC (seeded permissions + per-migration seeds), session revocation stack retained (1,345 LOC); Keycloak/OIDC deferred until an SSO-federation requirement lands — ABHA linkage (ADR-3) unaffected. Partially supersedes ADR-3 for chunks 0–5 | D16 (2026-11-13); buy-vs-kept-build evidence: BASELINE-AUDIT §5 |
+| ADR-12 | **FHIR sequencing:** baseline read-only FhirService stays internal; HAPI FHIR server lands at chunk 6 item 7 exactly as planned — no pre-adoption | D17 (2026-11-13); rebuilding a 403-line GET-only service later is cheaper than pre-adopting HAPI now |
+| ADR-13 | **Tenancy enforcement, staged:** stage 1 (chunk 0) — hospital_id NOT NULL + server-side tenant resolution from principal + cross-tenant denial suite; stage 2 (before chunk 6) — Postgres RLS as defense-in-depth, completing ADR-2 | D18 (2026-11-13); client-supplied nullable hospital_id = sharpest baseline defect |
+| ADR-14 | **Interop engine:** Mirth Connect confirmed for HL7 v2 per ADR-7 buy list (02.01); baseline built-in MLLP server demoted to dev simulator | D19 (2026-11-13); ASTM/quarantine/zero-silent-drop need a real engine |
 
 ---
 

@@ -68,8 +68,8 @@ Check "valid holiday publish" ($holiday.version -eq 1 -and $holiday.content.holi
 
 # 9. config.changed domain event reached Kafka topic
 Start-Sleep -Seconds 2
-$event = docker exec squamed-kafka kafka-console-consumer --bootstrap-server localhost:9092 --topic squamed.domain-events `
-  --from-beginning --max-messages 500 --timeout-ms 8000 2>$null | Select-String "config.changed" | Select-Object -First 1
+$event = docker exec squamed-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic squamed.domain-events `
+  --from-beginning --max-messages 2000 --timeout-ms 8000 2>$null | Select-String "config.changed" | Select-Object -First 1
 Check "config.changed event published" ($null -ne $event -and $event -match "`"type`"`s*:`s*`"working-hours`"") "no config.changed in domain-events topic"
 
 Write-Host ""

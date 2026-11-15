@@ -1,9 +1,9 @@
 package com.squamed.core.events
 
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
-import io.micrometer.core.instrument.MeterRegistry
 import java.util.UUID
 
 /** Implemented by each integration service that can re-run a stored inbound payload. */
@@ -25,6 +25,7 @@ class IntegrationErrorService(
     // covers the outbound outbox, this one the inbound integration errors).
     meterRegistry.gauge("squamed.integration.errors", repository) { it.countByStatus("OPEN").toDouble() }
   }
+
   fun record(
     hospitalId: UUID?,
     integration: String,

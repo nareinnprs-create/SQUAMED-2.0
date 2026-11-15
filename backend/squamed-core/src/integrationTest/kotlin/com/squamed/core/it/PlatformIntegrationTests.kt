@@ -7115,8 +7115,14 @@ class PlatformIntegrationTests {
       )
       assertTrue(
         ObservabilitySpanCapture.exporter.finishedSpanItems.any {
-          it.attributes.get(io.opentelemetry.api.common.AttributeKey.stringKey("db.system")) == "postgresql" ||
-            it.attributes.get(io.opentelemetry.api.common.AttributeKey.stringKey("db.system.name")) == "postgresql"
+          it.attributes.get(
+            io.opentelemetry.api.common.AttributeKey
+              .stringKey("db.system"),
+          ) == "postgresql" ||
+            it.attributes.get(
+              io.opentelemetry.api.common.AttributeKey
+                .stringKey("db.system.name"),
+            ) == "postgresql"
         },
         "DB span recorded (db.system=postgresql)",
       )
@@ -7124,10 +7130,20 @@ class PlatformIntegrationTests {
       // Later events (e.g. notification.dispatched) relay after task.created; match by type tag.
       val relay =
         ObservabilitySpanCapture.spans("squamed.realtime.relay").lastOrNull {
-          it.attributes.get(io.opentelemetry.api.common.AttributeKey.stringKey("squamed.event.type")) == "task.created"
+          it.attributes.get(
+            io.opentelemetry.api.common.AttributeKey
+              .stringKey("squamed.event.type"),
+          ) == "task.created"
         }
       assertNotNull(relay, "relay span for task.created recorded")
-      assertEquals("task.created", relay!!.attributes.get(io.opentelemetry.api.common.AttributeKey.stringKey("squamed.event.type")), "relay span carries the event type")
+      assertEquals(
+        "task.created",
+        relay!!.attributes.get(
+          io.opentelemetry.api.common.AttributeKey
+            .stringKey("squamed.event.type"),
+        ),
+        "relay span carries the event type",
+      )
     }
 
     @Test
@@ -7143,8 +7159,16 @@ class PlatformIntegrationTests {
       )
       var metrics = prom()
       val depth =
-        metrics.lines().firstOrNull { it.startsWith("squamed_events_dlq_depth") }?.substringAfterLast(" ")?.toDouble() ?: -1.0
-      assertEquals((before ?: 0L) + 1, depth.toLong(), "DLQ depth gauge counts the FAILED row: ${metrics.lines().filter { it.startsWith("squamed_events_dlq_depth") }}")
+        metrics
+          .lines()
+          .firstOrNull { it.startsWith("squamed_events_dlq_depth") }
+          ?.substringAfterLast(" ")
+          ?.toDouble() ?: -1.0
+      assertEquals(
+        (before ?: 0L) + 1,
+        depth.toLong(),
+        "DLQ depth gauge counts the FAILED row: ${metrics.lines().filter { it.startsWith("squamed_events_dlq_depth") }}",
+      )
 
       // Audit chain: fresh tenant -> one audited write -> tamper its row -> the breaches gauge
       // gains exactly that tenant (a fresh tenant cannot be breached before this), restore ->
@@ -7175,21 +7199,39 @@ class PlatformIntegrationTests {
       // Establish the real baseline: prior failed PIT runs leave tampered tenants in the DB,
       // and the gauge reads 0.0 until the first verify runs in this JVM.
       `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
-      val b0 = prom().lines().first { it.startsWith("squamed_audit_chain_breaches") }.substringAfterLast(" ").toDouble()
+      val b0 =
+        prom()
+          .lines()
+          .first { it.startsWith("squamed_audit_chain_breaches") }
+          .substringAfterLast(" ")
+          .toDouble()
       val target =
-        obsJdbc.queryForMap("SELECT id, response_payload FROM audit.audit_log WHERE hospital_id = ?::uuid AND chain_seq IS NOT NULL AND response_payload IS NOT NULL LIMIT 1", h2)
+        obsJdbc.queryForMap(
+          "SELECT id, response_payload FROM audit.audit_log WHERE hospital_id = ?::uuid AND chain_seq IS NOT NULL AND response_payload IS NOT NULL LIMIT 1",
+          h2,
+        )
       val id = target["id"].toString()
       val original = target["response_payload"].toString()
       obsJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", "TAMPERED-OBS-$s2", id)
       val verify = `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
       assertTrue(verify["breaches"].any { it["hospitalId"].asText() == h2 }, "tamper detected on the fresh tenant: $verify")
-      val afterTamper = prom().lines().first { it.startsWith("squamed_audit_chain_breaches") }.substringAfterLast(" ").toDouble()
+      val afterTamper =
+        prom()
+          .lines()
+          .first { it.startsWith("squamed_audit_chain_breaches") }
+          .substringAfterLast(" ")
+          .toDouble()
       assertEquals(b0 + 1.0, afterTamper, "breach gauge gains exactly the fresh tenant: b0=$b0 after=$afterTamper")
       assertTrue(prom().contains("squamed_audit_chain_seconds_since_verify"), "staleness gauge present after verify")
 
       obsJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", original, id)
       `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
-      val afterRestore = prom().lines().first { it.startsWith("squamed_audit_chain_breaches") }.substringAfterLast(" ").toDouble()
+      val afterRestore =
+        prom()
+          .lines()
+          .first { it.startsWith("squamed_audit_chain_breaches") }
+          .substringAfterLast(" ")
+          .toDouble()
       assertEquals(b0, afterRestore, "breach gauge returns to baseline after restore: b0=$b0 after=$afterRestore")
     }
   }

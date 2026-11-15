@@ -145,6 +145,9 @@ interface EventOutboxRepository : JpaRepository<EventOutbox, UUID> {
   ): List<EventOutbox>
 
   fun findByEventId(eventId: UUID): EventOutbox?
+
+  /** Gauge source: outbox DLQ depth (FAILED rows awaiting admin replay). */
+  fun countByStatus(status: String): Long
 }
 
 interface EventCursorRepository : JpaRepository<EventCursor, UUID> {
@@ -167,4 +170,7 @@ interface IntegrationErrorRepository : JpaRepository<IntegrationError, UUID> {
     status: String,
     pageable: Pageable,
   ): List<IntegrationError>
+
+  /** Gauge source: inbound dead-letter backlog (OPEN rows awaiting replay). */
+  fun countByStatus(status: String): Long
 }

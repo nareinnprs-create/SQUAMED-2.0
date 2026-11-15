@@ -52,3 +52,107 @@ groups:
         annotations:
           summary: "JVM heap near capacity"
           description: "Heap usage is above 90% of the max for 10 minutes."
+
+  # 00.16 SLO burn alerts (NFR §6: 99.9% availability => 0.1% error budget, p95 < 300 ms reads
+  # (GET) / < 500 ms writes => 5% latency bad ratio; multiwindow burn: fast 5m+1h critical at
+  # 14.4x, slow 30m+6h warning at 6x) + audit-breach / DLQ routing. Runbook:
+  # docs/runbooks/oncall.md.
+  - name: squamed-slo
+    interval: 30s
+    rules:
+      - record: squamed:slo:http_error_ratio:5m
+        expr: sum(rate(http_server_requests_seconds_count{status=~"5..", job="squamed-backend"}[5m])) / sum(rate(http_server_requests_seconds_count{job="squamed-backend"}[5m]))
+      - record: squamed:slo:http_error_ratio:30m
+        expr: sum(rate(http_server_requests_seconds_count{status=~"5..", job="squamed-backend"}[30m])) / sum(rate(http_server_requests_seconds_count{job="squamed-backend"}[30m]))
+      - record: squamed:slo:http_error_ratio:1h
+        expr: sum(rate(http_server_requests_seconds_count{status=~"5..", job="squamed-backend"}[1h])) / sum(rate(http_server_requests_seconds_count{job="squamed-backend"}[1h]))
+      - record: squamed:slo:http_error_ratio:6h
+        expr: sum(rate(http_server_requests_seconds_count{status=~"5..", job="squamed-backend"}[6h])) / sum(rate(http_server_requests_seconds_count{job="squamed-backend"}[6h]))
+      - record: squamed:slo:latency_bad_ratio:5m
+        expr: 1 - ((sum(rate(http_server_requests_seconds_bucket{method="GET", le="0.3", job="squamed-backend"}[5m])) + sum(rate(http_server_requests_seconds_bucket{method!="GET", le="0.5", job="squamed-backend"}[5m]))) / sum(rate(http_server_requests_seconds_count{job="squamed-backend"}[5m])))
+      - record: squamed:slo:latency_bad_ratio:30m
+        expr: 1 - ((sum(rate(http_server_requests_seconds_bucket{method="GET", le="0.3", job="squamed-backend"}[30m])) + sum(rate(http_server_requests_seconds_bucket{method!="GET", le="0.5", job="squamed-backend"}[30m]))) / sum(rate(http_server_requests_seconds_count{job="squamed-backend"}[30m])))
+      - record: squamed:slo:latency_bad_ratio:1h
+        expr: 1 - ((sum(rate(http_server_requests_seconds_bucket{method="GET", le="0.3", job="squamed-backend"}[1h])) + sum(rate(http_server_requests_seconds_bucket{method!="GET", le="0.5", job="squamed-backend"}[1h]))) / sum(rate(http_server_requests_seconds_count{job="squamed-backend"}[1h])))
+      - record: squamed:slo:latency_bad_ratio:6h
+        expr: 1 - ((sum(rate(http_server_requests_seconds_bucket{method="GET", le="0.3", job="squamed-backend"}[6h])) + sum(rate(http_server_requests_seconds_bucket{method!="GET", le="0.5", job="squamed-backend"}[6h]))) / sum(rate(http_server_requests_seconds_count{job="squamed-backend"}[6h])))
+
+      - alert: SloAvailabilityBurnFast
+        expr: squamed:slo:http_error_ratio:5m > 0.0144 and squamed:slo:http_error_ratio:1h > 0.0144
+        for: 5m
+        labels:
+          severity: critical
+          service: squamed-core
+        annotations:
+          summary: "Availability budget burning fast (>14.4x of the 0.1% budget)"
+          description: "5xx error ratio over 5m and 1h both above 1.44%."
+          runbook_url: "docs/runbooks/oncall.md#sloavailabilityburnfast"
+
+      - alert: SloAvailabilityBurnSlow
+        expr: squamed:slo:http_error_ratio:30m > 0.006 and squamed:slo:http_error_ratio:6h > 0.006
+        for: 15m
+        labels:
+          severity: warning
+          service: squamed-core
+        annotations:
+          summary: "Availability budget burning slow (>6x of the 0.1% budget)"
+          description: "5xx error ratio over 30m and 6h both above 0.6%."
+          runbook_url: "docs/runbooks/oncall.md#sloavailabilityburnslow"
+
+      - alert: SloLatencyBurnFast
+        expr: squamed:slo:latency_bad_ratio:5m > 0.72 and squamed:slo:latency_bad_ratio:1h > 0.72
+        for: 5m
+        labels:
+          severity: critical
+          service: squamed-core
+        annotations:
+          summary: "Latency budget burning fast (>14.4x of the 5% budget)"
+          description: "p95 targets (GET <300ms, others <500ms) missed for 72%+ of requests in 5m and 1h."
+          runbook_url: "docs/runbooks/oncall.md#slolatencyburnfast"
+
+      - alert: SloLatencyBurnSlow
+        expr: squamed:slo:latency_bad_ratio:30m > 0.30 and squamed:slo:latency_bad_ratio:6h > 0.30
+        for: 15m
+        labels:
+          severity: warning
+          service: squamed-core
+        annotations:
+          summary: "Latency budget burning slow (>6x of the 5% budget)"
+          description: "p95 targets missed for 30%+ of requests in 30m and 6h."
+          runbook_url: "docs/runbooks/oncall.md#slolatencyburnslow"
+
+  - name: squamed-business
+    interval: 30s
+    rules:
+      - alert: AuditChainBreached
+        expr: squamed_audit_chain_breaches > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: squamed-core
+        annotations:
+          summary: "Audit hash chain breached for {{ $value }} tenant(s)"
+          description: "ADR-9 verify found tampered rows; audit retention is WORM-protected by law."
+          runbook_url: "docs/runbooks/oncall.md#auditchainbreached"
+
+      - alert: AuditVerifyStale
+        expr: squamed_audit_chain_seconds_since_verify > 90000
+        for: 5m
+        labels:
+          severity: warning
+          service: squamed-core
+        annotations:
+          summary: "Audit chain not verified for more than 25 hours"
+          description: "Nightly verify (03:00) has not completed since {{ $value | humanizeDuration }}."
+          runbook_url: "docs/runbooks/oncall.md#auditverifystale"
+
+      - alert: DlqNonEmpty
+        expr: min_over_time(squamed_events_dlq_depth[15m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: squamed-core
+        annotations:
+          summary: "Event outbox DLQ non-empty for >15 minutes"
+          description: "Dead-lettered events await admin replay; depth {{ $value }}."
+          runbook_url: "docs/runbooks/oncall.md#dlqnonempty"

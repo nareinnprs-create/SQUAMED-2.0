@@ -21,6 +21,16 @@ repositories {
     mavenCentral()
 }
 
+// Spring Boot 3.3.5's BOM pins io.opentelemetry:* at 1.37.0; opentelemetry-spring-boot-starter
+// 2.10.0 is built against 1.44.1. Re-import the OTel BOMs so the mixed 1.37/1.44 classpath
+// resolves consistently (verified with :dependencyInsight after changes).
+dependencyManagement {
+    imports {
+        mavenBom("io.opentelemetry:opentelemetry-bom:1.44.1")
+        mavenBom("io.opentelemetry:opentelemetry-bom-alpha:1.44.1-alpha")
+    }
+}
+
 // Infra-dependent tests (Testcontainers or the compose dev stack) live outside :test so the
 // backend-gates job (ktlintCheck + test + coverage) never needs Docker. The integration-gates
 // job starts the compose stack and runs the "integrationTest" task by exact name.
@@ -47,6 +57,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-websocket")
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("io.opentelemetry.instrumentation:opentelemetry-spring-boot-starter:2.10.0")
 
     implementation("org.flywaydb:flyway-core")
     implementation("org.flywaydb:flyway-database-postgresql")
@@ -83,6 +94,8 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers")
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("io.mockk:mockk:1.13.13")
+    // 00.16 PIT: assert the real trace pipeline via the SPI seam below.
+    "integrationTestImplementation"("io.opentelemetry:opentelemetry-sdk-testing:1.44.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
@@ -186,6 +199,9 @@ tasks.register<Test>("integrationTest") {
     classpath = integrationTestSourceSet.runtimeClasspath
     shouldRunAfter(tasks.test)
     environment("SQUAMED_IT_EXTERNAL", System.getenv("SQUAMED_IT_EXTERNAL") ?: "true")
+    // Boot's test contexts disable metrics export by default, dropping the /actuator/prometheus
+    // scrape endpoint the 00.16 PITs verify; Boot's documented switch keeps it on under tests.
+    systemProperty("spring.test.observability.auto-configure", "true")
 }
 
 val ktlintCheck = tasks.register<JavaExec>("ktlintCheck") {

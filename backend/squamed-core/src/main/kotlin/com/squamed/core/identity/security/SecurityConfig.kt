@@ -33,6 +33,10 @@ class SecurityConfig(
         authorize
           .requestMatchers("/health", "/", "/actuator/health", "/actuator/info")
           .permitAll()
+          // 00.16: Prometheus needs unauthenticated scrape; the endpoint carries RED metrics +
+          // business counters only (no PII), and the management plane is not ingress-exposed.
+          .requestMatchers("/actuator/prometheus")
+          .permitAll()
           .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/api-docs/**", "/v3/api-docs/**")
           .permitAll()
           .requestMatchers(

@@ -1,6 +1,7 @@
 package com.squamed.core.events
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -22,8 +23,14 @@ class EventDispatcher(
   private val redis: StringRedisTemplate,
   private val objectMapper: ObjectMapper,
   private val cursorService: EventCursorService,
+  private val meterRegistry: MeterRegistry,
 ) {
   private val logger = LoggerFactory.getLogger(EventDispatcher::class.java)
+
+  init {
+    // Outbox DLQ depth gauge (alerts.yml: DlqNonEmpty when non-empty for >15 min).
+    meterRegistry.gauge("squamed.events.dlq.depth", outboxRepository) { it.countByStatus("FAILED").toDouble() }
+  }
 
   @Scheduled(fixedDelay = 500)
   fun dispatch() {
@@ -61,12 +68,19 @@ class EventDispatcher(
       row.dispatchedAt = Instant.now()
       row = outboxRepository.save(row)
       cursorService.advance("dispatcher", row.eventId, row.eventType, row.occurredAt)
+      // Business metric (09-INFRASTRUCTURE.md §3): events/min per type.
+      meterRegistry
+        .counter("squamed.events.dispatched", "type", row.eventType)
+        .increment()
     } catch (e: Exception) {
       row.attempts += 1
       row.lastError = e.message?.take(2000)
       if (row.attempts >= row.maxAttempts) {
         row.status = "FAILED"
         logger.error("Event {} moved to DLQ after {} attempts", row.eventId, row.attempts, e)
+        meterRegistry
+          .counter("squamed.events.dlq", "type", row.eventType)
+          .increment()
       } else {
         // shortcut: no claim lease / SKIP LOCKED — single app instance in dev; add claim semantics before >1 replica.
         val backoffSeconds = minOf(60L, 1L shl row.attempts.coerceAtMost(6))

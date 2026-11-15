@@ -5,6 +5,7 @@ import com.squamed.core.audit.repository.AuditLogRepository
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
@@ -24,8 +25,22 @@ class AuditChainService(
   private val auditLogRepository: AuditLogRepository,
   private val jdbcTemplate: JdbcTemplate,
   private val eventPublisher: DomainEventPublisher,
+  private val meterRegistry: MeterRegistry,
 ) {
   private val logger = KotlinLogging.logger {}
+
+  // Gauges (registered once; suppliers run at scrape time) feed the AuditChainBreached /
+  // AuditVerifyStale alerts in alerts.yml — see docs/runbooks/oncall.md.
+  private var lastResult: VerifyResult? = null
+  private var lastVerifiedAt: Instant? = null
+
+  init {
+    meterRegistry.gauge("squamed.audit.chain.breaches", this) { it.lastResult?.breachedTenants?.toDouble() ?: 0.0 }
+    meterRegistry.gauge(
+      "squamed.audit.chain.seconds.since.verify",
+      this,
+    ) { it.lastVerifiedAt?.let { at -> (Instant.now().epochSecond - at.epochSecond).toDouble() } ?: 0.0 }
+  }
 
   data class Breach(
     val hospitalId: UUID,
@@ -84,6 +99,8 @@ class AuditChainService(
   /** On-demand verify used by the endpoint + nightly job: publishes alerts when breached. */
   fun verifyAndAlert(): VerifyResult {
     val result = verify()
+    lastResult = result
+    lastVerifiedAt = result.verifiedAt
     if (!result.ok) {
       logger.error { "Audit chain verification FAILED: ${result.breaches.size} breach(es), ${result.checked} rows checked" }
       publishAlerts(result)

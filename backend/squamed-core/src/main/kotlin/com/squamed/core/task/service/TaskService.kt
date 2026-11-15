@@ -13,6 +13,7 @@ import com.squamed.core.task.domain.Task
 import com.squamed.core.task.domain.TaskLink
 import com.squamed.core.task.repository.TaskLinkRepository
 import com.squamed.core.task.repository.TaskRepository
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -27,6 +28,7 @@ class TaskService(
   private val eventPublisher: DomainEventPublisher,
   private val configDocumentService: ConfigDocumentService,
   private val userRoleRepository: UserRoleRepository,
+  private val meterRegistry: MeterRegistry,
 ) {
   companion object {
     val OPEN_STATUSES = listOf("pending", "in_progress", "escalated")
@@ -255,6 +257,9 @@ class TaskService(
           emptyList()
         }
       escalateTask(task.id!!, actorId, "SLA_BREACH:${task.priority}", task.hospitalId, roleTargets)
+      meterRegistry
+        .counter("squamed.sla.breaches", "priority", task.priority)
+        .increment()
       escalated += 1
     }
     return mapOf("escalated" to escalated, "checked" to open.size)

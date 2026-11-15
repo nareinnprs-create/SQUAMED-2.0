@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Badge, Button, Divider } from '@squamed/ui';
+import { Badge, Button, Divider, t } from '@squamed/ui';
 import { useApi } from '@/lib/use-api';
 import { useNotificationsRealtime, useRealtime } from '@/providers/RealtimeProvider';
 
@@ -108,8 +108,8 @@ export function NotificationBell() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span
           role="img"
-          aria-label={connected ? 'Realtime connected' : 'Realtime disconnected'}
-          title={connected ? 'Realtime connected' : 'Realtime disconnected'}
+          aria-label={t(connected ? 'shell.notifications.connected' : 'shell.notifications.disconnected')}
+          title={t(connected ? 'shell.notifications.connected' : 'shell.notifications.disconnected')}
           style={{
             width: 8,
             height: 8,
@@ -122,7 +122,7 @@ export function NotificationBell() {
           variant="ghost"
           size="sm"
           aria-expanded={open}
-          aria-label={`Notifications (${unread} unread)`}
+          aria-label={t('shell.notifications.count', { count: unread })}
           onClick={() => setOpen((value) => !value)}
           style={{ gap: 6 }}
         >
@@ -156,7 +156,7 @@ export function NotificationBell() {
       {open ? (
         <div
           role="menu"
-          aria-label="Notifications"
+          aria-label={t('shell.notifications.title')}
           style={{
             position: 'absolute',
             top: 'calc(100% + 8px)',
@@ -181,7 +181,7 @@ export function NotificationBell() {
               padding: '10px 16px',
             }}
           >
-            <strong style={{ fontSize: 14 }}>Notifications</strong>
+            <strong style={{ fontSize: 14 }}>{t('shell.notifications.title')}</strong>
             <Button
               variant="ghost"
               size="sm"
@@ -189,7 +189,7 @@ export function NotificationBell() {
               disabled={unread === 0}
               onClick={() => void markAllRead()}
             >
-              Mark all read
+              {t('shell.notifications.markAll')}
             </Button>
           </div>
           <Divider />
@@ -203,7 +203,7 @@ export function NotificationBell() {
                   color: 'var(--sq-fg-muted)',
                 }}
               >
-                No notifications
+                {t('shell.notifications.empty')}
               </div>
             ) : (
               notifications

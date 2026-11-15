@@ -97,7 +97,9 @@ function SidebarItemRow({ item, active, collapsed, onActivate }: SidebarItemRowP
       <a
         href={item.href}
         title={collapsed ? item.label : undefined}
-        onClick={() => {
+        onClick={(event) => {
+          // Consumers set onClick for SPA navigation; keep href for middle-click/new tab.
+          if (item.onClick) event.preventDefault();
           handleClick();
         }}
         onPointerDown={focus.onPointerDown}

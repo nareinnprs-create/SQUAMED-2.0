@@ -146,6 +146,17 @@ groups:
           description: "Nightly verify (03:00) has not completed since {{ $value | humanizeDuration }}."
           runbook_url: "docs/runbooks/oncall.md#auditverifystale"
 
+      - alert: AuditChainPendingBacklog
+        expr: max_over_time(squamed_audit_chain_pending[5m]) > 0
+        for: 15m
+        labels:
+          severity: warning
+          service: squamed-core
+        annotations:
+          summary: "Audit rows unchained for 15+ minutes ({{ $value }} pending)"
+          description: "ADR-15 async linkage has not drained the pending batch; tamper-evidence window open."
+          runbook_url: "docs/runbooks/oncall.md#auditchainpendingbacklog"
+
       - alert: DlqNonEmpty
         expr: min_over_time(squamed_events_dlq_depth[15m]) > 0
         for: 0m

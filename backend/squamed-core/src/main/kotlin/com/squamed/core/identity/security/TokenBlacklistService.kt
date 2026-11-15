@@ -34,4 +34,10 @@ class TokenBlacklistService(
   fun isTokenBlacklisted(jti: String): Boolean = redis.hasKey("$PREFIX$jti") == true
 
   fun isSessionRevoked(sessionId: UUID): Boolean = redis.hasKey("$SESSION_PREFIX$sessionId") == true
+
+  /** One variadic EXISTS round trip for both keys; the request path was paying two Redis RTs per request. */
+  fun isAccessBlocked(
+    sessionId: UUID,
+    jti: String,
+  ): Boolean = redis.countExistingKeys(listOf("$SESSION_PREFIX$sessionId", "$PREFIX$jti")) > 0
 }

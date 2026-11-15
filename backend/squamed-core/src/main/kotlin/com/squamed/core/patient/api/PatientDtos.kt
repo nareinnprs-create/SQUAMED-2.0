@@ -262,6 +262,17 @@ data class PatientDetailDto(
   }
 }
 
+/** Parse target for the single-round-trip detail aggregate (PatientRecordRepository.findDetailSubresources). */
+data class PatientDetailSubresources(
+  val identifiers: List<PatientIdentifierDto> = emptyList(),
+  val contactPoints: List<ContactPointDto> = emptyList(),
+  val addresses: List<AddressDto> = emptyList(),
+  val allergies: List<AllergyDto> = emptyList(),
+  val conditions: List<MedicalHistoryDto> = emptyList(),
+  val notes: List<NoteDto> = emptyList(),
+  val relationships: List<PatientRelationshipDto> = emptyList(),
+)
+
 data class PhotoDto(
   val photoKey: String? = null,
 )

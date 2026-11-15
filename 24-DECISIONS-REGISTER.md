@@ -23,6 +23,7 @@
 | D17 | FHIR: planned HAPI FHIR buy vs adopted build's hand-rolled `FhirService` (403 lines) | SC-6 adoption | Chunk 0 wk 1 (00.07 ABHA rides on it) | Master baseline audit, E1 | DECIDED 2026-11-13 → ADR-12 (read-only svc stays; HAPI at 06.07) |
 | D18 | Tenancy: planned Postgres RLS vs adopted build's `hospital_id` column scoping | SC-6 adoption | Chunk 0 wk 1 (00.04) | Master baseline audit | DECIDED 2026-11-13 → ADR-13 (stage 1 hardening now; RLS pre-chunk-6; chunk-00 item 15) |
 | D19 | Interop engine: planned Mirth Connect vs adopted build's built-in HL7 v2 module | SC-6 adoption | Chunk 2 wk 1 (02.01) | Master baseline audit, E6 | DECIDED 2026-11-13 → ADR-14 (Mirth confirmed; MLLP = dev sim) |
+| D20 | Audit chain: synchronous per-row append vs async batched linkage + reads out of audit scope | Chunk-0 exit load test (FINAL.md §7.4 NFR p95 breach) | Remediation block PR 1 | NFR §6 (p95 < 300 ms reads / < 500 ms writes @ 1,000 users) | DECIDED 2026-11-15 → ADR-15 (batcher links ≤1000 rows/250 ms; GET/HEAD skip) |
 
 ## Already-decided (for the record — don't re-open without protocol §5.2)
 | ID | Decision | Where |

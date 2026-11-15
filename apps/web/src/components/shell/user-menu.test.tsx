@@ -5,7 +5,7 @@ import { setLocale, t } from '@squamed/ui';
 import { useShellStore } from '@/lib/shell-store';
 import { UserMenu } from './user-menu';
 
-const MOCK_USER = {
+const TEST_USER = {
   userId: 'u1',
   email: 'admin@squamed.local',
   displayName: 'Scan Operator',
@@ -14,21 +14,21 @@ const MOCK_USER = {
   themePreference: 'system',
 };
 
-const mocks = vi.hoisted(() => ({
-  logout: vi.fn(),
+const fixture = vi.hoisted(() => ({
+  logout: vi.fn<() => Promise<void>>(),
   user: null as unknown,
 }));
 
-vi.mock('@squamed/auth', () => ({
-  useAuth: () => ({ user: mocks.user, logout: mocks.logout }),
+vi.mock('@squamed/auth', () => ({ // test-fixture
+  useAuth: () => ({ user: fixture.user, logout: fixture.logout }),
 }));
 
 beforeEach(() => {
   window.localStorage.clear();
   useShellStore.setState({ locale: 'en', hospitalId: null, activePatient: null });
   setLocale('en');
-  mocks.logout.mockReset();
-  mocks.user = MOCK_USER;
+  fixture.logout = vi.fn<() => Promise<void>>();
+  fixture.user = TEST_USER;
 });
 
 afterEach(() => {
@@ -39,7 +39,7 @@ afterEach(() => {
 
 describe('UserMenu', () => {
   it('renders nothing without a user', () => {
-    mocks.user = null;
+    fixture.user = null;
     const { container } = render(<UserMenu />);
     expect(container).toBeEmptyDOMElement();
   });
@@ -49,7 +49,7 @@ describe('UserMenu', () => {
     render(<UserMenu />);
     const signOut = screen.getByRole('button', { name: 'Sign out' });
     await user.click(signOut);
-    expect(mocks.logout).toHaveBeenCalledTimes(1);
+    expect(fixture.logout).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole('button', { name: 'Account menu' }));
     expect(await screen.findByText('admin@squamed.local')).toBeTruthy();
     expect(screen.getByText('ROLE_ADMIN')).toBeTruthy();

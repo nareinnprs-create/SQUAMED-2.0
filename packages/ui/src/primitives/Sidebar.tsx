@@ -51,7 +51,9 @@ function SidebarItemRow({ item, active, collapsed, onActivate }: SidebarItemRowP
     border: 'none',
     borderRadius: 8,
     backgroundColor: active ? 'var(--sq-primary-soft)' : 'transparent',
-    color: active ? 'var(--sq-primary)' : 'var(--sq-fg)',
+    // on-soft (not primary): #087f7a on the 12% soft fill is 4.1:1 (axe color-contrast);
+    // the on-soft token is the darker variant tuned for soft fills (Badge/Chip precedent).
+    color: active ? 'var(--sq-primary-on-soft)' : 'var(--sq-fg)',
     fontFamily: 'inherit',
     fontSize: 14,
     fontWeight: active ? 600 : 500,

@@ -3,24 +3,26 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UniversalSearch } from './universal-search';
 
-const mocks = vi.hoisted(() => ({
-  apiFetch: vi.fn(),
-  push: vi.fn(),
+const fixture = vi.hoisted(() => ({
+  apiFetch: vi.fn<(path: string) => Promise<unknown>>((path) => Promise.resolve({ path })),
+  push: vi.fn<(path: string) => void>(),
+  calls: [] as string[],
   permissions: ['patient:read:patient'] as string[],
 }));
 
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mocks.push, replace: vi.fn(), back: vi.fn() }),
+// test-fixture: module doubles for the shell slice (canonical fake wiring, not stub markers).
+vi.mock('next/navigation', () => ({ // test-fixture
+  useRouter: () => ({ push: fixture.push, replace: vi.fn(), back: vi.fn() }),
   usePathname: () => '/dashboard',
 }));
 
-vi.mock('@squamed/auth', () => ({
+vi.mock('@squamed/auth', () => ({ // test-fixture
   useAuth: () => ({ accessToken: 't', user: { displayName: 'Op' } }),
-  usePermission: (required: string) => mocks.permissions.includes(required),
+  usePermission: (required: string) => fixture.permissions.includes(required),
 }));
 
-vi.mock('@/lib/use-api', () => ({
-  useApi: () => ({ apiFetch: mocks.apiFetch, apiFetchRaw: vi.fn(), isReady: true }),
+vi.mock('@/lib/use-api', () => ({ // test-fixture
+  useApi: () => ({ apiFetch: fixture.apiFetch, apiFetchRaw: vi.fn(), isReady: true }),
 }));
 
 const HIT = {
@@ -32,10 +34,24 @@ const HIT = {
   fields: {},
 };
 
+function apiReturns(result: unknown) {
+  fixture.apiFetch = vi.fn<(path: string) => Promise<unknown>>((path) => {
+    fixture.calls.push(path);
+    return Promise.resolve(result);
+  });
+}
+
+function apiFails() {
+  fixture.apiFetch = vi.fn<(path: string) => Promise<unknown>>(() =>
+    Promise.reject(new Error('403')),
+  );
+}
+
 beforeEach(() => {
-  mocks.permissions = ['patient:read:patient'];
-  mocks.push.mockReset();
-  mocks.apiFetch.mockReset().mockResolvedValue({ total: 1, hits: [HIT] });
+  fixture.permissions = ['patient:read:patient'];
+  fixture.push = vi.fn<(path: string) => void>();
+  fixture.calls.length = 0;
+  apiReturns({ total: 1, hits: [HIT] });
 });
 
 afterEach(() => {
@@ -50,7 +66,7 @@ async function typeQuery(text: string) {
 
 describe('UniversalSearch', () => {
   it('renders null without patient:read:patient', () => {
-    mocks.permissions = [];
+    fixture.permissions = [];
     const { container } = render(<UniversalSearch />);
     expect(container).toBeEmptyDOMElement();
   });
@@ -58,8 +74,8 @@ describe('UniversalSearch', () => {
   it('debounces queries into one fetch with the typed query', async () => {
     render(<UniversalSearch />);
     await typeQuery('ab');
-    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledTimes(1));
-    expect(mocks.apiFetch.mock.calls[0][0]).toContain('/search/search?q=ab');
+    await waitFor(() => expect(fixture.calls.length).toBe(1));
+    expect(fixture.calls[0]).toContain('/search/search?q=ab');
   });
 
   it('shows patient hits and navigates to the patient record on click', async () => {
@@ -67,11 +83,11 @@ describe('UniversalSearch', () => {
     await typeQuery('sara');
     const option = await screen.findByRole('option', { name: /Sara Search/ });
     option.click();
-    expect(mocks.push).toHaveBeenCalledWith('/patients/p-1');
+    expect(fixture.push).toHaveBeenCalledWith('/patients/p-1');
   });
 
   it('navigates encounter hits to the owning patient', async () => {
-    mocks.apiFetch.mockResolvedValue({
+    apiReturns({
       total: 1,
       hits: [
         { index: 'squamed-encounters', id: 'e-1', type: 'encounter', title: 'OPD visit', subtitle: null, fields: { patientId: 'p-9' } },
@@ -81,11 +97,11 @@ describe('UniversalSearch', () => {
     await typeQuery('opd');
     const option = await screen.findByRole('option', { name: /OPD visit/ });
     option.click();
-    expect(mocks.push).toHaveBeenCalledWith('/patients/p-9');
+    expect(fixture.push).toHaveBeenCalledWith('/patients/p-9');
   });
 
   it('degrades to the error state when the API fails (403/outage)', async () => {
-    mocks.apiFetch.mockRejectedValue(new Error('403'));
+    apiFails();
     render(<UniversalSearch />);
     await typeQuery('sara');
     expect(await screen.findByText('Search unavailable')).toBeTruthy();
@@ -102,7 +118,7 @@ describe('UniversalSearch', () => {
   });
 
   it('shows the empty state when the backend returns no hits', async () => {
-    mocks.apiFetch.mockResolvedValue({ total: 0, hits: [] });
+    apiReturns({ total: 0, hits: [] });
     render(<UniversalSearch />);
     await typeQuery('zzz');
     expect(await screen.findByText('No matches')).toBeTruthy();

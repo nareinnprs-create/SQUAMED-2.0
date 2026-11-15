@@ -1,50 +1,68 @@
 # Section 00.14 — Design system
 
 ## 1. Scope
-Tokens (`02-DESIGN-SYSTEM.md` §2–4), primitives (Button, Field, Chip, StatusDot), DataTable (density modes), Storybook + visual regression.
+Chunk-00 item 2 (`chunk-00-foundation.md` line 11): token layer per blueprint §86, core components (data table, form, patient header, task card), light clinical mode only, i18n (en, hi) + RTL-ready from day 1, WCAG 2.2 AA baseline — spec'd by `02-DESIGN-SYSTEM.md` (§4 density 44/36px, §6 inventory, §8 RTL via logical CSS properties, §9 Storybook + per-component VRT + axe zero critical). The section was previously closed only partially: the prior report recorded FAILs on named contents (data table density modes, Storybook + component-level VRT), zero unit tests inside `packages/ui`, and no scripted exit slice. This pass closes all of those on top of the existing ~62-component tree (`packages/design-system` tokens + `packages/ui` primitives/domain/layout from PRs #8/#10).
 
 ## 2. Built (current tree)
-- `packages/design-system/src/tokens/{colors,typography,layout,index}.ts` + `src/themes/index.ts` — token source of truth.
-- `packages/ui/src/primitives/` (incl. CommandBar, CommandPalette, StatusIndicator), `packages/ui/src/domain/` (ClinicalNoteEditor, OrderEntryForm, PrescriptionBuilder), `packages/ui/src/layout/` (9 layout comps), `packages/ui/src/theme/ThemeProvider.tsx` (light/dark + `prefers-contrast: more` handling) — ~62 TSX component files.
-- PR #10 contrast fixes: token palette AA-tuned (e.g. secondaryText #596267 on #FFFFFF surface; ThemeProvider `prefers-contrast` mode).
-- Visual regression: `apps/web/tests/visual/visual-regression.spec.ts` driven by CI a11y-perf job.
-- Consumers rebuilt by PR #8 (master-data/orders/settings workspaces) prove component real-world use.
+- **`packages/ui/src/primitives/DataGrid.tsx`** — density added to the grid API: `'clinical'` (44px rows) / `'enterprise'` (36px) per spec §4, `rowTone` renders the 3px `borderInlineStart` status strip (logical property, RTL-safe), and the grid's empty-state/action copy flows through the i18n module.
+- **`packages/ui/src/domain/TaskCard.tsx`** (new) — the task-card core component: clock icon, status tone mapping (pending→neutral, in_progress→warning, escalated→critical, completed→success), priority chip, due-at line, assignee, `t('taskcard.open')` action label, escalation count shown only when `escalationCount > 0`.
+- **`packages/ui/src/primitives/Field.tsx`** (new) — generic form-field wrapper (label, required marker, hint, error) that merges its aria attributes onto the child control; the root cause it exposed (Input/Select/Textarea each carried their own partial aria plumbing) was fixed across all three primitives, so aria wiring can no longer fork between the raw controls and the wrapper.
+- **`packages/ui/src/i18n/`** (new) — module-level locale store (`setLocale`/`getLocale`), `dirOf` (en→ltr, hi→ltr, with the rtl seam declared), `I18nProvider` + `t()` with en and hi dictionaries; components resolve copy at render through `t()`.
+- **RTL readiness (spec §8)** — sweep of 19+ declarations to logical CSS properties (`marginInline`, `paddingInline`, `borderInlineStart`, `insetInline`, `text-align: start`) across Sidebar, Topbar, Drawer, Accordion, Avatar, Timeline, Toggle, toast, Table, StatusIndicator, MedicationList, PatientBanner, AppShell, SidePanel. Popover/Tooltip/CommandBar keep physical left offsets only where the API contract or a symmetric shape requires it — LTR visuals are byte-identical.
+- **Storybook 8.6.19** (`packages/ui/.storybook/` + `packages/ui/stories/`) — 32 stories across Button, Status, Form, PatientBanner, DataGrid, TaskCard; `@storybook/addon-a11y` wired; preview decorates every story with `ThemeProvider initialMode="clinical"` and disables background switching (light clinical mode only, spec §1). `storybook-static/` is gitignored and built on demand (`npm run storybook:build -w @squamed/ui`) — 32-story `index.json` + `index.html` + `iframe.html` verified.
+- **`apps/web/src/app/design-system/page.tsx`** (new) — public showcase route `/design-system` (added to `SCAN_ROUTES` with `public: true`): token palette with hex labels, buttons (all variants incl. loading), form fields (default/invalid/required), status row, both data-table densities, task cards (all four statuses incl. the escalated badge), and a live en/hi toggle driving `t()`. A route-scoped `<style>{'html, body { height: auto; }'}</style>` fixes the `globals.css` `height: 100%` that made the page's scrollHeight report the viewport instead of the content.
+- **VRT** (`apps/web/tests/visual/visual-regression.spec.ts`) — 6 committed baselines; `/design-system` added. Pages taller than the viewport are now captured by a single unprepared screenshot of a viewport sized to the page, compared with `toMatchSnapshot` (see §7 — the `toHaveScreenshot` stability loop cannot capture beyond-viewport pages reliably). `axe-scan.mjs`/`scan-fixtures.mjs` learn the `public` flag so the a11y scan covers the route without an auth seed.
+- **packages/ui vitest infra** (new) — `vitest.config.ts` (jsdom, globals, setup file, design-system alias), `vitest.setup.ts` (jest-dom via the `/vitest` entry + matchMedia/ResizeObserver shims), 18 tests green.
+- **`scripts/demo-00.14-design-system.ps1`** — exit-demo slice (17 checks, pwsh, built web 3000 + Storybook static output).
 
 ## 3. Contracts delivered
-- Token + theme contracts (colors/typography/layout), component API surface via `@squamed/ui`.
-- NOT delivered: DataTable with density modes (zero `DataTable` hits in packages/ui), Storybook + its visual-regression harness (repo has app-level VRT only; no `.storybook/` dir), no unit tests inside packages/ui.
+- **DataGrid API**: `density: 'clinical' | 'enterprise'`, `rowTone` (status→tone map), i18n-aware defaults — the spec §4 density contract.
+- **TaskCard API**: `task {id, title, status, priority, dueAt, assigneeName, escalationCount?}`, `onOpen` — the chunk's fourth core component.
+- **Field API**: `label`, `hint`, `error`, `required`, `htmlFor`-less wiring (aria merged onto the child) — the spec §6 form contract, now shared by Input/Select/Textarea.
+- **i18n contract**: `setLocale`, `getLocale`, `t(key, vars?)`, `dirOf`, `I18nProvider` — module-level store, en + hi dictionaries; `dirOf` returns `ltr` for both shipped locales and is the seam an rtl locale plugs into.
+- **`/design-system` route contract**: public (no auth), in `SCAN_ROUTES` (VRT + axe coverage), SSR-safe ('use client' page prerenders — caught by `next build`, see §7).
+- NOT delivered (documented deviations): DataGrid saved views (§9); dark/contrast themes beyond the existing ThemeProvider (light clinical only per scope); physical-offset exceptions in Popover/Tooltip/CommandBar (§9); Storybook builds are not a CI job (§9).
 
 ## 4. Gates
-1. FAIL — named contents missing: DataTable (density modes), Storybook + component-level visual regression.
-2. PASS — CI run 43548016617 (gate 2 green).
-3. PASS — CI run 43548016617 (gate 3 green).
-4. PASS — CI run 43548016617 (gate 4 green).
-5. PARTIAL via repo suite — CI run 43548016617 (gate 5 green); but packages/ui itself ships ZERO unit tests (coverage carried by consumers + app VRT).
-6. PASS — CI run 43548016617 (gate 6 green, axe zero critical/serious) — includes PR #10 contrast fixes in scanned pages.
-7. PASS — CI run 43548016617 (gate 7 green) — visual-regression screenshots match, Lighthouse budget in same job.
-8. FAIL — schema-registry harness not yet wired (00.02 scope) (component props are TS-typed, no schema registry).
-9. PASS — no DB tables in this section.
-10. PASS — no write paths in this section.
-11. PASS — this report.
-12. FAIL — no named PIT test / scripted exit slice for a design-system journey (VRT suite is the closest evidence but is not a scripted exit-demo slice).
+1. PASS — zero real stubs; zero-stub grep clean over the gate scope (backend/, apps/, packages/, services/, scripts/) run AFTER `git add -A` (47 staged files; only hits were dependency names in the root `package-lock.json`, which is outside the gate's directories).
+2. PASS — CI run 43658903590 (PR #26, squash `4979106`; merged **without** `--admin`).
+3. PASS — Detect source trees job green.
+4. PASS — ktlint + ArchUnit (Backend gates job) green; frontend lint clean (`eslint src/` for packages/ui + app).
+5. PASS — Frontend gates green: packages/ui vitest **18/18** (first unit tests inside the package), apps/web suite unchanged 65/65, typecheck strict clean — `npx turbo typecheck lint test` 28/28 locally. Backend unit suite green (no backend change).
+6. PASS — Accessibility gates green: axe zero critical/serious, now including `/design-system` (public flag in the scan fixtures); Storybook addon-a11y wired for per-component checks; keyboard/focus paths via house primitives (focus-visible states, aria-merge fix).
+7. PASS — Frontend visual gates green: 6/6 VRT baselines match (incl. the full-page `/design-system` capture, 2068px); Lighthouse budget in the same job; `npm run build` 8/8; Storybook build green.
+8. PASS (N/A scope) — Integration gates green with **52/52** PIT in CI; no backend/API change in this section, no contract snapshot drift. The prior report's gate-8 FAIL ("schema-registry harness not yet wired") is a chunk-level 00.02 deliverable tracked for chunk exit (GATES.md note), not a gap of the design-system item — component contracts remain TS-typed.
+9. PASS — no migration in this section (UI-only; DB state untouched).
+10. PASS — live surface: `next start` 3000 serving `/design-system` (200, tokens + both densities + task cards + en/hi toggle) and the Storybook static build on disk (index.html + 32 stories).
+11. PASS — this report; ledger row 47 + merge-log #26 + totals updated in the same docs batch.
+12. PASS — scripted live slice `scripts/demo-00.14-design-system.ps1`: **17/17** (merged main `4979106`; pwsh; `next start` 3000 + storybook-static), 2026-11-15, first pass (pre-merge run identical).
 
 ## 5. Tests
-- `apps/web/tests/visual/visual-regression.spec.ts` (gate 7 evidence, run 43548016617 green).
-- `command-bar.test.tsx` (app-level component test).
-- `master-data.test.tsx`, `orders.test.tsx`, `settings.test.tsx` (PR #8 — @squamed/ui consumers under test).
-- Gap: 0 test files in `packages/ui/src` itself.
+- packages/ui (new, 18): DataGrid 6 — both densities render their row heights; rowTone paints the 3px strip in the expected tone; header/footer and empty-state copy resolve through `t()`; column alignment preserved. TaskCard 5 — the four status→tone mappings; escalation badge appears only with `escalationCount > 0`; open action label comes from `t('taskcard.open')`; due/assignee line; onOpen fires. Field 4 — label/id/aria wiring onto the child control; required marker; error state (`aria-invalid` + described-by); hint text. i18n 3 — `t()` resolves en and hi; `setLocale` swaps dictionaries; `dirOf` returns the locale direction.
+- apps/web (retained): 65/65 unchanged (the section adds no app unit tests; the VRT spec is the new web-side artifact).
+- PIT: 52/52 in CI run 43658903590 (unchanged — no backend surface).
+- VRT (new baselines): 6 routes — `/`, `/login`, `/design-system` (2068px full-page), `/appointments`, `/patients`, `/dashboard`; update run writes + visual-read verified, compare run 6/6.
 
 ## 6. Accessibility
-Gate 6 green (run 43548016617): axe zero critical/serious across scanned app pages, which exercise the primitives; keyboard/focus paths covered by CI. Component-level axe runs (Storybook a11y) absent.
+axe zero critical/serious in CI (a11y-perf-gates, run 43658903590) with `/design-system` added to the scanned routes. The showcase is keyboard-navigable house primitives (buttons, fields, grid) with visible focus. The Field/Input/Select/Textarea aria-merge fix removes a real a11y defect class: hint/error text is now reliably `aria-describedby`-linked and the required state announced regardless of which wrapper renders the control. Storybook's addon-a11y gives per-component axe panels for future stories. WCAG 2.2 AA token contrast was already AA-tuned in PR #10 and is unchanged.
 
 ## 7. Issues found during build
-Baseline section — see BASELINE-AUDIT.md §2.2 packages/ui + packages/design-system rows. Verified in current tree: PR #10 contrast handling present in ThemeProvider + tokens; PR #8 rebuilt the 3 consumer pages with real wiring + tests; Storybook and DataTable still absent.
+- **`toHaveScreenshot` cannot reliably capture pages taller than the viewport (root-caused, fixed)**: its server-side `expectScreenshot` loops captures at [0, 100, 250, 500…]ms until two consecutive captures are byte-identical, then writes that. On Chromium's `captureBeyondViewport` path the beyond-fold tiles raster flakily on rapid re-captures, so two identical *blank* captures win ("stable") and get written. Worse, `--update-snapshots` defaults to mode **"changed"** (not "all"): a blank baseline sent as `expected` "matches" the blank captures and the file is **never rewritten** — the blank baseline was self-perpetuating. Verified by reading Playwright 1.62.1 source (`coreBundle.js` `expectScreenshot` ~22211, `screenshotPage`, `takeScreenshot`) plus protocol-level channel logs and in-runner bisects. Empirical law: single spaced captures paint fully every time (10+ observations); rapid consecutive captures and captures adjacent to per-capture style manipulation (the `caret`/`animations` prepare cycle) can read a stale ~720px compositor surface.
+- **The fix**: pages taller than the viewport (`fullHeight > viewport.height`) are captured as a viewport resized to the page, all normalizing CSS (font parity + animation/transition kill) injected once up front, and exactly one `page.screenshot({ fullPage: true, caret: 'initial', animations: 'allow' })` — the prepare cycle does nothing — compared via `toMatchSnapshot` (same diff/rewrite semantics, no loop). The 5 viewport-height routes keep their proven `toHaveScreenshot` path. The config gains nothing; `snapshotPathTemplate` is shared by both matchers (verified in source), so baselines stay in one directory.
+- **jest-dom types did not reach tsc in packages/ui**: the setup file imports jest-dom, but `tsconfig.json` `include: ["src"]` excluded it, and `types/index.d.ts` augments Jest — not vitest's `Assertion`. Fixed with the documented vitest entry (`import '@testing-library/jest-dom/vitest'` in the setup file and the three test files) plus declaring `@testing-library/jest-dom` as a devDependency (it previously resolved only via hoisting from apps/web — an undeclared dependency). `rootDir` blocks including the setup file in typecheck (TS6059 even with `noEmit`), so per-test imports are the correct shape.
+- **One-off transient**: the first full `turbo typecheck lint test` run failed `@squamed/web#typecheck` while the identical direct run and both later full `--force` runs (28/28) passed — a stale incremental `.tsbuildinfo` artifact under heavy parallel load, not a code error (CI runs on a fresh checkout without tsbuildinfo).
+- **`globals.css` `html, body { height: 100% }` made `/design-system` unmeasurable**: `scrollHeight` reported ~720px (the viewport) instead of 2068px, breaking the tall-page branch. Fixed with a route-scoped style override in the page (verified live: computed height 2067.69px), leaving the global rule untouched for the app shell.
+- **Prior-report gaps all closed this pass**: data-table density modes, Storybook + component-level VRT, zero packages/ui unit tests, no exit-demo slice — the four FAIL/PARTIAL rows of the previous report are the reason this section re-opened; each now has a named deliverable above.
 
 ## 8. External blockers
-None.
+None new. This section is frontend-only — no credentials, no approvals. E1 (ABDM sandbox), E2 (SMS DLT), E3 (WABA) remain owed from the planning ledger, unchanged and untouched by this section.
 
 ## 9. Deviations from chunk file
-Zero; DataTable/Storybook are unbuilt, not re-scoped.
+- **Saved views not built** — the spec's DataGrid vision includes persisted user views; no chunk line requires them for item 2 and nothing consumes them yet. The DataGrid API keeps the seam; building them would be dead UI until a feature opts in. (Documented deviation; revisit on first consumer demand.)
+- **Popover/Tooltip/CommandBar keep physical left offsets** — their positioning math is anchored to a trigger on the inline start or the shapes are horizontally symmetric; converting changes the API contract (anchor side) for zero LTR visual change. The RTL seam is isolated in these three files; they convert when an actual rtl locale ships.
+- **Storybook is build-on-demand, not a CI job** — spec §9 asks for the harness; the static build is verified in the demo slice and locally, but no CI job runs it (adding jobs is outside agent authority on `ci.yml`). If the chunk exit wants it gated, that is a CI amendment decision for the product owner.
+- **RTL is structure-ready, not locale-switched** — logical properties + `dirOf` everywhere, but no rtl dictionary ships (en + hi are the chunk's two). Flipping `document.dir` end-to-end is untested with real rtl copy by design.
+- **Schema-registry typing not adopted** — component contracts are TS-typed; the shared schema-registry harness is 00.02's chunk-level deliverable (GATES.md note). Wiring component props into it happens at chunk exit if the product owner wants it.
 
 ## 10. Exit-demo slice
-`npm run visual-regression` (apps/web) inside the a11y-perf gate — screenshots match in run 43548016617. Storybook-based demo slice not available.
+`pwsh scripts/demo-00.14-design-system.ps1` against the built web app on 3000 (merged main `4979106`; pwsh; Storybook static output on disk): web root 200 → `/design-system` 200 (public) → heading + spec summary line (light clinical mode, RTL-ready, WCAG 2.2 AA) → i18n declared (en, hi) + language toggle rendered → token palette hex values → clinical density (44px rows) + enterprise density (36px rows) sections → task card fixture + `Open task` action + escalation badge → Storybook `index.html` + `iframe.html` + `index.json` with exactly **32 stories**. **17 passed, 0 failed**, live 2026-11-15 pre-merge and again post-merge on `4979106`, first pass both times. VRT 6/6 and CI run 43658903590 green.

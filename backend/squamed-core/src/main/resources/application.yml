@@ -1,6 +1,11 @@
 server:
   port: 8080
   shutdown: graceful
+  tomcat:
+    threads:
+      # <= hikari pool / 2: every in-flight audited write holds two connections
+      # (main + REQUIRES_NEW audit) - see the datasource hikari note
+      max: 100
 
 spring:
   application:
@@ -10,7 +15,10 @@ spring:
     username: ${DB_USERNAME:squamed}
     password: ${DB_PASSWORD:squamed_dev_password}
     hikari:
-      maximum-pool-size: 20
+      # audited writes hold a main + a REQUIRES_NEW audit connection (nested, 2x demand);
+      # Tomcat threads are capped at half the pool so the audit connection is always free
+      # (load 00.17 finding: undersized or over-committed pools turn into 30s wedges)
+      maximum-pool-size: 200
       minimum-idle: 5
   jpa:
     hibernate:

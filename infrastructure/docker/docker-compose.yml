@@ -8,6 +8,9 @@ services:
       POSTGRES_DB: squamed
       POSTGRES_USER: squamed
       POSTGRES_PASSWORD: squamed_dev_password
+    # dev-scale connection headroom: load test drives 200 concurrent audited writes,
+    # each holding a main + a REQUIRES_NEW audit connection (100 default was exhausted)
+    command: ["postgres", "-c", "max_connections=300"]
     ports:
       - "5433:5432"
     volumes:

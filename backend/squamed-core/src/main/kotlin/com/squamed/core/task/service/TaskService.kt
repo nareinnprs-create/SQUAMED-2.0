@@ -145,6 +145,11 @@ class TaskService(
       throw IllegalArgumentException("TASK_INVALID_STATUS")
     }
     val task = resolveTask(id, hospitalId)
+    // Terminal-state guard (CS-08): a reordered/duplicated offline flush must not regress a
+    // completed task (late in_progress arriving after completed would null completedAt).
+    if (task.status == "completed" && newStatus != "completed") {
+      throw IllegalStateException("TASK_COMPLETED_TERMINAL")
+    }
     val wasCompleted = task.status == "completed"
     task.status = newStatus
     task.updatedBy = updaterId

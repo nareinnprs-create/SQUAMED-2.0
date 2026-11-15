@@ -1669,6 +1669,35 @@ class PlatformIntegrationTests {
         )
       assertEquals(403, cfgPut.status, "foreign config publish must be denied: ${cfgPut.body.take(300)}")
 
+      // 00.17 gate-adequacy fix: patient detail, child reads/writes and photo are tenant-scoped
+      // like the write paths (the blind re-verification found GET detail unguarded).
+      val doc2Email = registerDoctor(h2)
+      val doc2 = hospitalLogin(doc2Email)
+      val foreignPatient = createPatient(doc2)
+      val foreignId = foreignPatient["id"].asText()
+      assertEquals(
+        403,
+        api(HttpMethod.GET, "/api/v1/patients/$foreignId", token = doc1).status,
+        "foreign patient detail read must be denied",
+      )
+      assertEquals(
+        403,
+        api(HttpMethod.GET, "/api/v1/patients/$foreignId/allergies", token = doc1).status,
+        "foreign patient child read must be denied",
+      )
+      assertEquals(
+        403,
+        api(HttpMethod.POST, "/api/v1/patients/$foreignId/allergies", json("allergen" to "Penicillin"), doc1).status,
+        "foreign patient child write must be denied",
+      )
+      assertEquals(
+        403,
+        api(HttpMethod.GET, "/api/v1/patients/$foreignId/photo", token = doc1).status,
+        "foreign patient photo read must be denied",
+      )
+      // Own-tenant reads still work after the guard (same patient, same hospital).
+      assert2xx(api(HttpMethod.GET, "/api/v1/patients/$foreignId", token = doc2), "own tenant detail read allowed")
+
       // Platform admin (null hospital) keeps unrestricted access to both tenants.
       assert2xx(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals/$h1/tree", token = admin), "admin tree A")
       assert2xx(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals/$h2/tree", token = admin), "admin tree B")
@@ -4933,7 +4962,14 @@ class PlatformIntegrationTests {
 
       // Tamper: overwrite a stored field -> verify reports HASH_MISMATCH for this tenant and an
       // audit.chain_broken event lands in the outbox (chunk-00 item 8 "audit alerts").
-      auditJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", "TAMPERED-$s", createRow["id"].asText())
+      val tamperRow =
+        auditJdbc.queryForMap(
+          "SELECT id, response_payload FROM audit.audit_log WHERE id = ?::uuid",
+          createRow["id"].asText(),
+        )
+      val tamperId = tamperRow["id"].toString()
+      val originalPayload = tamperRow["response_payload"].toString()
+      auditJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", "TAMPERED-$s", tamperId)
       val breach = `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
       val h1Breaches = breach["breaches"].filter { it["hospitalId"].asText() == h1 }
       assertTrue(
@@ -4950,6 +4986,11 @@ class PlatformIntegrationTests {
       }
       assertNotNull(brokenRow, "audit.chain_broken published to the outbox")
       assertEquals("SENT", brokenRow!!["status"].asText(), "breach alert dispatched")
+
+      // Restore the tampered row: the shared dev DB must keep a clean chain baseline
+      // (the exit demo asserts gauge=0 before its own tamper; a left breach would break it).
+      auditJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", originalPayload, tamperId)
+      `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
     }
   }
 
@@ -5423,6 +5464,101 @@ class PlatformIntegrationTests {
       val conflict = api(HttpMethod.PATCH, "/api/v1/tasks/$taskId/status", json("status" to "cancelled"), doctor, mapOf("Idempotency-Key" to key))
       assertEquals(409, conflict.status, "payload change under same key -> 409, got ${conflict.body.take(200)}")
       assertEquals("IDEMPOTENCY_CONFLICT", om.readTree(conflict.body)["error"]["code"].asText())
+    }
+
+    /** CS-08 sync chaos simulator (08-TEST-STRATEGY section 1): the offline queue replayed
+     * under randomized drop/duplicate/reorder/partition must be exactly-once with the final
+     * state identical to the canonical online path. Every retry carries the client's
+     * idempotency key (the designed protocol), so the middleware absorbs duplicates and
+     * reordering; a keyless stale write is caught by the terminal-state guard. */
+    @Test
+    fun offlineChaosReplayCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+
+      val h =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Chaos H $s", "code" to "CHS-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+
+      val email = "chaos-doc-$s-${UUID.randomUUID().toString().take(6)}@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Doc",
+            "lastName" to "Chaos$s",
+            "roles" to listOf("DOCTOR"),
+            "hospitalId" to h,
+          ),
+        ),
+        "register chaos doctor",
+      )
+      val doctor =
+        `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+
+      fun newTask(title: String): String =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/tasks", json("title" to title, "priority" to "normal", "hospitalId" to h), doctor),
+        )["id"].asText()
+
+      fun taskStatus(taskId: String): String = `data`(api(HttpMethod.GET, "/api/v1/tasks/$taskId", token = doctor))["status"].asText()
+
+      fun completedEvents(taskId: String): Int =
+        `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = admin))
+          .filter { it["eventType"].asText() == "task.completed" }
+          .map { om.readTree(it["envelope"].asText()) }
+          .count { it["entityId"].asText() == taskId }
+
+      // 1. Canonical control: the same logical writes flushed in queue order, exactly once each.
+      val control = newTask("Chaos control $s")
+      api(HttpMethod.PATCH, "/api/v1/tasks/$control/status", json("status" to "in_progress"), doctor, mapOf("Idempotency-Key" to "ctl-a-$s"))
+      api(HttpMethod.PATCH, "/api/v1/tasks/$control/status", json("status" to "completed"), doctor, mapOf("Idempotency-Key" to "ctl-b-$s"))
+      assertEquals("completed", taskStatus(control), "control flushed in order completes")
+      assertEquals(1, completedEvents(control), "control: task.completed exactly once")
+
+      // 2. Chaos target: same queue under seeded drop/duplicate/reorder/partition. Some attempts
+      //    are dropped (network loss) and retried late; duplicates re-send the same key; the
+      //    batch arrives shuffled. Rejected stale attempts are expected conflict resolution, not
+      //    failures - the property is the FINAL state, not per-attempt status codes.
+      data class QueuedWrite(
+        val status: String,
+        val key: String,
+      )
+
+      for (seed in listOf(1701L, 42L, 99L)) {
+        val target = newTask("Chaos target $seed $s")
+        val canonical =
+          listOf(
+            QueuedWrite("in_progress", "chs-$s-$seed-a"),
+            QueuedWrite("completed", "chs-$s-$seed-b"),
+          )
+        val rng = java.util.Random(seed)
+        val attempts = mutableListOf<QueuedWrite>()
+        for (w in canonical) {
+          if (rng.nextBoolean()) attempts.add(w) // first attempt survives
+          if (rng.nextBoolean()) attempts.add(w) // duplicate
+          attempts.add(w) // guaranteed retry (partition: late arrival)
+        }
+        attempts.shuffle(rng)
+        for (w in attempts) {
+          api(HttpMethod.PATCH, "/api/v1/tasks/$target/status", json("status" to w.status), doctor, mapOf("Idempotency-Key" to w.key))
+        }
+        assertEquals("completed", taskStatus(target), "seed $seed: chaos final state equals canonical")
+        assertEquals(1, completedEvents(target), "seed $seed: task.completed exactly once under chaos")
+      }
+
+      // 3. Defense-in-depth: a stale write WITHOUT its key (client bug) cannot regress a
+      //    completed task - the terminal-state guard rejects it with 409.
+      val guarded = newTask("Chaos guarded $s")
+      api(HttpMethod.PATCH, "/api/v1/tasks/$guarded/status", json("status" to "completed"), doctor)
+      val stale = api(HttpMethod.PATCH, "/api/v1/tasks/$guarded/status", json("status" to "in_progress"), doctor)
+      assertEquals(409, stale.status, "keyless stale write -> 409, got ${stale.body.take(200)}")
+      assertEquals("TASK_COMPLETED_TERMINAL", om.readTree(stale.body)["error"]["code"].asText())
+      assertEquals("completed", taskStatus(guarded), "completed state survives the stale write")
     }
   }
 

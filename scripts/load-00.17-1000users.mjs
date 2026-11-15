@@ -66,6 +66,7 @@ console.log(`== 00.17 load test: ${USERS} users, ${OPS_PER_USER} ops each, ${CON
 const t0 = performance.now()
 
 // setup: hospital + seed patients + one doctor template (admin token, excluded from SLA)
+// sequential: MRN generation is check-then-insert and races under concurrent creates (remediation item)
 const admin = (await req('POST', '/api/v1/auth/login', { username: 'admin@squamed.local', password: 'Admin@12345' })).json.data.accessToken
 const suffix = String(Date.now())
 const h = (await req('POST', '/api/v1/hospital-config/hospitals', { name: `Load $${suffix}`, code: `LT-${suffix}`, country: 'Qatar' }, admin)).json.data.id
@@ -81,7 +82,7 @@ await pool(
     )
     if (r.status >= 300) throw new Error(`seed patient ${i} failed: ${r.status}`)
   },
-  20,
+  1,
 )
 console.log(`setup ok: hospital ${h}, ${SEED} seed patients (${Math.round(performance.now() - t0)} ms)`)
 

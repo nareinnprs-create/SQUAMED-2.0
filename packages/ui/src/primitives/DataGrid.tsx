@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { cn } from '../lib/cn';
 import { Skeleton } from './Skeleton';
+import { t } from '../i18n';
+import { toneColors, type StatusTone } from './StatusIndicator';
 
 export interface DataGridColumn<T> {
   key: keyof T;
@@ -17,9 +19,19 @@ export interface DataGridSort<T> {
   direction: 'asc' | 'desc';
 }
 
+/**
+ * Table density per 02-DESIGN-SYSTEM §4: Clinical is the default (rows 44px),
+ * Enterprise tightens to 36px (+8% data per viewport) — per-workspace,
+ * user-switchable, never mixed on one screen.
+ */
+export type DataGridDensity = 'clinical' | 'enterprise';
+
 export interface DataGridProps<T> {
   columns: DataGridColumn<T>[];
   rows: T[];
+  density?: DataGridDensity;
+  /** Row-status strip: a 3px inline-start bar in the status tone of the row. */
+  rowTone?: (row: T, index: number) => StatusTone | null | undefined;
   loading?: boolean;
   emptyMessage?: string;
   onRowClick?: (row: T, index: number) => void;
@@ -63,8 +75,10 @@ function renderCellValue<T>(row: T, column: DataGridColumn<T>, index: number): R
 export function DataGrid<T>({
   columns,
   rows,
+  density = 'clinical',
+  rowTone,
   loading = false,
-  emptyMessage = 'No data',
+  emptyMessage,
   onRowClick,
   pageSize,
   initialSort,
@@ -72,6 +86,10 @@ export function DataGrid<T>({
   style,
 }: DataGridProps<T>) {
   const [pageIndex, setPageIndex] = useState(0);
+
+  // §4: Clinical rows 44px (12px pad + ~20px line), Enterprise rows 36px.
+  const cellPadding = density === 'clinical' ? '12px 14px' : '8px 10px';
+  const headPadding = density === 'clinical' ? '10px 14px' : '6px 10px';
 
   const sortedRows = useMemo(() => {
     if (!initialSort) return rows;
@@ -99,8 +117,8 @@ export function DataGrid<T>({
             key={String(column.key)}
             scope="col"
             style={{
-              padding: '10px 14px',
-              textAlign: 'left',
+              padding: headPadding,
+              textAlign: 'start',
               fontWeight: 600,
               fontSize: 12,
               textTransform: 'uppercase',
@@ -126,7 +144,7 @@ export function DataGrid<T>({
           {columns.map((column) => (
             <td
               key={String(column.key)}
-              style={{ padding: '12px 14px', borderBottom: '1px solid var(--sq-border)', boxSizing: 'border-box' }}
+              style={{ padding: cellPadding, borderBottom: '1px solid var(--sq-border)', boxSizing: 'border-box' }}
             >
               <Skeleton height={12} width="70%" radius={4} />
             </td>
@@ -148,7 +166,7 @@ export function DataGrid<T>({
             color: 'var(--sq-fg-muted)',
           }}
         >
-          {emptyMessage}
+          {emptyMessage ?? t('datagrid.empty')}
         </td>
       </tr>
     </tbody>
@@ -158,6 +176,7 @@ export function DataGrid<T>({
     <tbody>
       {visibleRows.map((row, index) => {
         const globalIndex = pageSize && pageSize > 0 ? safePage * pageSize + index : index;
+        const tone = rowTone?.(row, globalIndex) ?? null;
         return (
           <tr
             key={globalIndex}
@@ -167,15 +186,20 @@ export function DataGrid<T>({
               transition: 'background-color 120ms ease',
             }}
           >
-            {columns.map((column) => (
+            {columns.map((column, columnIndex) => (
               <td
                 key={String(column.key)}
                 style={{
-                  padding: '12px 14px',
+                  padding: cellPadding,
                   borderBottom: '1px solid var(--sq-border)',
                   color: 'var(--sq-fg)',
                   boxSizing: 'border-box',
                   verticalAlign: 'middle',
+                  // Row-status strip (§6): 3px inline-start bar in the row's
+                  // status tone, only on the first cell so it spans the row.
+                  ...(columnIndex === 0 && tone
+                    ? { borderInlineStart: `3px solid ${toneColors[tone]}` }
+                    : {}),
                 }}
               >
                 {renderCellValue(row, column, globalIndex)}
@@ -216,12 +240,10 @@ export function DataGrid<T>({
             color: 'var(--sq-fg-muted)',
           }}
         >
-          <span>
-            Page {safePage + 1} of {pageCount}
-          </span>
+          <span>{t('datagrid.pageOf', { page: safePage + 1, pages: pageCount })}</span>
           <button
             type="button"
-            aria-label="Previous page"
+            aria-label={t('datagrid.prevPage')}
             disabled={safePage === 0}
             onClick={() => setPageIndex((index) => Math.max(0, index - 1))}
             style={{
@@ -245,7 +267,7 @@ export function DataGrid<T>({
           </button>
           <button
             type="button"
-            aria-label="Next page"
+            aria-label={t('datagrid.nextPage')}
             disabled={safePage >= pageCount - 1}
             onClick={() => setPageIndex((index) => Math.min(pageCount - 1, index + 1))}
             style={{

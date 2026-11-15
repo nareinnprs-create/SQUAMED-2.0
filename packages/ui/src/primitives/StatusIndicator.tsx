@@ -24,7 +24,7 @@ function injectStatusStyles(): void {
 
 injectStatusStyles();
 
-const toneColors: Record<StatusTone, string> = {
+export const toneColors: Record<StatusTone, string> = {
   success: 'var(--sq-success)',
   warning: 'var(--sq-warning)',
   critical: 'var(--sq-critical)',

@@ -59,7 +59,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             aria-hidden="true"
             style={{
               position: 'absolute',
-              left: 12,
+              insetInlineStart: 12,
               top: '50%',
               transform: 'translateY(-50%)',
               display: 'inline-flex',
@@ -77,8 +77,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           className={className}
           required={required}
           disabled={disabled}
-          aria-invalid={showError || undefined}
-          aria-describedby={describedBy}
+          aria-invalid={showError ? true : (rest['aria-invalid'] as boolean | undefined)}
+          aria-describedby={
+            [rest['aria-describedby'] as string | undefined, describedBy].filter(Boolean).join(' ') || undefined
+          }
           onFocus={(event) => {
             setFocused(true);
             onFocus?.(event);
@@ -90,8 +92,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           style={{
             ...fieldBase,
             ...sizeStyle,
-            paddingLeft: leftSlot ? 36 : (sizeStyle.paddingLeft as number),
-            paddingRight: rightSlot ? 36 : (sizeStyle.paddingRight as number),
+            paddingInlineStart: leftSlot ? 36 : (sizeStyle.paddingLeft as number),
+            paddingInlineEnd: rightSlot ? 36 : (sizeStyle.paddingRight as number),
             transition: 'border-color 150ms ease, box-shadow 150ms ease',
             borderColor: showError ? 'var(--sq-critical)' : focused ? 'var(--sq-primary)' : 'var(--sq-border)',
             boxShadow: focused ? '0 0 0 3px var(--sq-focus-ring)' : undefined,
@@ -105,7 +107,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             aria-hidden="true"
             style={{
               position: 'absolute',
-              right: 12,
+              insetInlineEnd: 12,
               top: '50%',
               transform: 'translateY(-50%)',
               display: 'inline-flex',

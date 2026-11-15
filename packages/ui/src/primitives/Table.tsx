@@ -186,7 +186,7 @@ export function TableHead({
       className={cn(className)}
       style={{
         padding: '10px 14px',
-        textAlign: 'left',
+        textAlign: 'start',
         fontWeight: 600,
         fontSize: 12,
         textTransform: 'uppercase',

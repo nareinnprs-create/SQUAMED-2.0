@@ -93,7 +93,7 @@ export function Avatar({ name, src, alt, size = 'md', status, className, style }
           aria-label={status}
           style={{
             position: 'absolute',
-            right: 0,
+            insetInlineEnd: 0,
             bottom: 0,
             width: dotSize,
             height: dotSize,

@@ -58,8 +58,10 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
         rows={rows}
         required={required}
         disabled={disabled}
-        aria-invalid={showError || undefined}
-        aria-describedby={describedBy}
+        aria-invalid={showError ? true : (rest['aria-invalid'] as boolean | undefined)}
+        aria-describedby={
+          [rest['aria-describedby'] as string | undefined, describedBy].filter(Boolean).join(' ') || undefined
+        }
         onFocus={(event) => {
           setFocused(true);
           onFocus?.(event);

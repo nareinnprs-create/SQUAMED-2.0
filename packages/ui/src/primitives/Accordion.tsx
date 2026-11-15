@@ -126,7 +126,7 @@ export function AccordionTrigger({ children, onClick, className, style, ...rest 
           fontSize: 14,
           fontWeight: 600,
           color: 'var(--sq-fg)',
-          textAlign: 'left',
+          textAlign: 'start',
           cursor: 'pointer',
           ...(focusVisible ? { outline: '2px solid var(--sq-focus-ring)', outlineOffset: 2 } : null),
         }}

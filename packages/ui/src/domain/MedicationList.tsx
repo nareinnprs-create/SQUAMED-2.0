@@ -74,7 +74,7 @@ export function MedicationList({ medications, className, style }: MedicationList
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--sq-fg)' }}>
                 {medication.name}
                 {medication.isPRN ? (
-                  <Badge variant="neutral" appearance="soft" size="sm" style={{ marginLeft: 8 }}>
+                  <Badge variant="neutral" appearance="soft" size="sm" style={{ marginInlineStart: 8 }}>
                     PRN
                   </Badge>
                 ) : null}

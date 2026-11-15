@@ -65,7 +65,7 @@ function SidebarItemRow({ item, active, collapsed, onActivate }: SidebarItemRowP
     <>
       {item.icon ? <span style={{ display: 'inline-flex', flexShrink: 0 }}>{item.icon}</span> : null}
       {!collapsed ? (
-        <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <span style={{ flex: 1, textAlign: 'start', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {item.label}
         </span>
       ) : null}
@@ -153,7 +153,7 @@ export function Sidebar({
         boxSizing: 'border-box',
         padding: '12px 8px',
         backgroundColor: 'var(--sq-surface)',
-        borderRight: '1px solid var(--sq-border)',
+        borderInlineEnd: '1px solid var(--sq-border)',
         transition: 'width 180ms ease',
         flexShrink: 0,
         ...style,

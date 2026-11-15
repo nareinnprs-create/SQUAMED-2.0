@@ -5,6 +5,7 @@
 export const SCAN_ROUTES = [
   { path: '/', label: 'root' },
   { path: '/login', label: 'login' },
+  { path: '/design-system', label: 'design-system', public: true },
   { path: '/appointments', label: 'appointments' },
   { path: '/patients', label: 'patients' },
   { path: '/dashboard', label: 'dashboard' },

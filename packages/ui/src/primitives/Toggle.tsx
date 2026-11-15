@@ -77,7 +77,7 @@ export function Toggle({
           style={{
             position: 'absolute',
             top: 2,
-            left: 2,
+            insetInlineStart: 2,
             width: thumbSize,
             height: thumbSize,
             borderRadius: '50%',

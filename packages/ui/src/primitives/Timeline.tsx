@@ -38,8 +38,8 @@ export function Timeline({ children, className, style }: TimelineProps) {
         display: 'flex',
         flexDirection: 'column',
         boxSizing: 'border-box',
-        borderLeft: '2px solid var(--sq-border)',
-        paddingLeft: 16,
+        borderInlineStart: '2px solid var(--sq-border)',
+        paddingInlineStart: 16,
         ...style,
       }}
     >
@@ -78,7 +78,7 @@ export function TimelineItem({
           style={{
             position: 'absolute',
             top: 2,
-            left: -25,
+            insetInlineStart: -25,
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -100,7 +100,7 @@ export function TimelineItem({
           style={{
             position: 'absolute',
             top: 6,
-            left: -19,
+            insetInlineStart: -19,
             width: 12,
             height: 12,
             borderRadius: '50%',

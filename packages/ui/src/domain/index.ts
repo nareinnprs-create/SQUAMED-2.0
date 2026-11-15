@@ -13,5 +13,6 @@ export * from './PatientCard';
 export * from './PrescriptionBuilder';
 export * from './QueueStatusWidget';
 export * from './ResultCard';
+export * from './TaskCard';
 export * from './TokenDisplay';
 export * from './VitalSignsChart';

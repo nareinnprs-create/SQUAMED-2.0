@@ -103,7 +103,7 @@ function ToastViewport({ toasts, onDismiss }: ToastViewportProps) {
       aria-label="Notifications"
       style={{
         position: 'fixed',
-        right: 16,
+        insetInlineEnd: 16,
         bottom: 16,
         zIndex: 9999,
         display: 'flex',
@@ -130,7 +130,7 @@ function ToastViewport({ toasts, onDismiss }: ToastViewportProps) {
             color: 'var(--sq-fg)',
             border: '1px solid',
             borderColor: 'var(--sq-border)',
-            borderLeft: `3px solid ${variantColors[toast.variant]}`,
+            borderInlineStart: `3px solid ${variantColors[toast.variant]}`,
             boxShadow: '0 8px 24px color-mix(in srgb, var(--sq-fg) 16%, transparent)',
             animation: reduced ? 'none' : 'sq-toast-in 180ms ease-out',
           }}

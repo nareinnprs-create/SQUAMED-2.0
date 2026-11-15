@@ -66,3 +66,6 @@ logs/
 
 # Misc
 *.tsbuildinfo
+
+# Storybook build output (packages/ui)
+packages/ui/storybook-static/

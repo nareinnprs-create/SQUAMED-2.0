@@ -103,7 +103,7 @@ export function Topbar({
         </div>
       ) : null}
       {rightSlot ? (
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>{rightSlot}</div>
+        <div style={{ marginInlineStart: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>{rightSlot}</div>
       ) : null}
     </header>
   );

@@ -115,8 +115,8 @@ export function Drawer({
           flexDirection: 'column',
           backgroundColor: 'var(--sq-surface)',
           color: 'var(--sq-fg)',
-          borderLeft: isLeft ? '1px solid var(--sq-border)' : undefined,
-          borderRight: isLeft ? undefined : '1px solid var(--sq-border)',
+          borderInlineStart: isLeft ? '1px solid var(--sq-border)' : undefined,
+          borderInlineEnd: isLeft ? undefined : '1px solid var(--sq-border)',
           boxShadow: isLeft
             ? '8px 0 40px color-mix(in srgb, var(--sq-fg) 18%, transparent)'
             : '-8px 0 40px color-mix(in srgb, var(--sq-fg) 18%, transparent)',

@@ -12,6 +12,7 @@ export * from './CommandPalette';
 export * from './DataGrid';
 export * from './Divider';
 export * from './Drawer';
+export * from './Field';
 export * from './Input';
 export * from './Modal';
 export * from './Pagination';

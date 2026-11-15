@@ -37,7 +37,7 @@ async function scanRoute(context, route) {
   try {
     await page.goto(`${BASE_URL}${route.path}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
     // '/' is a server-side redirect to /login, so it settles as the login page.
-    await settleForScan(page, { authenticated: route.path !== '/login' && route.path !== '/' });
+    await settleForScan(page, { authenticated: route.path !== '/login' && route.path !== '/' && !route.public });
     await page.addScriptTag({
       path: require.resolve('axe-core/axe.min.js'),
     });

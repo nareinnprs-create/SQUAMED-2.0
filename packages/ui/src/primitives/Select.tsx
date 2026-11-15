@@ -55,8 +55,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         className={className}
         required={required}
         disabled={disabled}
-        aria-invalid={showError || undefined}
-        aria-describedby={describedBy}
+        aria-invalid={showError ? true : (rest['aria-invalid'] as boolean | undefined)}
+        aria-describedby={
+          [rest['aria-describedby'] as string | undefined, describedBy].filter(Boolean).join(' ') || undefined
+        }
         onFocus={(event) => {
           setFocused(true);
           onFocus?.(event);
@@ -68,7 +70,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         style={{
           ...fieldBase,
           ...fieldSizes[size],
-          paddingRight: 38,
+          paddingInlineEnd: 38,
           cursor: 'pointer',
           transition: 'border-color 150ms ease, box-shadow 150ms ease',
           borderColor: showError ? 'var(--sq-critical)' : focused ? 'var(--sq-primary)' : 'var(--sq-border)',

@@ -18,8 +18,8 @@ export function SidePanel({ children, side = 'right', width = 320, className, st
         flexShrink: 0,
         background: 'var(--sq-surface)',
         borderInline: side === 'right' ? '1px solid var(--sq-border)' : undefined,
-        borderLeft: side === 'left' ? '1px solid var(--sq-border)' : undefined,
-        borderRight: side === 'right' ? '1px solid var(--sq-border)' : undefined,
+        borderInlineStart: side === 'left' ? '1px solid var(--sq-border)' : undefined,
+        borderInlineEnd: side === 'right' ? '1px solid var(--sq-border)' : undefined,
         overflowY: 'auto',
         ...style,
       }}

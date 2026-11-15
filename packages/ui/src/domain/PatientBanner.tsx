@@ -99,7 +99,7 @@ export function PatientBanner({
           ? 'color-mix(in srgb, var(--sq-critical) 6%, var(--sq-surface))'
           : 'var(--sq-surface)',
         border: '1px solid var(--sq-border)',
-        borderLeft: isEmergency ? '4px solid var(--sq-critical)' : '4px solid var(--sq-primary)',
+        borderInlineStart: isEmergency ? '4px solid var(--sq-critical)' : '4px solid var(--sq-primary)',
         borderRadius: 8,
         cursor: interactive ? 'pointer' : undefined,
         ...(focusVisible ? { outline: '2px solid var(--sq-focus-ring)', outlineOffset: 2 } : null),
@@ -135,7 +135,7 @@ export function PatientBanner({
       {interactive ? (
         <ChevronRightIcon
           size={16}
-          style={{ color: 'var(--sq-fg-muted)', flexShrink: 0, marginLeft: 'auto' }}
+          style={{ color: 'var(--sq-fg-muted)', flexShrink: 0, marginInlineStart: 'auto' }}
         />
       ) : null}
     </div>

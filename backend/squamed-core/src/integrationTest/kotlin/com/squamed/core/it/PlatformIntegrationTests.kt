@@ -390,7 +390,7 @@ class PlatformIntegrationTests {
       assert2xx(patient, "create patient")
       val patientId = `data`(patient)["patient"]["id"].asText()
       val mrn = `data`(patient)["patient"]["mrn"].asText()
-      assertTrue(mrn.matches(Regex("^MQ-\\d{4}-\\d{4}$")), "MRN format: $mrn")
+      assertTrue(mrn.matches(Regex("^MQ-\\d{4}-\\d{4,}$")), "MRN format: $mrn")
 
       val searchByName = api(HttpMethod.GET, "/api/v1/patients?query=Patient$s", token = token)
       assert2xx(searchByName, "search patients by name")
@@ -4925,10 +4925,23 @@ class PlatformIntegrationTests {
       val patId = `data`(create)["patient"]["id"].asText()
       assert2xx(api(HttpMethod.PUT, "/api/v1/patients/$patId", json("phone" to newPhone), doctor, ua), "patient update (audit before/after)")
 
-      val logs = `data`(api(HttpMethod.GET, "/api/v1/audit/logs?actor=$doctorId&limit=100", token = admin))
-      val createRow =
-        logs.first { it["method"].asText() == "POST" && it["path"].asText() == "/api/v1/patients" && it["entityType"].asText().contains("Patient") }
-      val updateRow = logs.first { it["method"].asText() == "PUT" && it["path"].asText() == "/api/v1/patients/$patId" }
+      // ADR-15: chain linkage is asynchronous (AuditChainBatcher, 250 ms cadence) — poll until
+      // both rows carry a chain_seq instead of assuming the append happened synchronously.
+      var found: Pair<JsonNode, JsonNode>? = null
+      val deadline = System.currentTimeMillis() + 15_000
+      while (found == null && System.currentTimeMillis() < deadline) {
+        val logs = `data`(api(HttpMethod.GET, "/api/v1/audit/logs?actor=$doctorId&limit=100", token = admin))
+        val c =
+          logs.firstOrNull { it["method"].asText() == "POST" && it["path"].asText() == "/api/v1/patients" && it["entityType"].asText().contains("Patient") }
+        val u = logs.firstOrNull { it["method"].asText() == "PUT" && it["path"].asText() == "/api/v1/patients/$patId" }
+        if (c != null && u != null && c.hasNonNull("chainSeq") && u.hasNonNull("chainSeq")) {
+          found = c to u
+        } else {
+          Thread.sleep(250)
+        }
+      }
+      val (createRow, updateRow) =
+        found ?: error("batcher did not link both audit rows (create + update) within 15 s")
       // ADR-9 chain: fresh tenant -> create is seq 1 (no previous hash), update links to it.
       assertEquals(1L, createRow["chainSeq"].asLong(), "fresh tenant chain starts at seq 1")
       assertTrue(createRow["previousHash"].isNull, "first chained row has no previous hash")

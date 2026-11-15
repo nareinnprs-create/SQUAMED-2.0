@@ -17,8 +17,8 @@ import java.util.UUID
  * ADR-9 chain verifier (00.10): recomputes every row hash in chain_seq order per tenant and
  * checks linkage (previous_hash == prior row_hash). Breaches publish `audit.chain_broken`
  * through the event fabric so the notification bridge pages admins (chunk-00 item 8 lists
- * "audit alerts" in the v1 event set). Legacy rows (pre-V49, no hash) are reported once and
- * are not tamper breaches.
+ * "audit alerts" in the v1 event set). Rows without a chain_seq are pending async linkage
+ * (ADR-15 batcher drains them within ~1s) or legacy pre-V49 rows — neither is a tamper breach.
  */
 @Service
 class AuditChainService(
@@ -78,7 +78,7 @@ class AuditChainService(
           breaches += Breach(key, row.chainSeq, "MISSING_HASH at seq ${row.chainSeq}")
           break
         }
-        if (row.rowHash != computeHash(row)) {
+        if (row.rowHash != AuditRecorder.computeHash(row.chainSeq!!, row.hospitalId ?: AuditRecorder.SYSTEM_CHAIN, row)) {
           breaches += Breach(key, row.chainSeq, "HASH_MISMATCH at seq ${row.chainSeq}: stored ${row.rowHash?.take(8)}")
           break
         }
@@ -137,32 +137,5 @@ class AuditChainService(
         logger.error(e) { "Failed to publish audit.chain_broken for tenant $chainKey" }
       }
     }
-  }
-
-  /** Recomputes the stored-hash comparison using the recorder's canonical form. */
-  private fun computeHash(row: AuditLog): String {
-    val canonical =
-      listOf(
-        row.chainSeq,
-        row.hospitalId ?: AuditRecorder.SYSTEM_CHAIN,
-        row.actorUserId,
-        row.action,
-        row.entityType,
-        row.entityId,
-        row.occurredAt.toEpochMilli(),
-        row.method,
-        row.path,
-        row.requestPayload,
-        row.responseStatus,
-        row.responsePayload,
-        row.beforeState,
-        row.afterState,
-        row.previousHash,
-      ).joinToString("|") { it?.toString() ?: "" }
-    val digest =
-      java.security.MessageDigest
-        .getInstance("SHA-256")
-        .digest(canonical.toByteArray(java.nio.charset.StandardCharsets.UTF_8))
-    return digest.joinToString("") { "%02x".format(it) }
   }
 }

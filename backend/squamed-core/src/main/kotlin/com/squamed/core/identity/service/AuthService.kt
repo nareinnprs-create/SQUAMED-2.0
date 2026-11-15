@@ -138,18 +138,20 @@ class AuthService(
     }
 
     if (!passwordEncoder.matches(password, user.passwordHash)) {
-      user.failedLoginAttempts += 1
-      if (user.failedLoginAttempts >= 5) {
-        user.lockedUntil = Instant.now().plus(Duration.ofMinutes(15))
+      // Login bookkeeping is last-write-wins: bulk updates instead of a versioned
+      // entity save, which 500s when two logins on the same account race.
+      val userId = user.id ?: throw IllegalStateException("USER_ID_MISSING")
+      userRepository.recordFailedLogin(userId)
+      if (userRepository.failedLoginAttempts(userId) >= 5) {
+        userRepository.lockAccount(userId, Instant.now().plus(Duration.ofMinutes(15)))
       }
-      userRepository.save(user)
       return LoginResult(LoginStatus.INVALID_CREDENTIALS)
     }
 
-    user.failedLoginAttempts = 0
-    user.lockedUntil = null
-    user.lastLoginAt = Instant.now()
-    userRepository.save(user)
+    userRepository.recordSuccessfulLogin(
+      user.id ?: throw IllegalStateException("USER_ID_MISSING"),
+      Instant.now(),
+    )
 
     if (user.mfaEnabled) {
       val mfaToken = jwtService.generateMfaToken(user.id ?: throw IllegalStateException("USER_ID_MISSING"))

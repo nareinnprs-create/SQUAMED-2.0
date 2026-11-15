@@ -8,6 +8,7 @@ import org.aspectj.lang.annotation.Aspect
 import org.springframework.stereotype.Component
 import org.springframework.web.context.request.RequestContextHolder
 import org.springframework.web.context.request.ServletRequestAttributes
+import java.util.Locale
 import java.util.UUID
 
 private val logger = KotlinLogging.logger {}
@@ -26,6 +27,9 @@ class AuditAspect(
     val attributes = RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes
     val request = attributes?.request
     val response = attributes?.response
+
+    // 00.10 is a write-path interceptor (ADR-15): reads (GET/HEAD) skip the audit path entirely.
+    if (request?.method?.uppercase(Locale.ROOT) in setOf("GET", "HEAD")) return joinPoint.proceed()
 
     val controllerName = joinPoint.signature.declaringType.simpleName
     val methodName = joinPoint.signature.name

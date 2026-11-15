@@ -27,9 +27,7 @@ class JwtAuthenticationFilter(
       val claims = jwtService.parseAccessToken(token)
       if (claims != null) {
         val sessionKey = claims.sessionId.toString()
-        val isRevoked = tokenBlacklistService.isSessionRevoked(claims.sessionId)
-        val isBlacklisted = tokenBlacklistService.isTokenBlacklisted(sessionKey)
-        if (!isRevoked && !isBlacklisted) {
+        if (!tokenBlacklistService.isAccessBlocked(claims.sessionId, sessionKey)) {
           val authentication =
             UsernamePasswordAuthenticationToken(
               SquamedPrincipal(

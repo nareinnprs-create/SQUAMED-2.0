@@ -40,6 +40,7 @@ The original document is a strong **vision**. It is not buildable: no data model
 | ADR-12 | **FHIR sequencing:** baseline read-only FhirService stays internal; HAPI FHIR server lands at chunk 6 item 7 exactly as planned — no pre-adoption | D17 (2026-11-13); rebuilding a 403-line GET-only service later is cheaper than pre-adopting HAPI now |
 | ADR-13 | **Tenancy enforcement, staged:** stage 1 (chunk 0) — hospital_id NOT NULL + server-side tenant resolution from principal + cross-tenant denial suite; stage 2 (before chunk 6) — Postgres RLS as defense-in-depth, completing ADR-2 | D18 (2026-11-13); client-supplied nullable hospital_id = sharpest baseline defect |
 | ADR-14 | **Interop engine:** Mirth Connect confirmed for HL7 v2 per ADR-7 buy list (02.01); baseline built-in MLLP server demoted to dev simulator | D19 (2026-11-13); ASTM/quarantine/zero-silent-drop need a real engine |
+| ADR-15 | **Audit chain, async batched linkage:** write path inserts the audit row synchronously WITHOUT chain allocation (durable + queryable immediately); `AuditChainBatcher` (@Scheduled 250 ms) links pending rows in batches — one `chain_head FOR UPDATE` + one commit per ≤1000 rows; GET/HEAD skip auditing (00.10 spec-literal "write-path interceptor"); `squamed.audit.chain.pending` gauge + `AuditChainPendingBacklog` alert watch the tamper-evidence window; verify treats NULL `chain_seq` as pending (not a tamper breach) | D20 (2026-11-15); serialized ~26.5 ms append = ~38 writes/s ceiling → write p95 ~5 s at 1,000 users, NFR breach |
 
 ---
 

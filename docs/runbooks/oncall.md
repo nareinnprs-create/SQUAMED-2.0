@@ -54,6 +54,20 @@ has not completed since the last run.
    errors; verify DB reachable at 03:00.
 2. Run `POST /api/v1/audit/verify` manually; the gauge resets on completion.
 
+### AuditChainPendingBacklog (warning)
+`max_over_time(squamed_audit_chain_pending[5m]) > 0 for 15m` — audit rows inserted without
+a `chain_seq` (ADR-15 async linkage) have not been drained by the AuditChainBatcher within
+~15 minutes; tamper evidence is delayed, not lost (rows are durable and queryable).
+1. Check the backend scheduler is alive (`GET /actuator/loggers` for
+   `com.squamed.core.audit` errors; the batcher logs "audit chain linkage failed" with the
+   reason on repeated failures).
+2. Check `audit.chain_head` is reachable — linkage serializes per tenant under a row lock;
+   a long-running transaction holding that lock blocks the batch (look for idle-in-
+   transaction sessions in `pg_stat_activity`).
+3. The batcher self-heals on the next tick; if the gauge stays >0 across restarts, verify
+   with `POST /api/v1/audit/verify` and escalate (pending rows older than a day = linkage
+   defect, not a tamper breach).
+
 ### DlqNonEmpty (warning)
 `min_over_time(squamed_events_dlq_depth[15m]) > 0` — outbox dead-letters (FAILED rows)
 present for over 15 minutes.

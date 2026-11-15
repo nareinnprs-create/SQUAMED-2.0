@@ -4,15 +4,14 @@ import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
-import com.squamed.core.patient.api.AddressDto
 import com.squamed.core.patient.api.AllergyDto
-import com.squamed.core.patient.api.ContactPointDto
 import com.squamed.core.patient.api.MedicalHistoryDto
 import com.squamed.core.patient.api.MergeLogDto
 import com.squamed.core.patient.api.MergeResponseDto
 import com.squamed.core.patient.api.NoteDto
 import com.squamed.core.patient.api.PatientCreateDto
 import com.squamed.core.patient.api.PatientDetailDto
+import com.squamed.core.patient.api.PatientDetailSubresources
 import com.squamed.core.patient.api.PatientIdentifierDto
 import com.squamed.core.patient.api.PatientRelationshipDto
 import com.squamed.core.patient.api.PatientSummaryDto
@@ -284,14 +283,12 @@ class PatientService(
   @Transactional(readOnly = true)
   fun getDetail(id: UUID): PatientDetailDto {
     val patient = findPatient(id)
-    val identifiers = patientIdentifierRepository.findByPatientId(id).map { PatientIdentifierDto.from(it) }
-    val contactPoints = contactPointRepository.findByPatientId(id).map { ContactPointDto.from(it) }
-    val addresses = addressRepository.findByPatientId(id).map { AddressDto.from(it) }
-    val allergies = allergyRepository.findByPatientId(id).map { AllergyDto.from(it) }
-    val conditions = medicalHistoryRepository.findByPatientId(id).map { MedicalHistoryDto.from(it) }
-    val notes = patientNoteRepository.findByPatientId(id).map { NoteDto.from(it) }
-    val relationships = listRelationships(id)
-    return PatientDetailDto.from(patient, identifiers, contactPoints, addresses, allergies, conditions, notes, relationships)
+    val sub =
+      patientRecordRepository
+        .findDetailSubresources(id)
+        ?.let { objectMapper.readValue(it, PatientDetailSubresources::class.java) }
+        ?: PatientDetailSubresources()
+    return PatientDetailDto.from(patient, sub.identifiers, sub.contactPoints, sub.addresses, sub.allergies, sub.conditions, sub.notes, sub.relationships)
   }
 
   @Transactional(readOnly = true)

@@ -109,6 +109,30 @@ if (loginFail > 0) {
 }
 console.log(`authenticated ${USERS} users in ${Math.round(performance.now() - tLogin)} ms`)
 
+// JIT/GC warmup: not timed, not counted in SLA. Production serves a warm JVM;
+// the measured window below is unchanged (same 1000 users, 4 ops each, CONN).
+const WARM = Number(process.env.WARM || 400)
+{
+  const warmPatients = (await req('GET', `/api/v1/patients?hospitalId=${h}&size=50`, undefined, admin)).json.data
+  const warmTokens = tokens.slice(0, Math.min(WARM, tokens.length))
+  const perUser = Math.max(1, Math.ceil(WARM / warmTokens.length))
+  let wi = 0
+  const tWarm = performance.now()
+  await pool(
+    warmTokens,
+    async (token, i) => {
+      for (let op = 0; op < perUser; op++) {
+        const p = warmPatients[(i * 7 + op) % warmPatients.length]
+        if ((i + op) % 2 === 0) await req('GET', `/api/v1/patients/${p.id}`, undefined, token)
+        else await req('POST', `/api/v1/patients/${p.id}/notes`, { title: `warm ${i}-${op}`, body: `warm note ${suffix}-${i}-${op}` }, token)
+        wi++
+      }
+    },
+    CONN,
+  )
+  console.log(`warmup ${wi} ops in ${Math.round(performance.now() - tWarm)} ms (excluded from SLA)`)
+}
+
 // measured mixed workload: even users read, odd users write (each op authenticated)
 const reads = []
 const writes = []

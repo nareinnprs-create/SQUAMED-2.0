@@ -42,6 +42,7 @@ All modules are exposed by `AuthController`-style `@RestController`s under
 | Patient created → domain event → SearchIndexer → OpenSearch | `DomainEventPublisher` → `squamed.patient.*` topic → indexer upserts patient doc | `assertTrue(hitsDone, "search finds created patient")` in `InteropTests`/`entSearch`, 8×1.5s poll |
 | HL7 ADT receive → patient find-or-create + index | MLLP/HTTP receive → `Hl7Service` → EMPI lookup → create → index | `hl7ReceiveAndAuthFailureCoverage`, `hl7ReceiveVariantsAndLockoutCoverage` |
 | Audit write → AuditController read | AOP `@Audited` on module writes → `audit` table | `auditTrailWritesForModuleActions` |
+| Audit row → hash chain (ADR-15) | `AuditRecorder` inserts unchained → `AuditChainBatcher` (@Scheduled 250 ms) links pending rows under the `chain_head` lock in batches | `auditChainCoverage` (polls ≤15 s for linkage) |
 
 ## 3. Transport wiring
 

@@ -18,6 +18,16 @@ scrape_configs:
         labels:
           service: 'squamed-core'
 
+  # dev-only: the demo/dev backend boots on host 8081 (8080 is taken by the compose stack).
+  # Short interval so AuditChainBreached (CS-15) evaluates within ~50s of a tamper.
+  - job_name: 'squamed-core-dev'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['host.docker.internal:8081']
+        labels:
+          service: 'squamed-core-dev'
+
   - job_name: 'squamed-frontend'
     metrics_path: '/metrics'
     static_configs:

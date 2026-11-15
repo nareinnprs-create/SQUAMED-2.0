@@ -62,7 +62,12 @@ class PatientController(
   @Transactional(readOnly = true)
   fun getDetail(
     @PathVariable id: UUID,
-  ): ApiResponse<PatientDetailDto> = ApiResponse.ok(patientService.getDetail(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<PatientDetailDto> {
+    // 00.04 re-verification fix: detail reads are tenant-scoped like every other surface.
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.getDetail(id))
+  }
 
   @PutMapping("/{id}")
   @RequiresPermission("patient:write:patient")
@@ -90,7 +95,11 @@ class PatientController(
   @Transactional(readOnly = true)
   fun listAllergies(
     @PathVariable id: UUID,
-  ): ApiResponse<List<AllergyDto>> = ApiResponse.ok(patientService.listAllergies(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<AllergyDto>> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.listAllergies(id))
+  }
 
   @PostMapping("/{id}/allergies")
   @ResponseStatus(HttpStatus.CREATED)
@@ -99,7 +108,11 @@ class PatientController(
   fun addAllergy(
     @PathVariable id: UUID,
     @RequestBody dto: AllergyDto,
-  ): ApiResponse<AllergyDto> = ApiResponse.ok(patientService.addAllergy(id, dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AllergyDto> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.addAllergy(id, dto))
+  }
 
   @DeleteMapping("/{id}/allergies/{allergyId}")
   @RequiresPermission("patient:write:patient")
@@ -107,14 +120,22 @@ class PatientController(
   fun deactivateAllergy(
     @PathVariable id: UUID,
     @PathVariable allergyId: UUID,
-  ): ApiResponse<AllergyDto> = ApiResponse.ok(patientService.deactivateAllergy(id, allergyId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AllergyDto> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.deactivateAllergy(id, allergyId))
+  }
 
   @GetMapping("/{id}/notes")
   @RequiresPermission("patient:read:patient")
   @Transactional(readOnly = true)
   fun listNotes(
     @PathVariable id: UUID,
-  ): ApiResponse<List<NoteDto>> = ApiResponse.ok(patientService.listNotes(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<NoteDto>> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.listNotes(id))
+  }
 
   @PostMapping("/{id}/notes")
   @ResponseStatus(HttpStatus.CREATED)
@@ -124,14 +145,21 @@ class PatientController(
     @PathVariable id: UUID,
     @RequestBody dto: NoteDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<NoteDto> = ApiResponse.ok(patientService.addNote(id, dto, principal.userId))
+  ): ApiResponse<NoteDto> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.addNote(id, dto, principal.userId))
+  }
 
   @GetMapping("/{id}/history")
   @RequiresPermission("patient:read:patient")
   @Transactional(readOnly = true)
   fun listMedicalHistory(
     @PathVariable id: UUID,
-  ): ApiResponse<List<MedicalHistoryDto>> = ApiResponse.ok(patientService.listMedicalHistory(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<MedicalHistoryDto>> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.listMedicalHistory(id))
+  }
 
   @PostMapping("/{id}/history")
   @ResponseStatus(HttpStatus.CREATED)
@@ -140,7 +168,11 @@ class PatientController(
   fun addMedicalHistory(
     @PathVariable id: UUID,
     @RequestBody dto: MedicalHistoryDto,
-  ): ApiResponse<MedicalHistoryDto> = ApiResponse.ok(patientService.addMedicalHistory(id, dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<MedicalHistoryDto> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.addMedicalHistory(id, dto))
+  }
 
   @PostMapping("/match")
   @RequiresPermission("patient:read:patient")
@@ -237,7 +269,11 @@ class PatientController(
   @Transactional(readOnly = true)
   fun listIdentifiers(
     @PathVariable id: UUID,
-  ): ApiResponse<List<PatientIdentifierDto>> = ApiResponse.ok(patientService.listIdentifiers(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<PatientIdentifierDto>> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.listIdentifiers(id))
+  }
 
   @DeleteMapping("/{id}/identifiers/{identifierId}")
   @RequiresPermission("patient:write:patient")
@@ -270,7 +306,11 @@ class PatientController(
   @Transactional(readOnly = true)
   fun listRelationships(
     @PathVariable id: UUID,
-  ): ApiResponse<List<PatientRelationshipDto>> = ApiResponse.ok(patientService.listRelationships(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<PatientRelationshipDto>> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(patientService.listRelationships(id))
+  }
 
   @DeleteMapping("/{id}/relationships/{relationshipId}")
   @RequiresPermission("patient:write:patient")
@@ -302,7 +342,9 @@ class PatientController(
   @Transactional(readOnly = true)
   fun downloadPhoto(
     @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ResponseEntity<ByteArray> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
     val key = patientService.getPhotoKey(id) ?: throw IllegalArgumentException("PHOTO_NOT_UPLOADED")
     if (!key.startsWith("photos/")) throw IllegalArgumentException("PHOTO_NOT_STORED")
     val (bytes, contentType) = patientService.getPhoto(key)

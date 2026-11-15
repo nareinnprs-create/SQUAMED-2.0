@@ -1,8 +1,11 @@
 # SQUAMED OpenAPI style guide
 
 This describes the contract conventions the backend already ships and the PIT suite
-(`errorResponsesFollowContract`, `paginationDelivered`, `openApiSnapshotMatchesLiveContract`)
+(`errorResponsesFollowContract`, `openApiSnapshotMatchesLiveContract`)
 enforces. New endpoints follow these rules or contract tests fail.
+(00.17 re-verification note: the pagination response `meta` block below is specified but not
+yet emitted by list endpoints; the previously cited `paginationDelivered` PIT does not exist -
+tracked in the 00.02 remediation backlog.)
 
 ## Base URL and versioning
 

@@ -3,7 +3,8 @@
 - Base URL: `/api/v1/{domain}/{resource}`
 - Authentication: `Authorization: Bearer <JWT>`
 - All requests require `X-Correlation-ID` (auto-generated if absent)
-- Multi-tenancy: `X-Tenant-Id` header
+- Multi-tenancy: resolved server-side from the JWT (`hospitalId` claim pinned to user_role
+  assignments, ADR-13) - no `X-Tenant-Id` header is read
 - Pagination: `?page=0&size=20&sort=createdAt,desc`
 - Response envelope: `{ data: ..., meta: {...} }` for success,
   `{ error: { code, message, details } }` for errors

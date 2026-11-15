@@ -138,6 +138,7 @@ services:
       - "9090:9090"
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./config/alerts.yml:/etc/prometheus/alerts.yml
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -160,6 +161,9 @@ services:
       - "3005:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+      # 00.16: provisioned datasource + RED/business dashboards (squamed-red.json).
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
     healthcheck:
@@ -167,6 +171,28 @@ services:
       interval: 15s
       timeout: 10s
       retries: 5
+
+  # 00.16: OTLP trace endpoint (tail sampling: 100% of error traces + 10% baseline) and the
+  # alert pipeline (Prometheus -> alertmanager -> webhook receiver on the host).
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.118.0
+    container_name: squamed-otel-collector
+    volumes:
+      - ../observability/otel-collector.yml:/etc/otel/config.yaml
+    command: ['--config=/etc/otel/config.yaml']
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8889:8889"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: squamed-alertmanager
+    volumes:
+      - ./config/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    command: ['--config.file=/etc/alertmanager/alertmanager.yml']
+    ports:
+      - "9093:9093"
 
 volumes:
   postgres_data:

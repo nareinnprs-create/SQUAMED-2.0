@@ -47,11 +47,33 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics,loggers
+  metrics:
+    distribution:
+      percentiles-histogram:
+        # RED dashboards + the p95 SLO (NFR §6) need latency buckets, not just _count/_sum.
+        http.server.requests: true
   endpoint:
     health:
       show-details: when-authorized
       probes:
         enabled: true
+
+# OTel traces -> OTLP collector (09-INFRASTRUCTURE.md §3: HTTP->service->DB->WS; head sampler
+# AlwaysOn here, tail sampling in the collector keeps 100% of error traces + 10% baseline).
+# Metrics stay on Micrometer/Prometheus, logs stay on stdout.
+otel:
+  traces:
+    exporter: otlp
+    sampler: parentbased_traceidratio
+    sampler.arg: 1.0
+  metrics:
+    exporter: none
+  logs:
+    exporter: none
+  exporter:
+    otlp:
+      protocol: grpc
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
 
 springdoc:
   api-docs:

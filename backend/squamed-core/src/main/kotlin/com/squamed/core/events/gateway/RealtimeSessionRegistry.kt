@@ -1,5 +1,6 @@
 package com.squamed.core.events.gateway
 
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.WebSocketSession
 import java.util.UUID
@@ -7,8 +8,14 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 @Component
-class RealtimeSessionRegistry {
+class RealtimeSessionRegistry(
+  private val meterRegistry: MeterRegistry,
+) {
   private val sessionsByUser = ConcurrentHashMap<UUID, CopyOnWriteArrayList<WebSocketSession>>()
+
+  init {
+    meterRegistry.gauge("squamed.ws.sessions", this) { it.connectedCount().toDouble() }
+  }
 
   fun add(
     userId: UUID,

@@ -1,5 +1,6 @@
 package com.squamed.core.events
 
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
@@ -17,7 +18,14 @@ interface IntegrationReplayer {
 @Service
 class IntegrationErrorService(
   private val repository: IntegrationErrorRepository,
+  private val meterRegistry: MeterRegistry,
 ) {
+  init {
+    // Inbound dead-letter backlog gauge (alerts.yml: high backlog escalates; DLQ depth alert
+    // covers the outbound outbox, this one the inbound integration errors).
+    meterRegistry.gauge("squamed.integration.errors", repository) { it.countByStatus("OPEN").toDouble() }
+  }
+
   fun record(
     hospitalId: UUID?,
     integration: String,

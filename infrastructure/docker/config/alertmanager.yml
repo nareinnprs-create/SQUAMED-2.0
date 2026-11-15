@@ -1,6 +1,7 @@
 global:
   resolve_timeout: 5m
-  slack_api_url: "" # overridden by the deployment; see docker-compose.prod.yml
+  # Slack paging (SLACK_API_URL env override) is wired per deployment; the dev receiver below
+  # is a plain webhook. See docker-compose.prod.yml for the receiver wiring.
 
 route:
   receiver: "squamed-ops"

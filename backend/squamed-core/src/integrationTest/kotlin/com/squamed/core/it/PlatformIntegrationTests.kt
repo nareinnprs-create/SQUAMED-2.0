@@ -270,6 +270,8 @@ class PlatformIntegrationTests {
     @JvmStatic
     @DynamicPropertySource
     fun properties(registry: DynamicPropertyRegistry) {
+      // 00.16: no OTLP export during PIT (no collector in CI); spans asserted via the SPI seam.
+      registry.add("otel.traces.exporter") { "none" }
       if (EXTERNAL) {
         registry.add("spring.datasource.url") { "jdbc:postgresql://localhost:5433/squamed" }
         registry.add("spring.datasource.username") { "squamed" }
@@ -6948,5 +6950,289 @@ class PlatformIntegrationTests {
           token,
         ),
       )["patient"]["id"].asText()
+  }
+
+  /** 00.16: metrics + trace pipeline verification (09-INFRASTRUCTURE.md §3). */
+  @Nested
+  inner class ObservabilityTests {
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var obsJdbc: org.springframework.jdbc.core.JdbcTemplate
+
+    private fun prom(): String {
+      val r = api(HttpMethod.GET, "/actuator/prometheus")
+      assert2xx(r, "prometheus scrape")
+      return r.body
+    }
+
+    private fun registerUser(hospitalId: String): String {
+      val s = suffix()
+      val email = "obs-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Obs",
+            "lastName" to "Doctor$s",
+            "roles" to listOf("DOCTOR"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register obs doctor $email",
+      )
+      return email
+    }
+
+    private fun hospitalLogin(email: String): String =
+      `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+
+    private fun connectRealtime(token: String): RealtimeCollector {
+      val collector = RealtimeCollector()
+      org.springframework.web.socket.client.standard
+        .StandardWebSocketClient()
+        .execute(collector, "ws://localhost:$port/realtime?token=$token")
+        .get(15, java.util.concurrent.TimeUnit.SECONDS)
+      return collector
+    }
+
+    private fun awaitEventFrame(
+      collector: RealtimeCollector,
+      eventType: String,
+      timeoutMs: Long,
+    ): String? {
+      val deadline = System.currentTimeMillis() + timeoutMs
+      while (System.currentTimeMillis() < deadline) {
+        collector.messages
+          .firstOrNull { isEventFrame(it, eventType) }
+          ?.let { return it }
+        Thread.sleep(250)
+      }
+      return null
+    }
+
+    // Substring matching is not enough: notification payloads can embed the triggering event
+    // type (e.g. notification.dispatched of a task.created). Parse the frame's eventType field.
+    private fun isEventFrame(
+      message: String,
+      eventType: String,
+    ): Boolean =
+      runCatching {
+        val node = om.readTree(message)
+        node.path("type").asText("") == "event.received" && node.path("event").path("eventType").asText("") == eventType
+      }.getOrDefault(false)
+
+    private fun awaitSpan(
+      name: String,
+      timeoutMs: Long = 15_000,
+    ): Boolean {
+      val deadline = System.currentTimeMillis() + timeoutMs
+      while (System.currentTimeMillis() < deadline) {
+        if (ObservabilitySpanCapture.spans(name).isNotEmpty()) return true
+        Thread.sleep(200)
+      }
+      return false
+    }
+
+    @Test
+    fun redAndBusinessMetricsCoverage() {
+      ObservabilitySpanCapture.reset()
+      val admin = adminToken()
+      val h = ensureSeed(admin)
+      val email = registerUser(h)
+      val doctor = hospitalLogin(email)
+      val doctorId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = doctor))["userId"].asText()
+
+      // RED traffic + business events: a read, a WS session, a task create -> task.created
+      // dispatched (outbox -> Kafka/Redis -> WS relay) with the doctor as recipient.
+      assert2xx(api(HttpMethod.GET, "/api/v1/events/catalog", token = admin), "RED read")
+      val ws = connectRealtime(doctor)
+      val s = suffix()
+      api(
+        HttpMethod.POST,
+        "/api/v1/tasks",
+        json("title" to "Obs metrics $s", "hospitalId" to h, "assigneeId" to doctorId),
+        admin,
+      )
+      assertNotNull(awaitEventFrame(ws, "task.created", 20_000), "WS frame reached the connected session")
+      assertEquals(
+        1,
+        ws.messages.count { isEventFrame(it, "task.created") },
+        "exactly one task.created frame; all frames: ${ws.messages.joinToString(" || ").take(2000)}",
+      )
+
+      // SLA breach counter: the meter only registers on the first breach, so drive one through
+      // the explicit scan route (§3: SLA breach counts as a business metric).
+      api(
+        HttpMethod.POST,
+        "/api/v1/tasks",
+        json(
+          "title" to "Obs SLA $s",
+          "hospitalId" to h,
+          "assigneeId" to doctorId,
+          "priority" to "normal",
+          "dueAt" to "2020-01-01T00:00:00Z",
+        ),
+        admin,
+      )
+      assert2xx(api(HttpMethod.POST, "/api/v1/tasks/sla/scan", json(), admin), "SLA scan")
+
+      val metrics = prom()
+      // RED (per-module dashboards read these).
+      assertTrue(metrics.contains("http_server_requests_seconds_count"), "HTTP RED counters present")
+      assertTrue(metrics.contains("http_server_requests_seconds_bucket"), "HTTP latency histogram present")
+      assertTrue(metrics.contains("jvm_memory_used_bytes"), "JVM base metrics present")
+      // Business metrics (§3: events/min per type, SLA breach counts, DLQ + audit + WS).
+      assertTrue(
+        Regex("squamed_events_dispatched_total\\{type=\"task.created\"").containsMatchIn(metrics),
+        "dispatched counter with type tag: ${metrics.lines().filter { it.startsWith("squamed_events_dispatched") }}",
+      )
+      assertTrue(
+        Regex("squamed_ws_relayed_total\\{type=\"task.created\"").containsMatchIn(metrics),
+        "WS relay counter with type tag",
+      )
+      val wsSessions =
+        metrics
+          .lines()
+          .first { it.startsWith("squamed_ws_sessions") }
+          .substringAfterLast(" ")
+          .toDouble()
+      assertTrue(wsSessions >= 1.0, "the connected session is gauged: $wsSessions")
+      assertTrue(metrics.contains("squamed_events_dlq_depth"), "outbox DLQ depth gauge present")
+      assertTrue(metrics.contains("squamed_integration_errors"), "integration error backlog gauge present")
+      assertTrue(metrics.contains("squamed_audit_chain_breaches"), "audit breach gauge present")
+      assertTrue(metrics.contains("squamed_audit_chain_seconds_since_verify"), "audit verify staleness gauge present")
+      assertTrue(
+        Regex("squamed_sla_breaches_total\\{priority=\"normal\"").containsMatchIn(metrics),
+        "SLA breach counter present with priority tag",
+      )
+
+      // Trace pipeline: HTTP server span, JDBC/DB span, WS relay span for task.created.
+      assertTrue(
+        ObservabilitySpanCapture.names().any { it.startsWith("GET /api/") },
+        "HTTP server span recorded: ${ObservabilitySpanCapture.names().take(12)}",
+      )
+      assertTrue(
+        ObservabilitySpanCapture.exporter.finishedSpanItems.any {
+          it.attributes.get(
+            io.opentelemetry.api.common.AttributeKey
+              .stringKey("db.system"),
+          ) == "postgresql" ||
+            it.attributes.get(
+              io.opentelemetry.api.common.AttributeKey
+                .stringKey("db.system.name"),
+            ) == "postgresql"
+        },
+        "DB span recorded (db.system=postgresql)",
+      )
+      assertTrue(awaitSpan("squamed.realtime.relay"), "WS relay span recorded")
+      // Later events (e.g. notification.dispatched) relay after task.created; match by type tag.
+      val relay =
+        ObservabilitySpanCapture.spans("squamed.realtime.relay").lastOrNull {
+          it.attributes.get(
+            io.opentelemetry.api.common.AttributeKey
+              .stringKey("squamed.event.type"),
+          ) == "task.created"
+        }
+      assertNotNull(relay, "relay span for task.created recorded")
+      assertEquals(
+        "task.created",
+        relay!!.attributes.get(
+          io.opentelemetry.api.common.AttributeKey
+            .stringKey("squamed.event.type"),
+        ),
+        "relay span carries the event type",
+      )
+    }
+
+    @Test
+    fun dlqDepthAndAuditBreachGaugesFlip() {
+      val admin = adminToken()
+      val h = ensureSeed(admin)
+
+      // Outbox DLQ: seed a FAILED row directly (dead-letter depth gauge must reflect it).
+      val before = obsJdbc.queryForObject("SELECT count(*) FROM events.event_outbox WHERE status = 'FAILED'", Long::class.java)
+      obsJdbc.update(
+        "INSERT INTO events.event_outbox (event_id, event_type, occurred_at, source, entity_type, status, attempts, max_attempts, payload, recipient_ids) " +
+          "VALUES (gen_random_uuid(), 'obs.dlq_seed', NOW(), 'obs', 'ObservabilityProbe', 'FAILED', 8, 8, '{}'::jsonb, '[]'::jsonb)",
+      )
+      var metrics = prom()
+      val depth =
+        metrics
+          .lines()
+          .firstOrNull { it.startsWith("squamed_events_dlq_depth") }
+          ?.substringAfterLast(" ")
+          ?.toDouble() ?: -1.0
+      assertEquals(
+        (before ?: 0L) + 1,
+        depth.toLong(),
+        "DLQ depth gauge counts the FAILED row: ${metrics.lines().filter { it.startsWith("squamed_events_dlq_depth") }}",
+      )
+
+      // Audit chain: fresh tenant -> one audited write -> tamper its row -> the breaches gauge
+      // gains exactly that tenant (a fresh tenant cannot be breached before this), restore ->
+      // gauge back to the baseline. Baseline may be > 0 (older PITs leave tampered tenants).
+      val s = suffix()
+      val h2 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Obs H2 $s", "code" to "OBS-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val email = registerUser(h2)
+      val doctor = hospitalLogin(email)
+      val s2 = suffix()
+      api(
+        HttpMethod.POST,
+        "/api/v1/patients",
+        json(
+          "firstName" to "Obs",
+          "lastName" to "Patient$s2",
+          "gender" to "female",
+          "dateOfBirth" to "1985-05-10",
+          "phone" to "5511$s2".take(12),
+          "qid" to "P2$s2".take(11),
+          "nationality" to "Qatar",
+          "city" to "Doha",
+        ),
+        doctor,
+      )
+      // Establish the real baseline: prior failed PIT runs leave tampered tenants in the DB,
+      // and the gauge reads 0.0 until the first verify runs in this JVM.
+      `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
+      val b0 =
+        prom()
+          .lines()
+          .first { it.startsWith("squamed_audit_chain_breaches") }
+          .substringAfterLast(" ")
+          .toDouble()
+      val target =
+        obsJdbc.queryForMap(
+          "SELECT id, response_payload FROM audit.audit_log WHERE hospital_id = ?::uuid AND chain_seq IS NOT NULL AND response_payload IS NOT NULL LIMIT 1",
+          h2,
+        )
+      val id = target["id"].toString()
+      val original = target["response_payload"].toString()
+      obsJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", "TAMPERED-OBS-$s2", id)
+      val verify = `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
+      assertTrue(verify["breaches"].any { it["hospitalId"].asText() == h2 }, "tamper detected on the fresh tenant: $verify")
+      val afterTamper =
+        prom()
+          .lines()
+          .first { it.startsWith("squamed_audit_chain_breaches") }
+          .substringAfterLast(" ")
+          .toDouble()
+      assertEquals(b0 + 1.0, afterTamper, "breach gauge gains exactly the fresh tenant: b0=$b0 after=$afterTamper")
+      assertTrue(prom().contains("squamed_audit_chain_seconds_since_verify"), "staleness gauge present after verify")
+
+      obsJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", original, id)
+      `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
+      val afterRestore =
+        prom()
+          .lines()
+          .first { it.startsWith("squamed_audit_chain_breaches") }
+          .substringAfterLast(" ")
+          .toDouble()
+      assertEquals(b0, afterRestore, "breach gauge returns to baseline after restore: b0=$b0 after=$afterRestore")
+    }
   }
 }

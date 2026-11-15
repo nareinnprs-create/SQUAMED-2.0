@@ -28,6 +28,30 @@ const catalogs: Record<Locale, Record<string, string>> = {
     'field.required': 'Required',
     'taskcard.open': 'Open task',
     'taskcard.escalated': 'Escalated x{count}',
+    'shell.loading': 'Loading...',
+    'shell.workspace': 'Clinical Workspace',
+    'shell.hospital.label': 'Hospital',
+    'shell.hospital.all': 'All hospitals',
+    'shell.hospital.unknown': 'Unknown hospital',
+    'shell.hospital.switchTitle': 'Switch active hospital',
+    'shell.search.title': 'Universal search',
+    'shell.search.placeholder': 'Search patients, encounters...',
+    'shell.search.empty': 'No matches',
+    'shell.search.error': 'Search unavailable',
+    'shell.user.menu': 'Account menu',
+    'shell.user.signOut': 'Sign out',
+    'shell.user.roles': 'Roles',
+    'shell.user.permissions': 'Permissions',
+    'shell.user.language': 'Language',
+    'shell.patient.context': 'Patient context',
+    'shell.patient.clear': 'Clear patient context',
+    'shell.notifications.title': 'Notifications',
+    'shell.notifications.markAll': 'Mark all read',
+    'shell.notifications.empty': 'No notifications',
+    'shell.notifications.connected': 'Realtime connected',
+    'shell.notifications.disconnected': 'Realtime disconnected',
+    'shell.notifications.count':
+      '{count, plural, =0 {No new notifications} =1 {1 new notification} other {# new notifications}}',
   },
   hi: {
     'datagrid.empty': 'कोई डेटा नहीं',
@@ -37,6 +61,30 @@ const catalogs: Record<Locale, Record<string, string>> = {
     'field.required': 'आवश्यक',
     'taskcard.open': 'कार्य खोलें',
     'taskcard.escalated': 'एस्कलेटेड x{count}',
+    'shell.loading': 'लोड हो रहा है...',
+    'shell.workspace': 'क्लिनिकल वर्कस्पेस',
+    'shell.hospital.label': 'अस्पताल',
+    'shell.hospital.all': 'सभी अस्पताल',
+    'shell.hospital.unknown': 'अज्ञात अस्पताल',
+    'shell.hospital.switchTitle': 'सक्रिय अस्पताल बदलें',
+    'shell.search.title': 'सार्वभौमिक खोज',
+    'shell.search.placeholder': 'मरीज़, विज़िट खोजें...',
+    'shell.search.empty': 'कोई मेल नहीं',
+    'shell.search.error': 'खोज अनुपलब्ध',
+    'shell.user.menu': 'खाता मेनू',
+    'shell.user.signOut': 'साइन आउट',
+    'shell.user.roles': 'भूमिकाएँ',
+    'shell.user.permissions': 'अनुमतियाँ',
+    'shell.user.language': 'भाषा',
+    'shell.patient.context': 'मरीज़ संदर्भ',
+    'shell.patient.clear': 'मरीज़ संदर्भ हटाएँ',
+    'shell.notifications.title': 'सूचनाएँ',
+    'shell.notifications.markAll': 'सभी पढ़ी हुई मार्क करें',
+    'shell.notifications.empty': 'कोई सूचना नहीं',
+    'shell.notifications.connected': 'रियलटाइम जुड़ा है',
+    'shell.notifications.disconnected': 'रियलटाइम डिस्कनेक्ट है',
+    'shell.notifications.count':
+      '{count, plural, =0 {कोई नई सूचना नहीं} =1 {1 नई सूचना} other {# नई सूचनाएँ}}',
   },
 };
 
@@ -50,14 +98,72 @@ export function getLocale(): Locale {
   return currentLocale;
 }
 
-/** Translate a catalog key in the current locale; en is the fallback chain root. */
-export function t(key: string, params?: Record<string, string | number>): string {
-  const template = catalogs[currentLocale][key] ?? catalogs.en[key] ?? key;
-  if (!params) return template;
+/** Position of the closing brace matching the `{` at `open`, or -1. */
+function matchBrace(text: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    if (text[i] === '{') depth++;
+    else if (text[i] === '}') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+const PLURAL_HEAD = /\{(\w+),\s*plural,\s*/;
+
+function interpolate(template: string, params: Record<string, string | number>): string {
   return Object.entries(params).reduce(
     (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
     template,
   );
+}
+
+/**
+ * ICU plural subset: {count, plural, =0 {None} =1 {One} one {# item} other {# items}}.
+ * Exact-match selectors win, then Intl.PluralRules for the active locale; `#`
+ * inside the branch is the number. select/ordinal ICU forms are out of scope
+ * (no shipped string needs them).
+ */
+function formatMessage(template: string, params: Record<string, string | number>): string {
+  const head = PLURAL_HEAD.exec(template);
+  if (!head) return interpolate(template, params);
+  const outerClose = matchBrace(template, head.index);
+  if (outerClose < 0) return interpolate(template, params);
+  const value = Number(params[head[1]]);
+  const selectors: Array<{ sel: string; body: string }> = [];
+  let cursor = head.index + head[0].length;
+  while (cursor < template.length) {
+    const selector = /^\s*(=\d+|\w+)\s*\{/.exec(template.slice(cursor));
+    if (!selector) break;
+    const bodyOpen = cursor + selector[0].length - 1;
+    const bodyClose = matchBrace(template, bodyOpen);
+    if (bodyClose < 0) break;
+    selectors.push({ sel: selector[1], body: template.slice(bodyOpen + 1, bodyClose) });
+    cursor = bodyClose + 1;
+  }
+  const exact = `=${value}`;
+  const category = selectors.some((s) => s.sel === exact)
+    ? exact
+    : new Intl.PluralRules(getLocale()).select(value);
+  const branch =
+    selectors.find((s) => s.sel === category)?.body ??
+    selectors.find((s) => s.sel === 'other')?.body ??
+    '';
+  const formatted = branch.replaceAll('#', String(value));
+  // Recurse: text after the branch may hold another plural or plain params.
+  return formatMessage(
+    template.slice(0, head.index) + formatted + template.slice(outerClose + 1),
+    params,
+  );
+}
+
+/** Translate a catalog key in the current locale; en is the fallback chain root. */
+export function t(key: string, params?: Record<string, string | number>): string {
+  const template = catalogs[currentLocale][key] ?? catalogs.en[key] ?? key;
+  if (!params) return template;
+  return formatMessage(template, params);
 }
 
 /** Text direction for a BCP-47 locale tag (base language wins for v1). */

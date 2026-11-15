@@ -17,6 +17,7 @@ import {
 } from '@squamed/ui';
 import type { BadgeVariant } from '@squamed/ui';
 import { useApi } from '../../../../lib/use-api';
+import { useShellStore } from '@/lib/shell-store';
 
 interface Allergy {
   id: string;
@@ -79,7 +80,9 @@ interface PatientDetail {
   photoUrl?: string | null;
   allergies: Allergy[];
   notes: PatientNote[];
-  medicalHistory: MedicalHistoryEntry[];
+  // Not in the detail DTO yet (backend sends no medical history field);
+  // optional until the API grows it.
+  medicalHistory?: MedicalHistoryEntry[];
   identifiers?: PatientIdentifier[];
   relationships?: PatientRelationship[];
 }
@@ -146,16 +149,36 @@ export default function PatientDetailPage() {
   const [photoObjectUrl, setPhotoObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const setPatientContext = useShellStore((state) => state.setPatient);
+
+  function ageFrom(dob: string): number {
+    const birth = new Date(dob).getTime();
+    if (Number.isNaN(birth)) return 0;
+    return Math.max(0, Math.floor((Date.now() - birth) / 31_557_600_000));
+  }
 
   const loadPatient = useCallback(async () => {
     try {
       const data = await apiFetch<PatientDetail>(`/patients/${id}`);
       setPatient(data);
+      setPatientContext({
+        id: data.id,
+        name: `${data.firstName} ${data.lastName}`.trim(),
+        mrn: data.mrn,
+        dateOfBirth: data.dateOfBirth,
+        gender: data.gender,
+        age: ageFrom(data.dateOfBirth),
+        isEmergency: (data.allergies ?? []).some((a) => a.severity === 'life_threatening'),
+        allergySummary:
+          (data.allergies ?? []).length > 0
+            ? (data.allergies ?? []).map((a) => a.allergen).join(', ')
+            : undefined,
+      });
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load patient');
     }
-  }, [apiFetch, id]);
+  }, [apiFetch, id, setPatientContext]);
 
   useEffect(() => {
     if (isReady) void loadPatient();
@@ -521,11 +544,11 @@ export default function PatientDetailPage() {
               Add condition
             </Button>
           </div>
-          {!patient || patient.medicalHistory.length === 0 ? (
+          {!patient || (patient.medicalHistory ?? []).length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--sq-fg-muted)' }}>No medical history recorded.</div>
           ) : (
             <Stack gap={8}>
-              {patient.medicalHistory.map((entry) => (
+              {(patient.medicalHistory ?? []).map((entry) => (
                 <Stack
                   key={entry.id}
                   direction="row"

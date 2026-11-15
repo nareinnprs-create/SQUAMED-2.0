@@ -12,6 +12,7 @@ import {
 } from '@squamed/ui'
 import type { BadgeVariant } from '@squamed/ui'
 import { useApi } from '../../../../../lib/use-api'
+import { useShellStore } from '@/lib/shell-store'
 
 interface Patient360Demographics {
   id: string
@@ -511,6 +512,7 @@ export default function Patient360OverviewPage() {
   const [data, setData] = useState<Patient360View | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const setPatientContext = useShellStore((state) => state.setPatient)
 
   const load = useCallback(async () => {
     try {
@@ -518,12 +520,28 @@ export default function Patient360OverviewPage() {
       const result = await apiFetch<Patient360View>(`/patient360/${id}`)
       setData(result)
       setError(null)
+      const d = result.demographics
+      if (d) {
+        const birth = new Date(d.dateOfBirth).getTime()
+        setPatientContext({
+          id: d.id,
+          name: `${d.firstName} ${d.lastName}`.trim(),
+          mrn: d.mrn,
+          dateOfBirth: d.dateOfBirth,
+          gender: d.gender,
+          age: Number.isNaN(birth) ? 0 : Math.max(0, Math.floor((Date.now() - birth) / 31_557_600_000)),
+          allergySummary:
+            result.allergies.length > 0
+              ? result.allergies.map((a) => a.allergen).join(', ')
+              : undefined,
+        })
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load patient 360 view')
     } finally {
       setLoading(false)
     }
-  }, [apiFetch, id])
+  }, [apiFetch, id, setPatientContext])
 
   useEffect(() => {
     if (isReady) void load()

@@ -51,25 +51,25 @@ class MasterDataController(
     @RequestParam(name = "size", defaultValue = "20") size: Int,
   ): ApiResponse<List<DrugDto>> {
     val pageable = buildPageable(page, size)
-    val content =
+    val paged =
       when {
         search != null && active != null -> {
-          drugRepository.search("%$search%", "%$search%", active, pageable).content
+          drugRepository.search("%$search%", "%$search%", active, pageable)
         }
 
         search != null -> {
-          drugRepository.search("%$search%", "%$search%", pageable).content
+          drugRepository.search("%$search%", "%$search%", pageable)
         }
 
         active != null -> {
-          drugRepository.findByIsActive(active, pageable).content
+          drugRepository.findByIsActive(active, pageable)
         }
 
         else -> {
-          drugRepository.findAll(pageable).content
+          drugRepository.findAll(pageable)
         }
       }
-    return ApiResponse.ok(content.map { DrugDto.from(it) })
+    return ApiResponse.ok(paged.content.map { DrugDto.from(it) }, paged)
   }
 
   @PostMapping("/drugs")
@@ -150,25 +150,25 @@ class MasterDataController(
     @RequestParam(name = "size", defaultValue = "20") size: Int,
   ): ApiResponse<List<LabTestDto>> {
     val pageable = buildPageable(page, size)
-    val content =
+    val paged =
       when {
         search != null && active != null -> {
-          labTestRepository.search("%$search%", "%$search%", active, pageable).content
+          labTestRepository.search("%$search%", "%$search%", active, pageable)
         }
 
         search != null -> {
-          labTestRepository.search("%$search%", "%$search%", pageable).content
+          labTestRepository.search("%$search%", "%$search%", pageable)
         }
 
         active != null -> {
-          labTestRepository.findByIsActive(active, pageable).content
+          labTestRepository.findByIsActive(active, pageable)
         }
 
         else -> {
-          labTestRepository.findAll(pageable).content
+          labTestRepository.findAll(pageable)
         }
       }
-    return ApiResponse.ok(content.map { LabTestDto.from(it) })
+    return ApiResponse.ok(paged.content.map { LabTestDto.from(it) }, paged)
   }
 
   @PostMapping("/lab-tests")
@@ -237,25 +237,25 @@ class MasterDataController(
     @RequestParam(name = "size", defaultValue = "20") size: Int,
   ): ApiResponse<List<ImagingProcedureDto>> {
     val pageable = buildPageable(page, size)
-    val content =
+    val paged =
       when {
         search != null && active != null -> {
-          imagingProcedureRepository.search("%$search%", "%$search%", active, pageable).content
+          imagingProcedureRepository.search("%$search%", "%$search%", active, pageable)
         }
 
         search != null -> {
-          imagingProcedureRepository.search("%$search%", "%$search%", pageable).content
+          imagingProcedureRepository.search("%$search%", "%$search%", pageable)
         }
 
         active != null -> {
-          imagingProcedureRepository.findByIsActive(active, pageable).content
+          imagingProcedureRepository.findByIsActive(active, pageable)
         }
 
         else -> {
-          imagingProcedureRepository.findAll(pageable).content
+          imagingProcedureRepository.findAll(pageable)
         }
       }
-    return ApiResponse.ok(content.map { ImagingProcedureDto.from(it) })
+    return ApiResponse.ok(paged.content.map { ImagingProcedureDto.from(it) }, paged)
   }
 
   @PostMapping("/imaging-procedures")
@@ -328,25 +328,25 @@ class MasterDataController(
     @RequestParam(name = "size", defaultValue = "20") size: Int,
   ): ApiResponse<List<ProcedureCodeDto>> {
     val pageable = buildPageable(page, size)
-    val content =
+    val paged =
       when {
         search != null && active != null -> {
-          procedureCodeRepository.search("%$search%", "%$search%", active, pageable).content
+          procedureCodeRepository.search("%$search%", "%$search%", active, pageable)
         }
 
         search != null -> {
-          procedureCodeRepository.search("%$search%", "%$search%", pageable).content
+          procedureCodeRepository.search("%$search%", "%$search%", pageable)
         }
 
         active != null -> {
-          procedureCodeRepository.findByIsActive(active, pageable).content
+          procedureCodeRepository.findByIsActive(active, pageable)
         }
 
         else -> {
-          procedureCodeRepository.findAll(pageable).content
+          procedureCodeRepository.findAll(pageable)
         }
       }
-    return ApiResponse.ok(content.map { ProcedureCodeDto.from(it) })
+    return ApiResponse.ok(paged.content.map { ProcedureCodeDto.from(it) }, paged)
   }
 
   @PostMapping("/procedure-codes")
@@ -415,25 +415,25 @@ class MasterDataController(
     @RequestParam(name = "size", defaultValue = "20") size: Int,
   ): ApiResponse<List<DiagnosisCodeDto>> {
     val pageable = buildPageable(page, size)
-    val content =
+    val paged =
       when {
         search != null && active != null -> {
-          diagnosisCodeRepository.search("%$search%", "%$search%", active, pageable).content
+          diagnosisCodeRepository.search("%$search%", "%$search%", active, pageable)
         }
 
         search != null -> {
-          diagnosisCodeRepository.search("%$search%", "%$search%", pageable).content
+          diagnosisCodeRepository.search("%$search%", "%$search%", pageable)
         }
 
         active != null -> {
-          diagnosisCodeRepository.findByIsActive(active, pageable).content
+          diagnosisCodeRepository.findByIsActive(active, pageable)
         }
 
         else -> {
-          diagnosisCodeRepository.findAll(pageable).content
+          diagnosisCodeRepository.findAll(pageable)
         }
       }
-    return ApiResponse.ok(content.map { DiagnosisCodeDto.from(it) })
+    return ApiResponse.ok(paged.content.map { DiagnosisCodeDto.from(it) }, paged)
   }
 
   @PostMapping("/diagnosis-codes")
@@ -502,25 +502,25 @@ class MasterDataController(
     @RequestParam(name = "size", defaultValue = "20") size: Int,
   ): ApiResponse<List<ChargeItemDto>> {
     val pageable = buildPageable(page, size)
-    val content =
+    val paged =
       when {
         search != null && active != null -> {
-          chargeItemRepository.search("%$search%", "%$search%", active, pageable).content
+          chargeItemRepository.search("%$search%", "%$search%", active, pageable)
         }
 
         search != null -> {
-          chargeItemRepository.search("%$search%", "%$search%", pageable).content
+          chargeItemRepository.search("%$search%", "%$search%", pageable)
         }
 
         active != null -> {
-          chargeItemRepository.findByIsActive(active, pageable).content
+          chargeItemRepository.findByIsActive(active, pageable)
         }
 
         else -> {
-          chargeItemRepository.findAll(pageable).content
+          chargeItemRepository.findAll(pageable)
         }
       }
-    return ApiResponse.ok(content.map { ChargeItemDto.from(it) })
+    return ApiResponse.ok(paged.content.map { ChargeItemDto.from(it) }, paged)
   }
 
   @PostMapping("/charge-items")

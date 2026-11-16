@@ -3,9 +3,6 @@
 This describes the contract conventions the backend already ships and the PIT suite
 (`errorResponsesFollowContract`, `openApiSnapshotMatchesLiveContract`)
 enforces. New endpoints follow these rules or contract tests fail.
-(00.17 re-verification note: the pagination response `meta` block below is specified but not
-yet emitted by list endpoints; the previously cited `paginationDelivered` PIT does not exist -
-tracked in the 00.02 remediation backlog.)
 
 ## Base URL and versioning
 
@@ -53,7 +50,8 @@ All 4xx/5xx responses use the error envelope (`GlobalExceptionHandler.ErrorBody`
 
 ## Pagination
 
-List endpoints accept `?page=0&size=25` (Spring Pageable semantics, page is 0-based) and return:
+List endpoints that accept paging params accept `?page=0&size=25` (Spring Pageable semantics,
+page is 0-based) and return an **offset-mode** meta block:
 
 ```json
 {
@@ -63,6 +61,34 @@ List endpoints accept `?page=0&size=25` (Spring Pageable semantics, page is 0-ba
 ```
 
 Paging lives in `meta`, never in `data`. Unpaged single-resource responses keep `meta: {}`.
+
+Delivered surfaces: the master-data catalogs (`/drugs`, `/lab-tests`, `/imaging-procedures`,
+`/procedure-codes`, `/diagnosis-codes`, `/charge-items`, `/vendors`, `/equipment`, `/employees`,
+`/price-lists`) emit the offset-mode block — enforced by the
+`catalogFilterAndPaginationCoverage` PIT. Search and child-resource lists that do not accept
+paging params stay unpaged (`meta: {}`) until paging is needed there.
+
+### Cursor mode (append-only lists)
+
+Append-only lists that can grow without bound (audit logs) use keyset cursors instead of
+offsets, so deep pages stay cheap and concurrent appends never skip or repeat rows:
+
+- Request: `GET /api/v1/audit/logs?limit=50&cursor=<opaque>` — first page omits `cursor`.
+- Response meta carries **cursor-mode** shape, no `total` (an unbounded stream has no stable
+  total):
+
+```json
+{
+  "data": [ "..." ],
+  "meta": { "limit": 50, "hasNext": true, "nextCursor": "MjAyNi0xMS0xNlQwMjozMDowMFp8..." }
+}
+```
+
+- `nextCursor` is an opaque, URL-safe token (base64url of the last row's ordering key); it is
+  absent once `hasNext` is false. Pass it back verbatim as `cursor` to fetch the next page.
+- An unparsable cursor is `400` with code `INVALID_CURSOR`.
+- Offsets are not offered on these endpoints; a client that wants "jump to page N" on an
+  append-only list should filter instead.
 
 ## Idempotency-Key
 

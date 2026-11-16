@@ -5,12 +5,15 @@ import com.squamed.core.audit.service.AuditChainService
 import com.squamed.core.audit.service.AuditExportService
 import com.squamed.core.common.api.ApiResponse
 import com.squamed.core.identity.security.RequiresPermission
+import org.springframework.data.domain.PageRequest
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.time.Instant
+import java.util.Base64
 import java.util.UUID
 
 @RestController
@@ -28,23 +31,31 @@ class AuditController(
     @RequestParam(name = "entityId", required = false) entityId: String?,
     @RequestParam(name = "actor", required = false) actor: UUID?,
     @RequestParam(name = "limit", defaultValue = "50") limit: Int,
+    @RequestParam(name = "cursor", required = false) cursor: String?,
   ): ApiResponse<List<AuditLogView>> {
     val effectiveLimit = if (limit in 1..500) limit else 50
-    val logs =
-      when {
-        entityType != null && entityId != null -> {
-          auditLogRepository.findByEntityTypeAndEntityIdOrderByOccurredAtDesc(entityType, entityId)
-        }
-
-        actor != null -> {
-          auditLogRepository.findByActorUserIdOrderByOccurredAtDesc(actor)
-        }
-
-        else -> {
-          auditLogRepository.findAllByOrderByOccurredAtDesc()
-        }
+    // limit+1 probe decides hasNext without a count query (append-only streams have no total).
+    val pageRequest = PageRequest.of(0, effectiveLimit + 1)
+    val rows =
+      decodeCursor(cursor)?.let { (cursorAt, cursorId) ->
+        auditLogRepository.listLogsAfter(entityType, entityId, actor, cursorAt, cursorId, pageRequest)
+      } ?: auditLogRepository.listLogsFirst(entityType, entityId, actor, pageRequest)
+    val hasNext = rows.size > effectiveLimit
+    val page = if (hasNext) rows.take(effectiveLimit) else rows
+    val nextCursor =
+      if (hasNext) {
+        val last = page.last()
+        encodeCursor(last.occurredAt, last.id ?: throw IllegalStateException("AUDIT_ROW_ID_MISSING"))
+      } else {
+        null
       }
-    return ApiResponse.ok(logs.take(effectiveLimit).map { AuditLogView.from(it) })
+    val meta =
+      buildMap {
+        put("limit", effectiveLimit)
+        put("hasNext", hasNext)
+        if (nextCursor != null) put("nextCursor", nextCursor)
+      }
+    return ApiResponse.ok(page.map { AuditLogView.from(it) }, meta)
   }
 
   /** ADR-9 on-demand chain verification (auditor "chain-integrity check" in the viewer). */
@@ -58,5 +69,25 @@ class AuditController(
   fun exportNow(): ApiResponse<AuditExportView> {
     val (exported, objectKey) = auditExportService.exportNow()
     return ApiResponse.ok(AuditExportView(exported = exported, objectKey = objectKey))
+  }
+
+  /** Opaque cursor = base64url of "<occurredAt>|<id>" (style guide §Pagination, cursor mode). */
+  private fun encodeCursor(
+    occurredAt: Instant,
+    id: UUID,
+  ): String =
+    Base64
+      .getUrlEncoder()
+      .withoutPadding()
+      .encodeToString("$occurredAt|$id".toByteArray())
+
+  private fun decodeCursor(cursor: String?): Pair<Instant, UUID>? {
+    if (cursor == null) return null
+    return runCatching {
+      val raw = String(Base64.getUrlDecoder().decode(cursor))
+      val sep = raw.indexOf('|')
+      require(sep > 0) { "INVALID_CURSOR" }
+      Instant.parse(raw.substring(0, sep)) to UUID.fromString(raw.substring(sep + 1))
+    }.getOrElse { throw IllegalArgumentException("INVALID_CURSOR") }
   }
 }

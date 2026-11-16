@@ -5,7 +5,9 @@
 - All requests require `X-Correlation-ID` (auto-generated if absent)
 - Multi-tenancy: resolved server-side from the JWT (`hospitalId` claim pinned to user_role
   assignments, ADR-13) - no `X-Tenant-Id` header is read
-- Pagination: `?page=0&size=20&sort=createdAt,desc`
+- Pagination: offset mode `?page=0&size=20` → `meta: {page, size, total, pages}` on catalog
+  lists; cursor mode `?limit=50&cursor=<opaque>` → `meta: {limit, hasNext, nextCursor}` on
+  append-only lists (audit logs) — see `docs/api/openapi-style-guide.md` §Pagination
 - Response envelope: `{ data: ..., meta: {...} }` for success,
   `{ error: { code, message, details } }` for errors
 - Idempotency: `Idempotency-Key` header on POST

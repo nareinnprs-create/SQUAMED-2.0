@@ -4638,7 +4638,7 @@ export interface components {
             data?: components["schemas"]["TaskView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         TaskView: {
@@ -4691,7 +4691,7 @@ export interface components {
             data?: components["schemas"]["PharmacyStockView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         PharmacyStockView: {
@@ -4793,7 +4793,7 @@ export interface components {
             data?: components["schemas"]["PatientDetailDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ContactPointDto: {
@@ -4930,7 +4930,7 @@ export interface components {
             data?: components["schemas"]["VendorDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ProcedureCodeDto: {
@@ -4946,7 +4946,7 @@ export interface components {
             data?: components["schemas"]["ProcedureCodeDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         PriceListDto: {
@@ -4967,7 +4967,7 @@ export interface components {
             data?: components["schemas"]["PriceListDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         LabTestDto: {
@@ -4986,7 +4986,7 @@ export interface components {
             data?: components["schemas"]["LabTestDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ImagingProcedureDto: {
@@ -5004,7 +5004,7 @@ export interface components {
             data?: components["schemas"]["ImagingProcedureDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         EquipmentDto: {
@@ -5029,7 +5029,7 @@ export interface components {
             data?: components["schemas"]["EquipmentDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         EmployeeDto: {
@@ -5057,7 +5057,7 @@ export interface components {
             data?: components["schemas"]["EmployeeDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         DrugDto: {
@@ -5082,7 +5082,7 @@ export interface components {
             data?: components["schemas"]["DrugDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         DiagnosisCodeDto: {
@@ -5098,7 +5098,7 @@ export interface components {
             data?: components["schemas"]["DiagnosisCodeDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ChargeItemDto: {
@@ -5115,7 +5115,7 @@ export interface components {
             data?: components["schemas"]["ChargeItemDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ConnectionUpdateRequest: {
@@ -5128,11 +5128,11 @@ export interface components {
         };
         ApiResponseMapStringObject: {
             data?: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         HospitalDto: {
@@ -5158,7 +5158,7 @@ export interface components {
             data?: components["schemas"]["HospitalDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         DepartmentDto: {
@@ -5178,15 +5178,15 @@ export interface components {
             data?: components["schemas"]["DepartmentDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
-        JsonNode: Record<string, never>;
+        JsonNode: unknown;
         ApiResponseConfigDocumentDto: {
             data?: components["schemas"]["ConfigDocumentDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ConfigDocumentDto: {
@@ -5214,7 +5214,7 @@ export interface components {
             data?: components["schemas"]["TraumaWorkflowView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         TraumaWorkflowView: {
@@ -5258,7 +5258,7 @@ export interface components {
             data?: components["schemas"]["TariffDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         AppointmentUpdateDto: {
@@ -5294,7 +5294,7 @@ export interface components {
             data?: components["schemas"]["AppointmentView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         AppointmentView: {
@@ -5331,7 +5331,7 @@ export interface components {
             data?: components["schemas"]["DischargeSummaryView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         DischargeSummaryView: {
@@ -5353,14 +5353,14 @@ export interface components {
             definitionId?: string;
             code?: string;
             payload?: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseWorkflowInstanceView: {
             data?: components["schemas"]["WorkflowInstanceView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         WorkflowApprovalView: {
@@ -5425,14 +5425,14 @@ export interface components {
             /** Format: int32 */
             sequenceOrder: number;
             config?: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseWorkflowDefinitionDto: {
             data?: components["schemas"]["WorkflowDefinitionDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         WorkflowDefinitionDto: {
@@ -5494,7 +5494,7 @@ export interface components {
             data?: components["schemas"]["SurgeryScheduleView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         SurgeryScheduleView: {
@@ -5535,7 +5535,7 @@ export interface components {
             data?: components["schemas"]["SurgicalTeamView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         SurgicalTeamView: {
@@ -5563,7 +5563,7 @@ export interface components {
             data?: components["schemas"]["PostOpView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         PostOpView: {
@@ -5597,7 +5597,7 @@ export interface components {
             data?: components["schemas"]["OtAllocationView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         OtAllocationView: {
@@ -5623,7 +5623,7 @@ export interface components {
             data?: components["schemas"]["IntraOpView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         IntraOpView: {
@@ -5648,7 +5648,7 @@ export interface components {
             data?: components["schemas"]["InstrumentView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         InstrumentView: {
@@ -5678,7 +5678,7 @@ export interface components {
             data?: components["schemas"]["ImplantView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ImplantView: {
@@ -5707,7 +5707,7 @@ export interface components {
             data?: components["schemas"]["PreOpChecklistView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         PreOpChecklistView: {
@@ -5735,7 +5735,7 @@ export interface components {
             data?: components["schemas"]["OtRoomView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         OtRoomView: {
@@ -5796,7 +5796,7 @@ export interface components {
             data?: components["schemas"]["VisitCreateResult"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         QueueEntryView: {
@@ -5884,7 +5884,7 @@ export interface components {
             data?: components["schemas"]["ServicePointDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ServicePointDto: {
@@ -5916,7 +5916,7 @@ export interface components {
             data?: components["schemas"]["QueueEntryView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         QueueTypeDto: {
@@ -5926,7 +5926,7 @@ export interface components {
             data?: components["schemas"]["BoardEntry"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         BoardEntry: {
@@ -5979,7 +5979,7 @@ export interface components {
             data?: components["schemas"]["DispensationView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         DispensationView: {
@@ -6073,7 +6073,7 @@ export interface components {
             data?: components["schemas"]["PatientCreateResponse"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         MatchCandidateDto: {
@@ -6096,14 +6096,14 @@ export interface components {
             data?: components["schemas"]["PatientRelationshipDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponsePhotoDto: {
             data?: components["schemas"]["PhotoDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         PhotoDto: {
@@ -6113,35 +6113,35 @@ export interface components {
             data?: components["schemas"]["NoteDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponsePatientIdentifierDto: {
             data?: components["schemas"]["PatientIdentifierDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseMedicalHistoryDto: {
             data?: components["schemas"]["MedicalHistoryDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseAllergyDto: {
             data?: components["schemas"]["AllergyDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseMergeLogDto: {
             data?: components["schemas"]["MergeLogDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         MergeLogDto: {
@@ -6178,7 +6178,7 @@ export interface components {
             data?: components["schemas"]["EmpiReviewDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         EmpiReviewDto: {
@@ -6209,7 +6209,7 @@ export interface components {
             data?: components["schemas"]["MatchCandidateDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         VitalsCreateDto: {
@@ -6240,7 +6240,7 @@ export interface components {
             data?: components["schemas"]["VitalsView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         VitalsView: {
@@ -6287,7 +6287,7 @@ export interface components {
             data?: components["schemas"]["RiskAssessmentView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         RiskAssessmentView: {
@@ -6322,7 +6322,7 @@ export interface components {
             data?: components["schemas"]["NursingNoteView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         NursingNoteView: {
@@ -6358,7 +6358,7 @@ export interface components {
             data?: components["schemas"]["MarView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         MarView: {
@@ -6397,7 +6397,7 @@ export interface components {
             data?: components["schemas"]["NursingHandoverView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         NursingHandoverView: {
@@ -6432,7 +6432,7 @@ export interface components {
             data?: components["schemas"]["NursingCarePlanView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         NursingCarePlanView: {
@@ -6468,7 +6468,7 @@ export interface components {
             data?: components["schemas"]["NursingAssessmentView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         NursingAssessmentView: {
@@ -6492,7 +6492,7 @@ export interface components {
             data?: components["schemas"]["NotificationView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         NotificationView: {
@@ -6532,7 +6532,7 @@ export interface components {
             data?: components["schemas"]["NotificationRequestView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         NotificationRequestView: {
@@ -6560,7 +6560,7 @@ export interface components {
             data?: number;
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         PriceListItemDto: {
@@ -6577,7 +6577,7 @@ export interface components {
             data?: components["schemas"]["PriceListItemDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         CreateLabOrderDto: {
@@ -6601,7 +6601,7 @@ export interface components {
             data?: components["schemas"]["LabOrderDetailView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         LabOrderDetailView: {
@@ -6725,7 +6725,7 @@ export interface components {
             data?: components["schemas"]["IcuVitalsView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         IcuVitalsView: {
@@ -6785,7 +6785,7 @@ export interface components {
             data?: components["schemas"]["VentilationView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         VentilationView: {
@@ -6833,7 +6833,7 @@ export interface components {
             data?: components["schemas"]["InfusionView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         InfusionView: {
@@ -6878,7 +6878,7 @@ export interface components {
             data?: components["schemas"]["FluidBalanceView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         FluidBalanceView: {
@@ -6917,7 +6917,7 @@ export interface components {
             data?: components["schemas"]["CriticalAlertView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         CriticalAlertView: {
@@ -6960,7 +6960,7 @@ export interface components {
             data?: components["schemas"]["WardDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         SpecialtyDto: {
@@ -6978,7 +6978,7 @@ export interface components {
             data?: components["schemas"]["SpecialtyDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         HospitalServiceDto: {
@@ -6996,7 +6996,7 @@ export interface components {
             data?: components["schemas"]["HospitalServiceDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         BedDto: {
@@ -7016,7 +7016,7 @@ export interface components {
             data?: components["schemas"]["BedDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         Hl7ParseRequest: {
@@ -7043,7 +7043,7 @@ export interface components {
             data?: components["schemas"]["EncounterView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         EncounterView: {
@@ -7098,7 +7098,7 @@ export interface components {
             data?: components["schemas"]["VitalSignView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         VitalSignView: {
@@ -7155,7 +7155,7 @@ export interface components {
             data?: components["schemas"]["PrescriptionView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         PrescriptionView: {
@@ -7201,7 +7201,7 @@ export interface components {
             data?: components["schemas"]["OrderView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         OrderView: {
@@ -7238,7 +7238,7 @@ export interface components {
             data?: components["schemas"]["ClinicalNoteView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ClinicalNoteView: {
@@ -7275,7 +7275,7 @@ export interface components {
             data?: components["schemas"]["DiagnosisView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         DiagnosisView: {
@@ -7293,7 +7293,7 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
-        SignNoteRequest: Record<string, never>;
+        SignNoteRequest: unknown;
         EmergencyRegisterDto: {
             /** Format: uuid */
             hospitalId?: string;
@@ -7308,7 +7308,7 @@ export interface components {
             data?: components["schemas"]["EmergencyRegistrationView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         EmergencyRegistrationView: {
@@ -7350,7 +7350,7 @@ export interface components {
             data?: components["schemas"]["TriageView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         TriageView: {
@@ -7395,7 +7395,7 @@ export interface components {
             data?: components["schemas"]["ConsentView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ConsentView: {
@@ -7435,7 +7435,7 @@ export interface components {
             data?: components["schemas"]["ChannelView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ChannelView: {
@@ -7470,7 +7470,7 @@ export interface components {
             data?: components["schemas"]["MessageView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         MessageView: {
@@ -7500,7 +7500,7 @@ export interface components {
             data?: components["schemas"]["ChannelMemberView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ChannelMemberView: {
@@ -7537,7 +7537,7 @@ export interface components {
             data?: components["schemas"]["UnitView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         UnitView: {
@@ -7578,7 +7578,7 @@ export interface components {
             data?: components["schemas"]["TransfusionView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         TransfusionView: {
@@ -7613,7 +7613,7 @@ export interface components {
             data?: components["schemas"]["ReactionView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ReactionView: {
@@ -7648,7 +7648,7 @@ export interface components {
             data?: components["schemas"]["ReservationView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ReservationView: {
@@ -7686,7 +7686,7 @@ export interface components {
             data?: components["schemas"]["IssueView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         IssueView: {
@@ -7720,7 +7720,7 @@ export interface components {
             data?: components["schemas"]["GroupingView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         GroupingView: {
@@ -7758,7 +7758,7 @@ export interface components {
             data?: components["schemas"]["DonorView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         DonorView: {
@@ -7791,7 +7791,7 @@ export interface components {
             data?: components["schemas"]["CrossmatchView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         CrossmatchView: {
@@ -7824,7 +7824,7 @@ export interface components {
             data?: components["schemas"]["InvoiceDetailView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         InvoiceDetailView: {
@@ -7889,7 +7889,7 @@ export interface components {
             data?: components["schemas"]["PaymentView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         CancelInvoiceDto: {
@@ -7916,7 +7916,7 @@ export interface components {
             data?: components["schemas"]["ChargeView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ChargeView: {
@@ -7965,7 +7965,7 @@ export interface components {
             data?: components["schemas"]["LoginResult"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         LoginResult: {
@@ -8003,7 +8003,7 @@ export interface components {
             };
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         LogoutDto: {
@@ -8014,10 +8014,10 @@ export interface components {
             data?: components["schemas"]["Unit"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
-        Unit: Record<string, never>;
+        Unit: unknown;
         LoginDto: {
             username: string;
             password: string;
@@ -8027,7 +8027,7 @@ export interface components {
             data?: components["schemas"]["AuditVerifyView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         AuditVerifyView: {
@@ -8053,7 +8053,7 @@ export interface components {
             data?: components["schemas"]["AuditExportView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         AuditExportView: {
@@ -8125,7 +8125,7 @@ export interface components {
             data?: components["schemas"]["AnaesthesiaRecordView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         RecoveryCreateDto: {
@@ -8138,7 +8138,7 @@ export interface components {
             data?: components["schemas"]["RecoveryView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         RecoveryView: {
@@ -8182,7 +8182,7 @@ export interface components {
             data?: components["schemas"]["PacuView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         PacuView: {
@@ -8236,7 +8236,7 @@ export interface components {
             data?: components["schemas"]["MonitoringView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         MonitoringView: {
@@ -8281,7 +8281,7 @@ export interface components {
             data?: components["schemas"]["MedicationView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         MedicationView: {
@@ -8326,7 +8326,7 @@ export interface components {
             data?: components["schemas"]["EvaluationView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         EvaluationView: {
@@ -8381,7 +8381,7 @@ export interface components {
             data?: components["schemas"]["AiCommandOutput"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         AiChatMessageDto: {
@@ -8407,7 +8407,7 @@ export interface components {
             data?: components["schemas"]["AiReply"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         AiAgentCreateRequest: {
@@ -8474,7 +8474,7 @@ export interface components {
             data?: components["schemas"]["AdmissionView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         AdmissionTransferDto: {
@@ -8500,7 +8500,7 @@ export interface components {
             data?: components["schemas"]["AttendantView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         AttendantView: {
@@ -8532,7 +8532,7 @@ export interface components {
             data?: components["schemas"]["VisitDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         VisitCancelDto: {
@@ -8590,21 +8590,21 @@ export interface components {
             data?: components["schemas"]["WorkflowInstanceView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListWorkflowDefinitionDto: {
             data?: components["schemas"]["WorkflowDefinitionDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListWorkflowPendingApprovalView: {
             data?: components["schemas"]["WorkflowPendingApprovalView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         WorkflowPendingApprovalView: {
@@ -8631,63 +8631,63 @@ export interface components {
             data?: components["schemas"]["TaskView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListSurgeryScheduleView: {
             data?: components["schemas"]["SurgeryScheduleView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListSurgicalTeamView: {
             data?: components["schemas"]["SurgicalTeamView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListIntraOpView: {
             data?: components["schemas"]["IntraOpView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListInstrumentView: {
             data?: components["schemas"]["InstrumentView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListImplantView: {
             data?: components["schemas"]["ImplantView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListPreOpChecklistView: {
             data?: components["schemas"]["PreOpChecklistView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListOtRoomView: {
             data?: components["schemas"]["OtRoomView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseSearchResponseView: {
             data?: components["schemas"]["SearchResponseView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         SearchHitView: {
@@ -8699,7 +8699,7 @@ export interface components {
             /** Format: double */
             score?: number;
             fields: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         SearchResponseView: {
@@ -8713,30 +8713,30 @@ export interface components {
             };
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListMapStringObject: {
             data?: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             }[];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListVisitDto: {
             data?: components["schemas"]["VisitDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseQueueStatsView: {
             data?: components["schemas"]["QueueStatsView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         QueueStatsView: {
@@ -8754,35 +8754,35 @@ export interface components {
             data?: components["schemas"]["ServicePointDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListBoardEntry: {
             data?: components["schemas"]["BoardEntry"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListPharmacyStockView: {
             data?: components["schemas"]["PharmacyStockView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListDispensationView: {
             data?: components["schemas"]["DispensationView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListPatientSummaryDto: {
             data?: components["schemas"]["PatientSummaryDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         PatientSummaryDto: {
@@ -8808,56 +8808,56 @@ export interface components {
             data?: components["schemas"]["PatientRelationshipDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListNoteDto: {
             data?: components["schemas"]["NoteDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListPatientIdentifierDto: {
             data?: components["schemas"]["PatientIdentifierDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListMedicalHistoryDto: {
             data?: components["schemas"]["MedicalHistoryDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListAllergyDto: {
             data?: components["schemas"]["AllergyDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListMergeLogDto: {
             data?: components["schemas"]["MergeLogDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListEmpiReviewDto: {
             data?: components["schemas"]["EmpiReviewDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponsePatient360View: {
             data?: components["schemas"]["Patient360View"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         Encounter360View: {
@@ -8907,154 +8907,154 @@ export interface components {
             data?: components["schemas"]["VitalsView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListRiskAssessmentView: {
             data?: components["schemas"]["RiskAssessmentView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListNursingNoteView: {
             data?: components["schemas"]["NursingNoteView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListMarView: {
             data?: components["schemas"]["MarView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListNursingHandoverView: {
             data?: components["schemas"]["NursingHandoverView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListNursingCarePlanView: {
             data?: components["schemas"]["NursingCarePlanView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListNursingAssessmentView: {
             data?: components["schemas"]["NursingAssessmentView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListNotificationView: {
             data?: components["schemas"]["NotificationView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListNotificationRequestView: {
             data?: components["schemas"]["NotificationRequestView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListVendorDto: {
             data?: components["schemas"]["VendorDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListProcedureCodeDto: {
             data?: components["schemas"]["ProcedureCodeDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListPriceListDto: {
             data?: components["schemas"]["PriceListDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListPriceListItemDto: {
             data?: components["schemas"]["PriceListItemDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListLabTestDto: {
             data?: components["schemas"]["LabTestDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListImagingProcedureDto: {
             data?: components["schemas"]["ImagingProcedureDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListEquipmentDto: {
             data?: components["schemas"]["EquipmentDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListEmployeeDto: {
             data?: components["schemas"]["EmployeeDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListDrugDto: {
             data?: components["schemas"]["DrugDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListDiagnosisCodeDto: {
             data?: components["schemas"]["DiagnosisCodeDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListChargeItemDto: {
             data?: components["schemas"]["ChargeItemDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListLabOrderView: {
             data?: components["schemas"]["LabOrderView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListRoleView: {
             data?: components["schemas"]["RoleView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         RoleView: {
@@ -9070,63 +9070,63 @@ export interface components {
             data?: string[];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListIcuVitalsView: {
             data?: components["schemas"]["IcuVitalsView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListVentilationView: {
             data?: components["schemas"]["VentilationView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListInfusionView: {
             data?: components["schemas"]["InfusionView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListFluidBalanceView: {
             data?: components["schemas"]["FluidBalanceView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListCriticalAlertView: {
             data?: components["schemas"]["CriticalAlertView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListHospitalDto: {
             data?: components["schemas"]["HospitalDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListWardDto: {
             data?: components["schemas"]["WardDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseHospitalTreeDto: {
             data?: components["schemas"]["HospitalTreeDto"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         BuildingDto: {
@@ -9195,42 +9195,42 @@ export interface components {
             data?: components["schemas"]["SpecialtyDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListHospitalServiceDto: {
             data?: components["schemas"]["HospitalServiceDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListDepartmentDto: {
             data?: components["schemas"]["DepartmentDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListConfigDocumentDto: {
             data?: components["schemas"]["ConfigDocumentDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListBedDto: {
             data?: components["schemas"]["BedDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseEncounterDetailView: {
             data?: components["schemas"]["EncounterDetailView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         EncounterDetailView: {
@@ -9245,56 +9245,56 @@ export interface components {
             data?: components["schemas"]["PrescriptionView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListOrderView: {
             data?: components["schemas"]["OrderView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListClinicalNoteView: {
             data?: components["schemas"]["ClinicalNoteView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListDiagnosisView: {
             data?: components["schemas"]["DiagnosisView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListVitalSignView: {
             data?: components["schemas"]["VitalSignView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListEmergencyRegistrationView: {
             data?: components["schemas"]["EmergencyRegistrationView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListConsentView: {
             data?: components["schemas"]["ConsentView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListChannelSummaryView: {
             data?: components["schemas"]["ChannelSummaryView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ChannelSummaryView: {
@@ -9315,7 +9315,7 @@ export interface components {
             data?: components["schemas"]["ChannelDetailView"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ChannelDetailView: {
@@ -9328,84 +9328,84 @@ export interface components {
             data?: components["schemas"]["MessageView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListChannelMemberView: {
             data?: components["schemas"]["ChannelMemberView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListUnitView: {
             data?: components["schemas"]["UnitView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListTransfusionView: {
             data?: components["schemas"]["TransfusionView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListReactionView: {
             data?: components["schemas"]["ReactionView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListIssueView: {
             data?: components["schemas"]["IssueView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListDonorView: {
             data?: components["schemas"]["DonorView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListCrossmatchView: {
             data?: components["schemas"]["CrossmatchView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListTariffDto: {
             data?: components["schemas"]["TariffDto"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListInvoiceView: {
             data?: components["schemas"]["InvoiceView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListChargeView: {
             data?: components["schemas"]["ChargeView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseMfaSetupResponse: {
             data?: components["schemas"]["MfaSetupResponse"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         MfaSetupResponse: {
@@ -9416,14 +9416,14 @@ export interface components {
             data?: components["schemas"]["UserSummary"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListDeviceView: {
             data?: components["schemas"]["DeviceView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         DeviceView: {
@@ -9440,7 +9440,7 @@ export interface components {
             data?: components["schemas"]["AuditLogView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         AuditLogView: {
@@ -9474,14 +9474,14 @@ export interface components {
             data?: components["schemas"]["AppointmentView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseQueueStats: {
             data?: components["schemas"]["QueueStats"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         NameCount: {
@@ -9505,7 +9505,7 @@ export interface components {
             data?: components["schemas"]["PatientsStats"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         PatientsStats: {
@@ -9525,7 +9525,7 @@ export interface components {
             data?: components["schemas"]["OverviewStats"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         OverviewStats: {
@@ -9564,7 +9564,7 @@ export interface components {
             data?: components["schemas"]["LabStats"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         LabStats: {
@@ -9581,7 +9581,7 @@ export interface components {
             data?: components["schemas"]["EncounterStats"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         EncounterStats: {
@@ -9598,7 +9598,7 @@ export interface components {
             data?: components["schemas"]["BillingStats"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         BillingStats: {
@@ -9619,7 +9619,7 @@ export interface components {
             data?: components["schemas"]["AppointmentStats"];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         AppointmentStats: {
@@ -9634,42 +9634,42 @@ export interface components {
             data?: components["schemas"]["RecoveryView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListPacuView: {
             data?: components["schemas"]["PacuView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListMonitoringView: {
             data?: components["schemas"]["MonitoringView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListMedicationView: {
             data?: components["schemas"]["MedicationView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListEvaluationView: {
             data?: components["schemas"]["EvaluationView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListAdmissionView: {
             data?: components["schemas"]["AdmissionView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         AdmissionTransferView: {
@@ -9691,21 +9691,21 @@ export interface components {
             data?: components["schemas"]["AdmissionTransferView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseListAttendantView: {
             data?: components["schemas"]["AttendantView"][];
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseVoid: {
-            data?: Record<string, never>;
+            data?: unknown;
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
         ApiResponseMapStringBoolean: {
@@ -9714,7 +9714,7 @@ export interface components {
             };
             success: boolean;
             meta: {
-                [key: string]: Record<string, never>;
+                [key: string]: unknown;
             };
         };
     };
@@ -16973,7 +16973,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    [key: string]: Record<string, never>;
+                    [key: string]: unknown;
                 };
             };
         };
@@ -17005,7 +17005,7 @@ export interface operations {
                 };
                 content: {
                     "*/*": {
-                        [key: string]: Record<string, never>;
+                        [key: string]: unknown;
                     };
                 };
             };
@@ -18237,6 +18237,7 @@ export interface operations {
                 entityId?: string;
                 actor?: string;
                 limit?: number;
+                cursor?: string;
             };
             header?: never;
             path?: never;
@@ -18562,7 +18563,7 @@ export interface operations {
                 };
                 content: {
                     "*/*": {
-                        [key: string]: Record<string, never>;
+                        [key: string]: unknown;
                     };
                 };
             };
@@ -18728,4 +18729,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 93c6b16a97cac513097d00ce119349adf6ec9a8e927a0672e51afe4b886694ed
+// openapi snapshot sha256: 23e182524374ee6235ab78f0fefcd1c999b04195c21627d0f1dfa040e76ed288

@@ -912,8 +912,11 @@ class PlatformIntegrationTests {
       assert2xx(api(HttpMethod.GET, "/api/v1/analytics/lab", token = token), "analytics lab")
       assert2xx(api(HttpMethod.GET, "/api/v1/analytics/billing", token = token), "analytics billing")
 
-      val audit = api(HttpMethod.GET, "/api/v1/audit/logs?entityType=Patient&limit=10", token = token)
-      assert2xx(audit, "audit logs for patient")
+      // 00.02: the /audit/logs filters are now real. The decide call above audited a row whose
+      // entityId is the workflow instance id (audit aspect takes the first UUID method arg),
+      // so this filter must return at least that row.
+      val audit = api(HttpMethod.GET, "/api/v1/audit/logs?entityId=$winstId&limit=10", token = token)
+      assert2xx(audit, "audit logs for workflow instance")
       assertTrue(`data`(audit).size() >= 1, "audit rows recorded")
       assert2xx(api(HttpMethod.GET, "/api/v1/audit/logs?limit=50", token = token), "audit logs global")
     }
@@ -1976,6 +1979,39 @@ class PlatformIntegrationTests {
     @Test
     fun catalogFilterAndPaginationCoverage() {
       val token = adminToken()
+      val s = suffix()
+      // 00.02: seed 3 own drugs so the paged meta block (page/size/total/pages) is provable.
+      listOf(1, 2, 3).forEach { i ->
+        assert2xx(
+          api(HttpMethod.POST, "/api/v1/master-data/drugs", json("code" to "PMD-$s-$i", "name" to "PageMeta Drug $i $s"), token),
+          "create page-meta drug $i",
+        )
+      }
+      val p0 = api(HttpMethod.GET, "/api/v1/master-data/drugs?page=0&size=2", token = token)
+      assert2xx(p0, "paged drugs page 0")
+      val p0Body = om.readTree(p0.body)
+      val p0Meta = p0Body["meta"]
+      assertEquals(0, p0Meta["page"].asInt(), "meta.page must be 0 on the first page: $p0Meta")
+      assertEquals(2, p0Meta["size"].asInt(), "meta.size must echo the requested size: $p0Meta")
+      assertTrue(p0Meta["total"].asLong() >= 3, "meta.total must count all drugs: $p0Meta")
+      assertEquals(
+        (p0Meta["total"].asLong() + 1) / 2,
+        p0Meta["pages"].asLong(),
+        "meta.pages must be ceil(total/size): $p0Meta",
+      )
+      assertEquals(2, p0Body["data"].size(), "page 0 holds exactly size rows")
+      val p1 = api(HttpMethod.GET, "/api/v1/master-data/drugs?page=1&size=2", token = token)
+      assert2xx(p1, "paged drugs page 1")
+      val p1Body = om.readTree(p1.body)
+      assertEquals(1, p1Body["meta"]["page"].asInt(), "meta.page must echo the requested page")
+      assertTrue(
+        p1Body["data"][0]["id"].asText() != p0Body["data"][0]["id"].asText(),
+        "page 1 must start with a different row than page 0",
+      )
+      // Unpaged single-resource responses keep the empty meta block.
+      val created = api(HttpMethod.POST, "/api/v1/master-data/drugs", json("code" to "PMD-$s-empty", "name" to "Empty Meta $s"), token)
+      assert2xx(created, "create unpaged drug")
+      assertTrue(om.readTree(created.body)["meta"].isEmpty, "unpaged create keeps meta {}: ${created.body.take(200)}")
       assert2xx(api(HttpMethod.GET, "/api/v1/master-data/drugs?search=Para", token = token), "search drugs")
       assert2xx(api(HttpMethod.GET, "/api/v1/master-data/drugs?active=true", token = token), "active drugs filter")
       assert2xx(api(HttpMethod.GET, "/api/v1/master-data/drugs?search=Para&active=true", token = token), "search+active drugs")
@@ -2019,6 +2055,92 @@ class PlatformIntegrationTests {
           "update missing imaging 4xx",
         )
       }
+    }
+
+    @Test
+    fun auditLogsCursorPaginationCoverage() {
+      // 00.02: /audit/logs is keyset-paginated (opaque cursor, no offset). Three own patient
+      // creates guarantee fresh audit rows regardless of shared dev-DB state or test order.
+      val token = adminToken()
+      val s = suffix()
+      repeat(3) { i ->
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Cursor",
+              "lastName" to "Walk$i$s",
+              "gender" to "male",
+              "dateOfBirth" to "1990-01-0${i + 1}",
+              "phone" to "55$s$i".take(12),
+              "qid" to "c$i$s".take(11),
+              "nationality" to "Qatar",
+              "city" to "Doha",
+            ),
+            token,
+          ),
+          "create cursor patient $i",
+        )
+      }
+
+      fun metaOf(r: ApiResp): JsonNode = om.readTree(r.body)["meta"]
+
+      fun idsOf(r: ApiResp): List<String> = `data`(r).map { it["id"].asText() }
+
+      fun fetch(cursor: String?): ApiResp {
+        val suffix = if (cursor != null) "&cursor=$cursor" else ""
+        return api(HttpMethod.GET, "/api/v1/audit/logs?limit=2$suffix", token = token)
+      }
+
+      // Page 1: cursor-mode meta shape.
+      val r1 = fetch(null)
+      assert2xx(r1, "audit page 1")
+      val m1 = metaOf(r1)
+      assertEquals(2, m1["limit"].asInt(), "meta.limit echoes the limit")
+      assertTrue(m1["hasNext"].asBoolean(), "hasNext true while rows remain: $m1")
+      var nextCursor: String? = m1["nextCursor"].asText()
+      assertTrue(nextCursor!!.isNotBlank(), "hasNext=true must carry nextCursor: $m1")
+      val seen = idsOf(r1).toMutableSet()
+      assertEquals(2, seen.size, "page 1 holds exactly limit rows")
+      var lastSecond = `data`(r1).last()["occurredAt"].asText().take(19)
+
+      // Continuation pages: strictly-after semantics — nothing repeats, newest first, and a
+      // present nextCursor is always carried while hasNext holds.
+      repeat(2) { page ->
+        val cur = nextCursor ?: return@repeat
+        val r = fetch(cur)
+        assert2xx(r, "audit page ${page + 2}")
+        val m = metaOf(r)
+        val ids = idsOf(r)
+        assertTrue(ids.isNotEmpty(), "page ${page + 2} must return rows")
+        assertTrue(ids.none { it in seen }, "page ${page + 2} must not repeat earlier rows: $ids")
+        seen.addAll(ids)
+        val firstSecond = `data`(r).first()["occurredAt"].asText().take(19)
+        assertTrue(lastSecond >= firstSecond, "pages must stay newest-first: $lastSecond vs $firstSecond")
+        lastSecond = `data`(r).last()["occurredAt"].asText().take(19)
+        if (m["hasNext"].asBoolean()) {
+          nextCursor = m["nextCursor"].asText()
+          assertTrue(nextCursor!!.isNotBlank(), "hasNext=true must carry nextCursor: $m")
+        } else {
+          assertTrue(!m.has("nextCursor"), "exhausted page must not carry nextCursor: $m")
+          nextCursor = null
+        }
+      }
+
+      // No matching rows = end of stream: hasNext false, no nextCursor (also exercises the
+      // optional entityType filter branch).
+      val empty = api(HttpMethod.GET, "/api/v1/audit/logs?limit=2&entityType=NoSuchEntity_$s", token = token)
+      assert2xx(empty, "audit empty filter")
+      val mEmpty = metaOf(empty)
+      assertTrue(!mEmpty["hasNext"].asBoolean(), "no rows -> hasNext false: $mEmpty")
+      assertTrue(!mEmpty.has("nextCursor"), "no nextCursor at the end of stream")
+      assertEquals(0, `data`(empty).size(), "empty filter page has no rows")
+
+      // Unparsable cursor -> 400 INVALID_CURSOR on the error envelope.
+      val bad = api(HttpMethod.GET, "/api/v1/audit/logs?limit=2&cursor=!!bad!!", token = token)
+      assert4xx(bad, "invalid cursor rejected")
+      assertEquals("INVALID_CURSOR", om.readTree(bad.body)["error"]["code"].asText(), "invalid cursor error code: ${bad.body.take(200)}")
     }
 
     @Test

@@ -36,7 +36,7 @@ Tooling:
 
 ## 4. Gates 1–12
 1. PASS — zero real stubs; zero-stub grep over backend/, apps/, packages/, services/, scripts/ run after `git add -A` (only dependency names in the root `package-lock.json`, outside the gate directories).
-2. ⟨CI run id — filled after PR⟩
+2. PASS — CI: run 43917978891 green (PR #39, squash-merged as fe34378; no --admin).
 3. PASS — types: `npx turbo typecheck` clean (28/28 tasks, local run 2026-11-17).
 4. PASS — lint/format: `ktlintFormat compileKotlin compileIntegrationTestKotlin` EXIT=0; frontend lint clean — 0 errors, 3 pre-existing warnings unchanged from chunk-00 (`sw.js` unused `clients`, two `react-hooks/exhaustive-deps` in legacy pages).
 5. PASS — tests: `npx turbo test` 146 passed / 0 failed (web 88, ui 48, api-client 5, schemas 5; 28/28 turbo tasks incl. `next build`); PIT **60/60** (external mode, includes the 3 `SchedulingEngineTests`).
@@ -79,4 +79,4 @@ None new. Teleconsult is consumed by chunk 6, not externally blocked. E1 (ABDM s
 - **Exit demo is 21 checks**, not the originally sketched 16 — the slice grew during verification (RBAC trio, teleconsult, cursor, audit, catalog rows are separate checks).
 
 ## 10. Exit-demo slice
-`pwsh scripts/demo-01.01-scheduling-engine.ps1` against the app on :8081 (`SERVER_PORT=8081 SPRING_PROFILES_ACTIVE=dev .\gradlew.bat bootRun`, compose dev stack up): admin login → hospital → receptionist login → patient → scheduling config publish → template validation (400 weekday 0 / end≤start) → template create → two open slots → generation idempotent (same ids) → slot booking derives fields → overbook 2.0 admits second, rejects third → no-show limit denies rebook, override admits → doctor reads 200 → doctor template write 403 → doctor booking 403 → waitlist urgent-first → promote books the slot (201, then 400) → teleconsult slot → telemedicine=true → legacy booking + cursor page → audit row for appointment write → catalog carries `appointment.*` events. **21 passed, 0 failed**, live 2026-11-17, first pass. PIT 60/60 recorded above; CI ⟨run id⟩ follows the PR.
+`pwsh scripts/demo-01.01-scheduling-engine.ps1` against the app on :8081 (`SERVER_PORT=8081 SPRING_PROFILES_ACTIVE=dev .\gradlew.bat bootRun`, compose dev stack up): admin login → hospital → receptionist login → patient → scheduling config publish → template validation (400 weekday 0 / end≤start) → template create → two open slots → generation idempotent (same ids) → slot booking derives fields → overbook 2.0 admits second, rejects third → no-show limit denies rebook, override admits → doctor reads 200 → doctor template write 403 → doctor booking 403 → waitlist urgent-first → promote books the slot (201, then 400) → teleconsult slot → telemedicine=true → legacy booking + cursor page → audit row for appointment write → catalog carries `appointment.*` events. **21 passed, 0 failed**, live 2026-11-17, first pass. PIT 60/60 recorded above; CI run 43917978891 green.

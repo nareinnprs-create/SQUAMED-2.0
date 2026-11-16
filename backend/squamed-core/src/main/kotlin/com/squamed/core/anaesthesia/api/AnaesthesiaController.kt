@@ -30,7 +30,7 @@ class AnaesthesiaController(
   fun createEvaluation(
     @RequestBody dto: EvaluationCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<EvaluationView> = ApiResponse.ok(anaesthesiaService.createEvaluation(dto, principal.userId))
+  ): ApiResponse<EvaluationView> = ApiResponse.ok(anaesthesiaService.createEvaluation(dto, principal.userId, principal.hospitalId))
 
   @PatchMapping("/evaluations/{id}/confirm")
   @RequiresPermission("anaesthesia:write:anaesthesia")
@@ -38,7 +38,7 @@ class AnaesthesiaController(
   fun confirmEvaluation(
     @PathVariable id: UUID,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<EvaluationView> = ApiResponse.ok(anaesthesiaService.confirmEvaluation(id, principal.userId))
+  ): ApiResponse<EvaluationView> = ApiResponse.ok(anaesthesiaService.confirmEvaluation(id, principal.userId, principal.hospitalId))
 
   @GetMapping("/evaluations")
   @RequiresPermission("anaesthesia:read:anaesthesia")
@@ -46,7 +46,8 @@ class AnaesthesiaController(
   fun listEvaluations(
     @RequestParam(name = "surgeryScheduleId", required = false) surgeryScheduleId: UUID?,
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<EvaluationView>> = ApiResponse.ok(anaesthesiaService.listEvaluations(surgeryScheduleId, patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<EvaluationView>> = ApiResponse.ok(anaesthesiaService.listEvaluations(surgeryScheduleId, patientId, principal.hospitalId))
 
   @PostMapping("/records")
   @ResponseStatus(HttpStatus.CREATED)
@@ -55,7 +56,7 @@ class AnaesthesiaController(
   fun createRecord(
     @RequestBody dto: AnaesthesiaRecordCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<AnaesthesiaRecordView> = ApiResponse.ok(anaesthesiaService.createRecord(dto, principal.userId))
+  ): ApiResponse<AnaesthesiaRecordView> = ApiResponse.ok(anaesthesiaService.createRecord(dto, principal.userId, principal.hospitalId))
 
   @PatchMapping("/records/{id}/status")
   @RequiresPermission("anaesthesia:write:anaesthesia")
@@ -64,7 +65,7 @@ class AnaesthesiaController(
     @PathVariable id: UUID,
     @RequestBody dto: AnaesthesiaRecordStatusDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<AnaesthesiaRecordView> = ApiResponse.ok(anaesthesiaService.updateRecordStatus(id, dto, principal.userId))
+  ): ApiResponse<AnaesthesiaRecordView> = ApiResponse.ok(anaesthesiaService.updateRecordStatus(id, dto, principal.userId, principal.hospitalId))
 
   @PostMapping("/records/{id}/monitoring")
   @ResponseStatus(HttpStatus.CREATED)
@@ -74,14 +75,15 @@ class AnaesthesiaController(
     @PathVariable id: UUID,
     @RequestBody dto: MonitoringCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<MonitoringView> = ApiResponse.ok(anaesthesiaService.addMonitoring(id, dto, principal.userId))
+  ): ApiResponse<MonitoringView> = ApiResponse.ok(anaesthesiaService.addMonitoring(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/records/{id}/monitoring")
   @RequiresPermission("anaesthesia:read:anaesthesia")
   @Transactional(readOnly = true)
   fun listMonitoring(
     @PathVariable id: UUID,
-  ): ApiResponse<List<MonitoringView>> = ApiResponse.ok(anaesthesiaService.listMonitoring(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<MonitoringView>> = ApiResponse.ok(anaesthesiaService.listMonitoring(id, principal.hospitalId))
 
   @PostMapping("/records/{id}/medications")
   @ResponseStatus(HttpStatus.CREATED)
@@ -91,14 +93,15 @@ class AnaesthesiaController(
     @PathVariable id: UUID,
     @RequestBody dto: MedicationCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<MedicationView> = ApiResponse.ok(anaesthesiaService.addMedication(id, dto, principal.userId))
+  ): ApiResponse<MedicationView> = ApiResponse.ok(anaesthesiaService.addMedication(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/records/{id}/medications")
   @RequiresPermission("anaesthesia:read:anaesthesia")
   @Transactional(readOnly = true)
   fun listMedications(
     @PathVariable id: UUID,
-  ): ApiResponse<List<MedicationView>> = ApiResponse.ok(anaesthesiaService.listMedications(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<MedicationView>> = ApiResponse.ok(anaesthesiaService.listMedications(id, principal.hospitalId))
 
   @PostMapping("/records/{id}/recovery")
   @ResponseStatus(HttpStatus.CREATED)
@@ -108,14 +111,15 @@ class AnaesthesiaController(
     @PathVariable id: UUID,
     @RequestBody dto: RecoveryCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<RecoveryView> = ApiResponse.ok(anaesthesiaService.recordRecovery(id, dto, principal.userId))
+  ): ApiResponse<RecoveryView> = ApiResponse.ok(anaesthesiaService.recordRecovery(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/records/{id}/recovery")
   @RequiresPermission("anaesthesia:read:anaesthesia")
   @Transactional(readOnly = true)
   fun listRecovery(
     @PathVariable id: UUID,
-  ): ApiResponse<List<RecoveryView>> = ApiResponse.ok(anaesthesiaService.listRecovery(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<RecoveryView>> = ApiResponse.ok(anaesthesiaService.listRecovery(id, principal.hospitalId))
 
   @PostMapping("/records/{id}/pacu")
   @ResponseStatus(HttpStatus.CREATED)
@@ -125,12 +129,13 @@ class AnaesthesiaController(
     @PathVariable id: UUID,
     @RequestBody dto: PacuCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<PacuView> = ApiResponse.ok(anaesthesiaService.recordPacu(id, dto, principal.userId))
+  ): ApiResponse<PacuView> = ApiResponse.ok(anaesthesiaService.recordPacu(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/records/{id}/pacu")
   @RequiresPermission("anaesthesia:read:anaesthesia")
   @Transactional(readOnly = true)
   fun listPacu(
     @PathVariable id: UUID,
-  ): ApiResponse<List<PacuView>> = ApiResponse.ok(anaesthesiaService.listPacu(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<PacuView>> = ApiResponse.ok(anaesthesiaService.listPacu(id, principal.hospitalId))
 }

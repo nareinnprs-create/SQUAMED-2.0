@@ -17,7 +17,10 @@ import com.squamed.core.hospitalconfig.repository.RoomRepository
 import com.squamed.core.hospitalconfig.repository.SpecialtyRepository
 import com.squamed.core.hospitalconfig.repository.WardRepository
 import com.squamed.core.identity.security.RequiresPermission
+import com.squamed.core.identity.security.SquamedPrincipal
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.AccessDeniedException
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -48,7 +51,12 @@ class HospitalConfigController(
   @GetMapping("/hospitals")
   @RequiresPermission("hospital-config:read:hospital")
   @Transactional(readOnly = true)
-  fun listHospitals(): ApiResponse<List<HospitalDto>> {
+  fun listHospitals(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<HospitalDto>> {
+    // 00.04 tenant sweep: bare /hospitals has no {id} segment so TenantInterceptor never fires —
+    // the tenant directory is a platform-admin surface (principal.hospitalId == null).
+    requirePlatformAdmin(principal)
     val hospitals = hospitalRepository.findAll().map { HospitalDto.from(it) }
     return ApiResponse.ok(hospitals)
   }
@@ -59,7 +67,9 @@ class HospitalConfigController(
   @Transactional
   fun createHospital(
     @RequestBody dto: HospitalDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<HospitalDto> {
+    requirePlatformAdmin(principal)
     val hospital =
       hospitalRepository.save(
         Hospital(
@@ -426,5 +436,9 @@ class HospitalConfigController(
 
   private fun requireHospitalExists(hospitalId: UUID) {
     hospitalRepository.findById(hospitalId).orElseThrow { IllegalArgumentException("HOSPITAL_NOT_FOUND") }
+  }
+
+  private fun requirePlatformAdmin(principal: SquamedPrincipal) {
+    if (principal.hospitalId != null) throw AccessDeniedException("TENANT_FORBIDDEN")
   }
 }

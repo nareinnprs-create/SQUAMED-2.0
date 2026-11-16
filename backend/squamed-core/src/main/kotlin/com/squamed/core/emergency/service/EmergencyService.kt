@@ -1,5 +1,6 @@
 package com.squamed.core.emergency.service
 
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.emergency.api.EmergencyRegisterDto
 import com.squamed.core.emergency.api.EmergencyRegistrationView
 import com.squamed.core.emergency.api.EmergencyStatusDto
@@ -67,12 +68,13 @@ class EmergencyService(
   fun listRegistrations(
     status: String?,
     patientId: UUID?,
+    hospitalId: UUID?,
   ): List<EmergencyRegistrationView> {
     val rows =
       when {
-        status != null -> registrationRepository.findByStatus(status)
-        patientId != null -> registrationRepository.findByPatientId(patientId)
-        else -> registrationRepository.findAll()
+        status != null -> registrationRepository.findByStatus(hospitalId, status)
+        patientId != null -> registrationRepository.findByPatientId(hospitalId, patientId)
+        else -> registrationRepository.findAllForHospital(hospitalId)
       }
     return rows
       .sortedByDescending { it.arrivalAt }
@@ -80,15 +82,19 @@ class EmergencyService(
   }
 
   @Transactional(readOnly = true)
-  fun getRegistration(id: UUID): EmergencyRegistrationView = EmergencyRegistrationView.from(findRegistration(id))
+  fun getRegistration(
+    id: UUID,
+    hospitalId: UUID?,
+  ): EmergencyRegistrationView = EmergencyRegistrationView.from(findRegistration(id, hospitalId))
 
   @Transactional
   fun triage(
     registrationId: UUID,
     dto: TriageCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): TriageView {
-    val registration = findRegistration(registrationId)
+    val registration = findRegistration(registrationId, hospitalId)
     val esiLevel = dto.esiLevel ?: throw IllegalArgumentException("EMERGENCY_ESI_REQUIRED")
     if (esiLevel !in 1..5) throw IllegalArgumentException("EMERGENCY_TRIAGE_INVALID_ESI")
     if (registration.triageEsi != null) throw IllegalArgumentException("EMERGENCY_ALREADY_TRIAGED")
@@ -130,8 +136,9 @@ class EmergencyService(
   fun activateTrauma(
     registrationId: UUID,
     actorId: UUID,
+    hospitalId: UUID?,
   ): TraumaWorkflowView {
-    val registration = findRegistration(registrationId)
+    val registration = findRegistration(registrationId, hospitalId)
     val existing = traumaRepository.findByRegistrationId(registrationId)
     if (existing != null) throw IllegalArgumentException("EMERGENCY_TRAUMA_ALREADY_ACTIVE")
     val workflow =
@@ -163,8 +170,10 @@ class EmergencyService(
     registrationId: UUID,
     dto: TraumaSurveyDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): TraumaWorkflowView {
     val workflow = traumaRepository.findByRegistrationId(registrationId) ?: throw IllegalArgumentException("EMERGENCY_TRAUMA_NOT_ACTIVE")
+    requireSameHospital(hospitalId, workflow.hospitalId) // 00.04 tenant sweep
     val phase = dto.surveyPhase ?: throw IllegalArgumentException("EMERGENCY_TRAUMA_PHASE_REQUIRED")
     if (phase !in TRAUMA_PHASES) throw IllegalArgumentException("EMERGENCY_TRAUMA_INVALID_PHASE")
     val now = Instant.now()
@@ -206,8 +215,9 @@ class EmergencyService(
     registrationId: UUID,
     dto: EmergencyStatusDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): EmergencyRegistrationView {
-    val registration = findRegistration(registrationId)
+    val registration = findRegistration(registrationId, hospitalId)
     val status = dto.status ?: throw IllegalArgumentException("EMERGENCY_STATUS_REQUIRED")
     if (status !in REGISTRATION_STATUSES) throw IllegalArgumentException("EMERGENCY_INVALID_STATUS")
     val now = Instant.now()
@@ -244,8 +254,14 @@ class EmergencyService(
     return EmergencyRegistrationView.from(registration)
   }
 
-  private fun findRegistration(id: UUID): EmergencyRegistration =
-    registrationRepository.findById(id).orElseThrow { IllegalArgumentException("EMERGENCY_REGISTRATION_NOT_FOUND") }
+  private fun findRegistration(
+    id: UUID,
+    hospitalId: UUID?,
+  ): EmergencyRegistration {
+    val registration = registrationRepository.findById(id).orElseThrow { IllegalArgumentException("EMERGENCY_REGISTRATION_NOT_FOUND") }
+    requireSameHospital(hospitalId, registration.hospitalId) // 00.04 tenant sweep
+    return registration
+  }
 
   companion object {
     val ARRIVAL_MODES = setOf("walk_in", "ambulance", "transfer")

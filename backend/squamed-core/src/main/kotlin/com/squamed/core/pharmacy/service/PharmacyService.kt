@@ -1,8 +1,10 @@
 package com.squamed.core.pharmacy.service
 
 import com.squamed.core.common.tenant.TenantResolver
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
+import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.pharmacy.api.DispensationView
 import com.squamed.core.pharmacy.api.DispenseRequestDto
 import com.squamed.core.pharmacy.api.PharmacyStockView
@@ -26,8 +28,12 @@ class PharmacyService(
   private val tenantResolver: TenantResolver,
 ) {
   @Transactional
-  fun addStock(dto: StockRequestDto): PharmacyStockView {
-    val hospitalId = dto.hospitalId ?: tenantResolver.primaryHospitalId()
+  fun addStock(
+    dto: StockRequestDto,
+    principal: SquamedPrincipal,
+  ): PharmacyStockView {
+    // 00.04 tenant sweep (D3): hospital-bound users are pinned, not free to pick dto.hospitalId.
+    val hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId)
     val drugId = dto.drugId
     val existing =
       if (drugId != null) {
@@ -64,23 +70,24 @@ class PharmacyService(
   fun listStock(
     search: String? = null,
     activeOnly: Boolean? = null,
+    hospitalId: UUID? = null,
   ): List<PharmacyStockView> {
     val stocks =
       when {
         search != null && activeOnly == true -> {
-          pharmacyStockRepository.findByDrugNameContainingIgnoreCase(search).filter { it.isActive }
+          pharmacyStockRepository.findByDrugNameContainingIgnoreCase(hospitalId, search).filter { it.isActive }
         }
 
         activeOnly == true -> {
-          pharmacyStockRepository.findByIsActiveTrue()
+          pharmacyStockRepository.findByIsActiveTrue(hospitalId)
         }
 
         search != null -> {
-          pharmacyStockRepository.findByDrugNameContainingIgnoreCase(search)
+          pharmacyStockRepository.findByDrugNameContainingIgnoreCase(hospitalId, search)
         }
 
         else -> {
-          pharmacyStockRepository.findAll()
+          pharmacyStockRepository.findAllForHospital(hospitalId)
         }
       }
     return stocks.sortedBy { it.drugName }.map { PharmacyStockView.from(it) }
@@ -90,11 +97,13 @@ class PharmacyService(
   fun updateStock(
     stockId: UUID,
     dto: StockUpdateDto,
+    hospitalId: UUID?,
   ): PharmacyStockView {
     val stock =
       pharmacyStockRepository
         .findById(stockId)
         .orElseThrow { IllegalArgumentException("STOCK_NOT_FOUND") }
+    requireSameHospital(hospitalId, stock.hospitalId) // 00.04 tenant sweep (D8)
     stock.drugId = dto.drugId ?: stock.drugId
     stock.drugCode = dto.drugCode ?: stock.drugCode
     stock.drugName = dto.drugName ?: stock.drugName
@@ -171,11 +180,13 @@ class PharmacyService(
   fun verifyDispensation(
     dispId: UUID,
     verifierId: UUID,
+    hospitalId: UUID?,
   ): DispensationView {
     val dispensation =
       dispensationRepository
         .findById(dispId)
         .orElseThrow { IllegalArgumentException("DISPENSATION_NOT_FOUND") }
+    requireSameHospital(hospitalId, dispensation.hospitalId) // 00.04 tenant sweep (D8)
     if (dispensation.status != "dispensed") {
       throw IllegalArgumentException("DISPENSATION_NOT_DISPENSED")
     }
@@ -189,11 +200,13 @@ class PharmacyService(
   fun returnOrCancel(
     dispId: UUID,
     reason: String? = null,
+    hospitalId: UUID?,
   ): DispensationView {
     val dispensation =
       dispensationRepository
         .findById(dispId)
         .orElseThrow { IllegalArgumentException("DISPENSATION_NOT_FOUND") }
+    requireSameHospital(hospitalId, dispensation.hospitalId) // 00.04 tenant sweep (D8)
     val restock: Boolean
     when (dispensation.status) {
       "pending" -> {
@@ -216,8 +229,9 @@ class PharmacyService(
     if (restock) {
       val drugId = dispensation.drugId
       if (drugId != null) {
+        // 00.04 tenant sweep (D8): restock the dispensation's own hospital row, not an arbitrary tenant's.
         val stock =
-          pharmacyStockRepository.findByDrugId(drugId).firstOrNull()
+          pharmacyStockRepository.findByDrugId(drugId).firstOrNull { it.hospitalId == dispensation.hospitalId }
             ?: throw IllegalArgumentException("STOCK_NOT_FOUND")
         stock.quantityOnHand += dispensation.quantity
         pharmacyStockRepository.save(stock)
@@ -230,23 +244,24 @@ class PharmacyService(
   fun listDispensations(
     patientId: UUID? = null,
     status: String? = null,
+    hospitalId: UUID? = null,
   ): List<DispensationView> {
     val dispensations =
       when {
         patientId != null && status != null -> {
-          dispensationRepository.findByPatientId(patientId).filter { it.status == status }
+          dispensationRepository.findByPatientId(hospitalId, patientId).filter { it.status == status }
         }
 
         patientId != null -> {
-          dispensationRepository.findByPatientId(patientId)
+          dispensationRepository.findByPatientId(hospitalId, patientId)
         }
 
         status != null -> {
-          dispensationRepository.findByStatus(status)
+          dispensationRepository.findByStatus(hospitalId, status)
         }
 
         else -> {
-          dispensationRepository.findAll()
+          dispensationRepository.findAllForHospital(hospitalId)
         }
       }
     return dispensations

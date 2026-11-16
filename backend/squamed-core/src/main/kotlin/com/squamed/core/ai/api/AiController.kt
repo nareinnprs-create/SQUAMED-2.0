@@ -191,9 +191,12 @@ class AiController(
 
   @GetMapping("/logs")
   @RequiresPermission("ai:read:agent")
-  fun logs(): ApiResponse<List<Map<String, Any?>>> =
+  fun logs(
+    // 00.04 tenant sweep: interaction logs (raw messages) are pinned to the caller's hospital (null = admin).
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<Map<String, Any?>>> =
     ApiResponse.ok(
-      aiService.logs().map { log ->
+      aiService.logs(principal.hospitalId).map { log ->
         mapOf(
           "id" to log.id,
           "agentCode" to log.agentCode,

@@ -42,14 +42,16 @@ class EmergencyController(
   fun listRegistrations(
     @RequestParam(name = "status", required = false) status: String?,
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<EmergencyRegistrationView>> = ApiResponse.ok(emergencyService.listRegistrations(status, patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<EmergencyRegistrationView>> = ApiResponse.ok(emergencyService.listRegistrations(status, patientId, principal.hospitalId))
 
   @GetMapping("/registrations/{id}")
   @RequiresPermission("emergency:read:emergency")
   @Transactional(readOnly = true)
   fun getRegistration(
     @PathVariable id: UUID,
-  ): ApiResponse<EmergencyRegistrationView> = ApiResponse.ok(emergencyService.getRegistration(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<EmergencyRegistrationView> = ApiResponse.ok(emergencyService.getRegistration(id, principal.hospitalId))
 
   @PostMapping("/registrations/{id}/triage")
   @ResponseStatus(HttpStatus.CREATED)
@@ -59,7 +61,7 @@ class EmergencyController(
     @PathVariable id: UUID,
     @RequestBody dto: TriageCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<TriageView> = ApiResponse.ok(emergencyService.triage(id, dto, principal.userId))
+  ): ApiResponse<TriageView> = ApiResponse.ok(emergencyService.triage(id, dto, principal.userId, principal.hospitalId))
 
   @PostMapping("/registrations/{id}/trauma/activate")
   @ResponseStatus(HttpStatus.CREATED)
@@ -68,7 +70,7 @@ class EmergencyController(
   fun activateTrauma(
     @PathVariable id: UUID,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<TraumaWorkflowView> = ApiResponse.ok(emergencyService.activateTrauma(id, principal.userId))
+  ): ApiResponse<TraumaWorkflowView> = ApiResponse.ok(emergencyService.activateTrauma(id, principal.userId, principal.hospitalId))
 
   @PutMapping("/registrations/{id}/trauma")
   @RequiresPermission("emergency:write:emergency")
@@ -77,7 +79,7 @@ class EmergencyController(
     @PathVariable id: UUID,
     @RequestBody dto: TraumaSurveyDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<TraumaWorkflowView> = ApiResponse.ok(emergencyService.updateTraumaSurvey(id, dto, principal.userId))
+  ): ApiResponse<TraumaWorkflowView> = ApiResponse.ok(emergencyService.updateTraumaSurvey(id, dto, principal.userId, principal.hospitalId))
 
   @PatchMapping("/registrations/{id}/status")
   @RequiresPermission("emergency:write:emergency")
@@ -86,5 +88,5 @@ class EmergencyController(
     @PathVariable id: UUID,
     @RequestBody dto: EmergencyStatusDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<EmergencyRegistrationView> = ApiResponse.ok(emergencyService.updateStatus(id, dto, principal.userId))
+  ): ApiResponse<EmergencyRegistrationView> = ApiResponse.ok(emergencyService.updateStatus(id, dto, principal.userId, principal.hospitalId))
 }

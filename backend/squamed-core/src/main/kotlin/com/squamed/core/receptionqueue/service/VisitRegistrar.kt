@@ -1,5 +1,6 @@
 package com.squamed.core.receptionqueue.service
 
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.receptionqueue.api.VisitCreateDto
 import com.squamed.core.receptionqueue.api.VisitCreateResult
 import com.squamed.core.receptionqueue.api.VisitDto
@@ -61,19 +62,23 @@ class VisitRegistrar(
   }
 
   @Transactional(readOnly = true)
-  fun getVisit(id: UUID): VisitDto = VisitDto.from(findVisit(id))
+  fun getVisit(
+    id: UUID,
+    hospitalId: UUID?,
+  ): VisitDto = VisitDto.from(findVisit(id, hospitalId))
 
   @Transactional(readOnly = true)
   fun listVisits(
     status: String?,
     patientId: UUID?,
     from: Instant,
+    hospitalId: UUID?,
   ): List<VisitDto> {
     val visits =
       when {
-        patientId != null -> visitRegistrationRepository.findByPatientId(patientId)
-        status != null -> visitRegistrationRepository.findByStatus(status)
-        else -> visitRegistrationRepository.findAll()
+        patientId != null -> visitRegistrationRepository.findByPatientId(hospitalId, patientId)
+        status != null -> visitRegistrationRepository.findByStatus(hospitalId, status)
+        else -> visitRegistrationRepository.findAllForHospital(hospitalId)
       }
     return visits
       .filter { (it.createdAt ?: Instant.EPOCH) >= from }
@@ -82,16 +87,22 @@ class VisitRegistrar(
   }
 
   @Transactional
-  fun checkIn(visitId: UUID): VisitDto {
-    val visit = findVisit(visitId)
+  fun checkIn(
+    visitId: UUID,
+    hospitalId: UUID?,
+  ): VisitDto {
+    val visit = findVisit(visitId, hospitalId)
     visit.status = "checked-in"
     visitRegistrationRepository.save(visit)
     return VisitDto.from(visit)
   }
 
   @Transactional
-  fun complete(visitId: UUID): VisitDto {
-    val visit = findVisit(visitId)
+  fun complete(
+    visitId: UUID,
+    hospitalId: UUID?,
+  ): VisitDto {
+    val visit = findVisit(visitId, hospitalId)
     visit.status = "completed"
     visitRegistrationRepository.save(visit)
     return VisitDto.from(visit)
@@ -101,8 +112,9 @@ class VisitRegistrar(
   fun cancelVisit(
     visitId: UUID,
     reason: String?,
+    hospitalId: UUID?,
   ): VisitDto {
-    val visit = findVisit(visitId)
+    val visit = findVisit(visitId, hospitalId)
     visit.status = "cancelled"
     if (!reason.isNullOrBlank()) {
       visit.reason = if (visit.reason.isNullOrBlank()) reason else "${visit.reason} | CANCELLED: $reason"
@@ -123,5 +135,12 @@ class VisitRegistrar(
     return String.format("VN-%d-%04d", year, sequence + 1)
   }
 
-  private fun findVisit(id: UUID): VisitRegistration = visitRegistrationRepository.findById(id).orElseThrow { IllegalArgumentException("VISIT_NOT_FOUND") }
+  private fun findVisit(
+    id: UUID,
+    hospitalId: UUID?,
+  ): VisitRegistration {
+    val visit = visitRegistrationRepository.findById(id).orElseThrow { IllegalArgumentException("VISIT_NOT_FOUND") }
+    requireSameHospital(hospitalId, visit.hospitalId)
+    return visit
+  }
 }

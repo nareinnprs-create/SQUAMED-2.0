@@ -36,6 +36,7 @@ import com.squamed.core.bloodbank.repository.BloodUnitRepository
 import com.squamed.core.bloodbank.repository.CrossmatchRepository
 import com.squamed.core.bloodbank.repository.TransfusionReactionRepository
 import com.squamed.core.bloodbank.repository.TransfusionRecordRepository
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import org.springframework.stereotype.Service
@@ -86,8 +87,9 @@ class BloodBankService(
     id: UUID,
     dto: DonorStatusDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): DonorView {
-    val donor = findDonor(id)
+    val donor = findDonor(id, hospitalId)
     val status = dto.status ?: throw IllegalArgumentException("BLOODBANK_DONOR_STATUS_REQUIRED")
     if (status !in DONOR_STATUSES) throw IllegalArgumentException("BLOODBANK_DONOR_INVALID_STATUS")
     donor.status = status
@@ -99,12 +101,13 @@ class BloodBankService(
   fun listDonors(
     status: String?,
     bloodGroup: String?,
+    hospitalId: UUID?,
   ): List<DonorView> {
     val rows =
       when {
-        status != null -> donorRepository.findByStatus(status)
-        bloodGroup != null -> donorRepository.findByBloodGroup(bloodGroup)
-        else -> donorRepository.findAll()
+        status != null -> donorRepository.findByStatus(hospitalId, status)
+        bloodGroup != null -> donorRepository.findByBloodGroup(hospitalId, bloodGroup)
+        else -> donorRepository.findAllForHospital(hospitalId)
       }
     return rows.map { DonorView.from(it) }
   }
@@ -122,7 +125,7 @@ class BloodBankService(
     if (component !in COMPONENTS) throw IllegalArgumentException("BLOODBANK_INVALID_COMPONENT")
     val expiry = dto.expiryDate ?: throw IllegalArgumentException("BLOODBANK_EXPIRY_REQUIRED")
     if (!expiry.isAfter(LocalDate.now())) throw IllegalArgumentException("BLOODBANK_EXPIRY_IN_PAST")
-    if (dto.donorId != null) findDonor(dto.donorId)
+    if (dto.donorId != null) findDonor(dto.donorId, hospitalId)
     val unit =
       unitRepository.save(
         BloodUnit(
@@ -157,8 +160,9 @@ class BloodBankService(
     id: UUID,
     dto: UnitStatusDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): UnitView {
-    val unit = findUnit(id)
+    val unit = findUnit(id, hospitalId)
     val status = dto.status ?: throw IllegalArgumentException("BLOODBANK_UNIT_STATUS_REQUIRED")
     if (status !in UNIT_STATUSES) throw IllegalArgumentException("BLOODBANK_UNIT_INVALID_STATUS")
     if (unit.status == "issued") throw IllegalArgumentException("BLOODBANK_UNIT_ISSUED_LOCKED")
@@ -173,13 +177,14 @@ class BloodBankService(
     status: String?,
     bloodGroup: String?,
     component: String?,
+    hospitalId: UUID?,
   ): List<UnitView> {
     val rows =
       when {
-        status != null -> unitRepository.findByStatus(status)
-        bloodGroup != null -> unitRepository.findByBloodGroup(bloodGroup)
-        component != null -> unitRepository.findByComponent(component)
-        else -> unitRepository.findAll()
+        status != null -> unitRepository.findByStatus(hospitalId, status)
+        bloodGroup != null -> unitRepository.findByBloodGroup(hospitalId, bloodGroup)
+        component != null -> unitRepository.findByComponent(hospitalId, component)
+        else -> unitRepository.findAllForHospital(hospitalId)
       }
     return rows.map { UnitView.from(it) }
   }
@@ -191,7 +196,7 @@ class BloodBankService(
   ): GroupingView {
     val hospitalId = dto.hospitalId ?: throw IllegalArgumentException("BLOODBANK_HOSPITAL_REQUIRED")
     val unitId = dto.unitId ?: throw IllegalArgumentException("BLOODBANK_UNIT_REQUIRED")
-    findUnit(unitId)
+    findUnit(unitId, hospitalId)
     if (groupingRepository.findByUnitId(unitId) != null) throw IllegalArgumentException("BLOODBANK_ALREADY_GROUPED")
     val aboResult = dto.aboResult ?: throw IllegalArgumentException("BLOODBANK_ABO_REQUIRED")
     val rhResult = dto.rhResult ?: throw IllegalArgumentException("BLOODBANK_RH_REQUIRED")
@@ -214,8 +219,9 @@ class BloodBankService(
   fun confirmGrouping(
     id: UUID,
     actorId: UUID,
+    hospitalId: UUID?,
   ): GroupingView {
-    val grouping = findGrouping(id)
+    val grouping = findGrouping(id, hospitalId)
     if (grouping.confirmed) throw IllegalArgumentException("BLOODBANK_GROUPING_CONFIRMED")
     grouping.confirmed = true
     grouping.confirmedBy = actorId
@@ -225,8 +231,12 @@ class BloodBankService(
   }
 
   @Transactional(readOnly = true)
-  fun getGrouping(unitId: UUID): GroupingView {
+  fun getGrouping(
+    unitId: UUID,
+    hospitalId: UUID?,
+  ): GroupingView {
     val grouping = groupingRepository.findByUnitId(unitId) ?: throw IllegalArgumentException("BLOODBANK_GROUPING_NOT_FOUND")
+    requireSameHospital(hospitalId, grouping.hospitalId) // 00.04 tenant sweep
     return GroupingView.from(grouping)
   }
 
@@ -238,7 +248,7 @@ class BloodBankService(
     val hospitalId = dto.hospitalId ?: throw IllegalArgumentException("BLOODBANK_HOSPITAL_REQUIRED")
     val patientId = dto.patientId ?: throw IllegalArgumentException("BLOODBANK_PATIENT_REQUIRED")
     val unitId = dto.unitId ?: throw IllegalArgumentException("BLOODBANK_UNIT_REQUIRED")
-    findUnit(unitId)
+    findUnit(unitId, hospitalId)
     val technique = dto.technique ?: throw IllegalArgumentException("BLOODBANK_TECHNIQUE_REQUIRED")
     if (technique !in TECHNIQUES) throw IllegalArgumentException("BLOODBANK_INVALID_TECHNIQUE")
     val crossmatch =
@@ -259,8 +269,9 @@ class BloodBankService(
     id: UUID,
     dto: CrossmatchResultDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): CrossmatchView {
-    val crossmatch = findCrossmatch(id)
+    val crossmatch = findCrossmatch(id, hospitalId)
     val compatibility = dto.compatibility ?: throw IllegalArgumentException("BLOODBANK_COMPATIBILITY_REQUIRED")
     if (compatibility !in COMPATIBILITIES) throw IllegalArgumentException("BLOODBANK_INVALID_COMPATIBILITY")
     crossmatch.compatibility = compatibility
@@ -275,12 +286,13 @@ class BloodBankService(
   fun listCrossmatches(
     patientId: UUID?,
     unitId: UUID?,
+    hospitalId: UUID?,
   ): List<CrossmatchView> {
     val rows =
       when {
-        patientId != null -> crossmatchRepository.findByPatientId(patientId)
-        unitId != null -> crossmatchRepository.findByUnitId(unitId)
-        else -> crossmatchRepository.findAll()
+        patientId != null -> crossmatchRepository.findByPatientId(hospitalId, patientId)
+        unitId != null -> crossmatchRepository.findByUnitId(hospitalId, unitId)
+        else -> crossmatchRepository.findAllForHospital(hospitalId)
       }
     return rows.map { CrossmatchView.from(it) }
   }
@@ -293,7 +305,7 @@ class BloodBankService(
     val hospitalId = dto.hospitalId ?: throw IllegalArgumentException("BLOODBANK_HOSPITAL_REQUIRED")
     val patientId = dto.patientId ?: throw IllegalArgumentException("BLOODBANK_PATIENT_REQUIRED")
     val unitId = dto.unitId ?: throw IllegalArgumentException("BLOODBANK_UNIT_REQUIRED")
-    val unit = findUnit(unitId)
+    val unit = findUnit(unitId, hospitalId)
     if (unit.status != "available") throw IllegalArgumentException("BLOODBANK_UNIT_NOT_AVAILABLE")
     unit.status = "reserved"
     unit.updatedBy = actorId
@@ -315,6 +327,7 @@ class BloodBankService(
   fun releaseReservation(
     unitId: UUID,
     actorId: UUID,
+    hospitalId: UUID?,
   ): ReservationView {
     val reservation =
       reservationRepository
@@ -322,7 +335,8 @@ class BloodBankService(
         .filter { it.status == "reserved" }
         .maxByOrNull { it.reservedAt }
         ?: throw IllegalArgumentException("BLOODBANK_NO_ACTIVE_RESERVATION")
-    val unit = findUnit(unitId)
+    requireSameHospital(hospitalId, reservation.hospitalId) // 00.04 tenant sweep
+    val unit = findUnit(unitId, hospitalId)
     unit.status = "available"
     unit.updatedBy = actorId
     unitRepository.save(unit)
@@ -341,7 +355,7 @@ class BloodBankService(
     val hospitalId = dto.hospitalId ?: throw IllegalArgumentException("BLOODBANK_HOSPITAL_REQUIRED")
     val patientId = dto.patientId ?: throw IllegalArgumentException("BLOODBANK_PATIENT_REQUIRED")
     val unitId = dto.unitId ?: throw IllegalArgumentException("BLOODBANK_UNIT_REQUIRED")
-    val unit = findUnit(unitId)
+    val unit = findUnit(unitId, hospitalId)
     if (unit.status !in setOf("available", "reserved")) throw IllegalArgumentException("BLOODBANK_UNIT_NOT_ISSUABLE")
     unit.status = "issued"
     unit.updatedBy = actorId
@@ -372,8 +386,16 @@ class BloodBankService(
   }
 
   @Transactional(readOnly = true)
-  fun listIssues(patientId: UUID?): List<IssueView> {
-    val rows = if (patientId != null) issueRepository.findByPatientId(patientId) else issueRepository.findAll()
+  fun listIssues(
+    patientId: UUID?,
+    hospitalId: UUID?,
+  ): List<IssueView> {
+    val rows =
+      if (patientId != null) {
+        issueRepository.findByPatientId(hospitalId, patientId)
+      } else {
+        issueRepository.findAllForHospital(hospitalId)
+      }
     return rows.map { IssueView.from(it) }
   }
 
@@ -385,7 +407,7 @@ class BloodBankService(
     val hospitalId = dto.hospitalId ?: throw IllegalArgumentException("BLOODBANK_HOSPITAL_REQUIRED")
     val patientId = dto.patientId ?: throw IllegalArgumentException("BLOODBANK_PATIENT_REQUIRED")
     val unitId = dto.unitId ?: throw IllegalArgumentException("BLOODBANK_UNIT_REQUIRED")
-    val unit = findUnit(unitId)
+    val unit = findUnit(unitId, hospitalId)
     if (unit.status != "issued") throw IllegalArgumentException("BLOODBANK_UNIT_NOT_ISSUED")
     val transfusion =
       transfusionRepository.save(
@@ -419,8 +441,9 @@ class BloodBankService(
     id: UUID,
     dto: TransfusionStatusDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): TransfusionView {
-    val transfusion = findTransfusion(id)
+    val transfusion = findTransfusion(id, hospitalId)
     val status = dto.status ?: throw IllegalArgumentException("BLOODBANK_TRANSFUSION_STATUS_REQUIRED")
     if (status !in TRANSFUSION_STATUSES) throw IllegalArgumentException("BLOODBANK_TRANSFUSION_INVALID_STATUS")
     if (transfusion.status != "in_progress") throw IllegalArgumentException("BLOODBANK_TRANSFUSION_FINISHED")
@@ -444,8 +467,16 @@ class BloodBankService(
   }
 
   @Transactional(readOnly = true)
-  fun listTransfusions(patientId: UUID?): List<TransfusionView> {
-    val rows = if (patientId != null) transfusionRepository.findByPatientId(patientId) else transfusionRepository.findAll()
+  fun listTransfusions(
+    patientId: UUID?,
+    hospitalId: UUID?,
+  ): List<TransfusionView> {
+    val rows =
+      if (patientId != null) {
+        transfusionRepository.findByPatientId(hospitalId, patientId)
+      } else {
+        transfusionRepository.findAllForHospital(hospitalId)
+      }
     return rows.map { TransfusionView.from(it) }
   }
 
@@ -454,8 +485,9 @@ class BloodBankService(
     transfusionId: UUID,
     dto: ReactionCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): ReactionView {
-    val transfusion = findTransfusion(transfusionId)
+    val transfusion = findTransfusion(transfusionId, hospitalId)
     val reactionType = dto.reactionType ?: throw IllegalArgumentException("BLOODBANK_REACTION_TYPE_REQUIRED")
     if (reactionType !in REACTION_TYPES) throw IllegalArgumentException("BLOODBANK_INVALID_REACTION_TYPE")
     val severity = dto.severity ?: throw IllegalArgumentException("BLOODBANK_REACTION_SEVERITY_REQUIRED")
@@ -489,22 +521,58 @@ class BloodBankService(
   }
 
   @Transactional(readOnly = true)
-  fun listReactions(transfusionId: UUID): List<ReactionView> {
-    findTransfusion(transfusionId)
+  fun listReactions(
+    transfusionId: UUID,
+    hospitalId: UUID?,
+  ): List<ReactionView> {
+    findTransfusion(transfusionId, hospitalId)
     return reactionRepository.findByTransfusionRecordId(transfusionId).map { ReactionView.from(it) }
   }
 
-  private fun findDonor(id: UUID): BloodDonor = donorRepository.findById(id).orElseThrow { IllegalArgumentException("BLOODBANK_DONOR_NOT_FOUND") }
+  private fun findDonor(
+    id: UUID,
+    hospitalId: UUID?,
+  ): BloodDonor {
+    val donor = donorRepository.findById(id).orElseThrow { IllegalArgumentException("BLOODBANK_DONOR_NOT_FOUND") }
+    requireSameHospital(hospitalId, donor.hospitalId) // 00.04 tenant sweep
+    return donor
+  }
 
-  private fun findUnit(id: UUID): BloodUnit = unitRepository.findById(id).orElseThrow { IllegalArgumentException("BLOODBANK_UNIT_NOT_FOUND") }
+  private fun findUnit(
+    id: UUID,
+    hospitalId: UUID?,
+  ): BloodUnit {
+    val unit = unitRepository.findById(id).orElseThrow { IllegalArgumentException("BLOODBANK_UNIT_NOT_FOUND") }
+    requireSameHospital(hospitalId, unit.hospitalId) // 00.04 tenant sweep
+    return unit
+  }
 
-  private fun findGrouping(id: UUID): BloodGrouping = groupingRepository.findById(id).orElseThrow { IllegalArgumentException("BLOODBANK_GROUPING_NOT_FOUND") }
+  private fun findGrouping(
+    id: UUID,
+    hospitalId: UUID?,
+  ): BloodGrouping {
+    val grouping = groupingRepository.findById(id).orElseThrow { IllegalArgumentException("BLOODBANK_GROUPING_NOT_FOUND") }
+    requireSameHospital(hospitalId, grouping.hospitalId) // 00.04 tenant sweep
+    return grouping
+  }
 
-  private fun findCrossmatch(id: UUID): Crossmatch =
-    crossmatchRepository.findById(id).orElseThrow { IllegalArgumentException("BLOODBANK_CROSSMATCH_NOT_FOUND") }
+  private fun findCrossmatch(
+    id: UUID,
+    hospitalId: UUID?,
+  ): Crossmatch {
+    val crossmatch = crossmatchRepository.findById(id).orElseThrow { IllegalArgumentException("BLOODBANK_CROSSMATCH_NOT_FOUND") }
+    requireSameHospital(hospitalId, crossmatch.hospitalId) // 00.04 tenant sweep
+    return crossmatch
+  }
 
-  private fun findTransfusion(id: UUID): TransfusionRecord =
-    transfusionRepository.findById(id).orElseThrow { IllegalArgumentException("BLOODBANK_TRANSFUSION_NOT_FOUND") }
+  private fun findTransfusion(
+    id: UUID,
+    hospitalId: UUID?,
+  ): TransfusionRecord {
+    val transfusion = transfusionRepository.findById(id).orElseThrow { IllegalArgumentException("BLOODBANK_TRANSFUSION_NOT_FOUND") }
+    requireSameHospital(hospitalId, transfusion.hospitalId) // 00.04 tenant sweep
+    return transfusion
+  }
 
   companion object {
     val BLOOD_GROUPS = setOf("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-")

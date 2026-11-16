@@ -2,6 +2,7 @@ package com.squamed.core.workflow.service
 
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.notification.domain.Notification
 import com.squamed.core.notification.repository.NotificationRepository
 import com.squamed.core.task.domain.Task
@@ -241,18 +242,29 @@ class WorkflowService(
   }
 
   @Transactional(readOnly = true)
-  fun listInstances(status: String?): List<WorkflowInstanceView> {
+  fun listInstances(
+    status: String?,
+    hospitalId: UUID?,
+  ): List<WorkflowInstanceView> {
     val instances =
       if (status == null) {
-        instanceRepository.findAllByOrderByStartedAtDesc()
+        instanceRepository.findAllByOrderByStartedAtDesc(hospitalId)
       } else {
-        instanceRepository.findByStatus(status)
+        instanceRepository.findByStatus(status, hospitalId)
       }
     return instances.sortedByDescending { it.startedAt }.map { toInstanceView(it) }
   }
 
   @Transactional(readOnly = true)
-  fun getInstance(id: UUID): WorkflowInstanceView = toInstanceView(findInstance(id))
+  fun getInstance(
+    id: UUID,
+    hospitalId: UUID?,
+  ): WorkflowInstanceView {
+    val instance = findInstance(id)
+    // 00.04 tenant sweep: instance reads are gated on the row's hospital (null rows denied for bound users).
+    requireSameHospital(hospitalId, instance.hospitalId)
+    return toInstanceView(instance)
+  }
 
   @Transactional(readOnly = true)
   fun pendingApprovals(actorUserId: UUID): List<WorkflowPendingApprovalView> =

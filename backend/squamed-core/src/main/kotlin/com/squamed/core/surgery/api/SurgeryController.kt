@@ -60,14 +60,16 @@ class SurgeryController(
   fun listSchedules(
     @RequestParam(name = "status", required = false) status: String?,
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<SurgeryScheduleView>> = ApiResponse.ok(surgeryService.listSchedules(status, patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<SurgeryScheduleView>> = ApiResponse.ok(surgeryService.listSchedules(status, patientId, principal.hospitalId))
 
   @GetMapping("/schedules/{id}")
   @RequiresPermission("surgery:read:surgery")
   @Transactional(readOnly = true)
   fun getSchedule(
     @PathVariable id: UUID,
-  ): ApiResponse<SurgeryScheduleView> = ApiResponse.ok(surgeryService.getSchedule(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<SurgeryScheduleView> = ApiResponse.ok(surgeryService.getSchedule(id, principal.hospitalId))
 
   @PatchMapping("/schedules/{id}/status")
   @RequiresPermission("surgery:write:surgery")
@@ -76,7 +78,7 @@ class SurgeryController(
     @PathVariable id: UUID,
     @RequestBody dto: SurgeryStatusDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<SurgeryScheduleView> = ApiResponse.ok(surgeryService.updateStatus(id, dto, principal.userId))
+  ): ApiResponse<SurgeryScheduleView> = ApiResponse.ok(surgeryService.updateStatus(id, dto, principal.userId, principal.hospitalId))
 
   @PostMapping("/schedules/{id}/ot-allocation")
   @ResponseStatus(HttpStatus.CREATED)
@@ -86,7 +88,7 @@ class SurgeryController(
     @PathVariable id: UUID,
     @RequestBody dto: OtAllocationCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<OtAllocationView> = ApiResponse.ok(surgeryService.allocateOt(id, dto, principal.userId))
+  ): ApiResponse<OtAllocationView> = ApiResponse.ok(surgeryService.allocateOt(id, dto, principal.userId, principal.hospitalId))
 
   @PostMapping("/schedules/{id}/team")
   @ResponseStatus(HttpStatus.CREATED)
@@ -96,14 +98,15 @@ class SurgeryController(
     @PathVariable id: UUID,
     @RequestBody dto: SurgicalTeamCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<SurgicalTeamView> = ApiResponse.ok(surgeryService.addTeamMember(id, dto, principal.userId))
+  ): ApiResponse<SurgicalTeamView> = ApiResponse.ok(surgeryService.addTeamMember(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/schedules/{id}/team")
   @RequiresPermission("surgery:read:surgery")
   @Transactional(readOnly = true)
   fun listTeam(
     @PathVariable id: UUID,
-  ): ApiResponse<List<SurgicalTeamView>> = ApiResponse.ok(surgeryService.listTeam(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<SurgicalTeamView>> = ApiResponse.ok(surgeryService.listTeam(id, principal.hospitalId))
 
   @PostMapping("/schedules/{id}/checklist")
   @ResponseStatus(HttpStatus.CREATED)
@@ -113,7 +116,7 @@ class SurgeryController(
     @PathVariable id: UUID,
     @RequestBody dto: ChecklistCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<PreOpChecklistView> = ApiResponse.ok(surgeryService.addChecklistItem(id, dto, principal.userId))
+  ): ApiResponse<PreOpChecklistView> = ApiResponse.ok(surgeryService.addChecklistItem(id, dto, principal.userId, principal.hospitalId))
 
   @PatchMapping("/schedules/{id}/checklist/{itemId}/check")
   @RequiresPermission("surgery:write:surgery")
@@ -122,14 +125,15 @@ class SurgeryController(
     @PathVariable id: UUID,
     @PathVariable itemId: UUID,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<PreOpChecklistView> = ApiResponse.ok(surgeryService.checkChecklistItem(id, itemId, principal.userId))
+  ): ApiResponse<PreOpChecklistView> = ApiResponse.ok(surgeryService.checkChecklistItem(id, itemId, principal.userId, principal.hospitalId))
 
   @GetMapping("/schedules/{id}/checklist")
   @RequiresPermission("surgery:read:surgery")
   @Transactional(readOnly = true)
   fun listChecklist(
     @PathVariable id: UUID,
-  ): ApiResponse<List<PreOpChecklistView>> = ApiResponse.ok(surgeryService.listChecklist(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<PreOpChecklistView>> = ApiResponse.ok(surgeryService.listChecklist(id, principal.hospitalId))
 
   @PostMapping("/schedules/{id}/instruments")
   @ResponseStatus(HttpStatus.CREATED)
@@ -139,7 +143,7 @@ class SurgeryController(
     @PathVariable id: UUID,
     @RequestBody dto: InstrumentCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<InstrumentView> = ApiResponse.ok(surgeryService.addInstrument(id, dto, principal.userId))
+  ): ApiResponse<InstrumentView> = ApiResponse.ok(surgeryService.addInstrument(id, dto, principal.userId, principal.hospitalId))
 
   @PatchMapping("/schedules/{id}/instruments/{instrumentId}/status")
   @RequiresPermission("surgery:write:surgery")
@@ -149,14 +153,15 @@ class SurgeryController(
     @PathVariable instrumentId: UUID,
     @RequestBody dto: InstrumentStatusDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<InstrumentView> = ApiResponse.ok(surgeryService.updateInstrumentStatus(id, instrumentId, dto, principal.userId))
+  ): ApiResponse<InstrumentView> = ApiResponse.ok(surgeryService.updateInstrumentStatus(id, instrumentId, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/schedules/{id}/instruments")
   @RequiresPermission("surgery:read:surgery")
   @Transactional(readOnly = true)
   fun listInstruments(
     @PathVariable id: UUID,
-  ): ApiResponse<List<InstrumentView>> = ApiResponse.ok(surgeryService.listInstruments(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<InstrumentView>> = ApiResponse.ok(surgeryService.listInstruments(id, principal.hospitalId))
 
   @PostMapping("/schedules/{id}/implants")
   @ResponseStatus(HttpStatus.CREATED)
@@ -166,14 +171,15 @@ class SurgeryController(
     @PathVariable id: UUID,
     @RequestBody dto: ImplantCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<ImplantView> = ApiResponse.ok(surgeryService.addImplant(id, dto, principal.userId))
+  ): ApiResponse<ImplantView> = ApiResponse.ok(surgeryService.addImplant(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/schedules/{id}/implants")
   @RequiresPermission("surgery:read:surgery")
   @Transactional(readOnly = true)
   fun listImplants(
     @PathVariable id: UUID,
-  ): ApiResponse<List<ImplantView>> = ApiResponse.ok(surgeryService.listImplants(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ImplantView>> = ApiResponse.ok(surgeryService.listImplants(id, principal.hospitalId))
 
   @PostMapping("/schedules/{id}/intra-op")
   @ResponseStatus(HttpStatus.CREATED)
@@ -183,14 +189,15 @@ class SurgeryController(
     @PathVariable id: UUID,
     @RequestBody dto: IntraOpCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<IntraOpView> = ApiResponse.ok(surgeryService.recordIntraOp(id, dto, principal.userId))
+  ): ApiResponse<IntraOpView> = ApiResponse.ok(surgeryService.recordIntraOp(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/schedules/{id}/intra-op")
   @RequiresPermission("surgery:read:surgery")
   @Transactional(readOnly = true)
   fun listIntraOp(
     @PathVariable id: UUID,
-  ): ApiResponse<List<IntraOpView>> = ApiResponse.ok(surgeryService.listIntraOp(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<IntraOpView>> = ApiResponse.ok(surgeryService.listIntraOp(id, principal.hospitalId))
 
   @PostMapping("/schedules/{id}/post-op")
   @ResponseStatus(HttpStatus.CREATED)
@@ -200,12 +207,13 @@ class SurgeryController(
     @PathVariable id: UUID,
     @RequestBody dto: PostOpCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<PostOpView> = ApiResponse.ok(surgeryService.recordPostOp(id, dto, principal.userId))
+  ): ApiResponse<PostOpView> = ApiResponse.ok(surgeryService.recordPostOp(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/schedules/{id}/post-op")
   @RequiresPermission("surgery:read:surgery")
   @Transactional(readOnly = true)
   fun getPostOp(
     @PathVariable id: UUID,
-  ): ApiResponse<PostOpView> = ApiResponse.ok(surgeryService.getPostOp(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<PostOpView> = ApiResponse.ok(surgeryService.getPostOp(id, principal.hospitalId))
 }

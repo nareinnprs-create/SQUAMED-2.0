@@ -4,6 +4,7 @@ import com.squamed.core.billing.api.ChargeView
 import com.squamed.core.billing.api.InvoiceView
 import com.squamed.core.billing.repository.ChargeRepository
 import com.squamed.core.billing.repository.InvoiceRepository
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.encounter.api.DiagnosisView
 import com.squamed.core.encounter.api.OrderView
 import com.squamed.core.encounter.api.PrescriptionView
@@ -51,7 +52,13 @@ class Patient360Service(
   private val taskRepository: TaskRepository,
 ) {
   @Transactional(readOnly = true)
-  fun getPatient360(patientId: UUID): Patient360View {
+  fun getPatient360(
+    patientId: UUID,
+    hospitalId: UUID?,
+  ): Patient360View {
+    // 00.04 tenant sweep: the parent patient's hospital gates every aggregate built below
+    // (no patient-package edit needed — PatientService already exposes getHospitalId).
+    requireSameHospital(hospitalId, patientService.getHospitalId(patientId))
     val demographics = patientService.getDetail(patientId)
 
     val encounters =
@@ -77,7 +84,7 @@ class Patient360Service(
 
     val invoices =
       invoiceRepository
-        .findByPatientId(patientId)
+        .findByPatientId(null, patientId)
         .sortedByDescending { it.issuedAt }
 
     val tasks =
@@ -112,13 +119,13 @@ class Patient360Service(
       totalLabOrders = labOrders.size,
       medications =
         dispensationRepository
-          .findByPatientId(patientId)
+          .findByPatientId(null, patientId)
           .sortedByDescending { it.dispensedAt ?: it.createdAt ?: Instant.EPOCH }
           .take(20)
           .map { DispensationView.from(it) },
       charges =
         chargeRepository
-          .findByPatientIdOrderByPostedAtDesc(patientId)
+          .findByPatientIdOrderByPostedAtDesc(null, patientId)
           .take(20)
           .map { ChargeView.from(it) },
       invoices = invoices.take(20).map { InvoiceView.from(it) },

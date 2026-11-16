@@ -45,7 +45,8 @@ class ReceptionController(
   @Transactional(readOnly = true)
   fun getVisit(
     @PathVariable id: UUID,
-  ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.getVisit(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.getVisit(id, principal.hospitalId))
 
   @GetMapping("/visits")
   @RequiresPermission("reception:read:visit")
@@ -54,9 +55,10 @@ class ReceptionController(
     @RequestParam(name = "status", required = false) status: String?,
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
     @RequestParam(name = "from", required = false) from: Instant?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<List<VisitDto>> {
     val defaultFrom = LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant()
-    return ApiResponse.ok(visitRegistrar.listVisits(status, patientId, from ?: defaultFrom))
+    return ApiResponse.ok(visitRegistrar.listVisits(status, patientId, from ?: defaultFrom, principal.hospitalId))
   }
 
   @PatchMapping("/visits/{id}/check-in")
@@ -64,14 +66,16 @@ class ReceptionController(
   @Transactional
   fun checkIn(
     @PathVariable id: UUID,
-  ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.checkIn(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.checkIn(id, principal.hospitalId))
 
   @PatchMapping("/visits/{id}/complete")
   @RequiresPermission("reception:write:visit")
   @Transactional
   fun complete(
     @PathVariable id: UUID,
-  ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.complete(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.complete(id, principal.hospitalId))
 
   @PatchMapping("/visits/{id}/cancel")
   @RequiresPermission("reception:write:visit")
@@ -79,5 +83,6 @@ class ReceptionController(
   fun cancelVisit(
     @PathVariable id: UUID,
     @RequestBody dto: VisitCancelDto,
-  ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.cancelVisit(id, dto.reason))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.cancelVisit(id, dto.reason, principal.hospitalId))
 }

@@ -48,14 +48,17 @@ class LabController(
     @RequestParam(required = false) patientId: UUID?,
     @RequestParam(required = false) status: String?,
     @RequestParam(required = false) resultStatus: String?,
-  ): ApiResponse<List<LabOrderView>> = ApiResponse.ok(labService.listOrders(patientId = patientId, status = status, resultStatus = resultStatus))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<LabOrderView>> =
+    ApiResponse.ok(labService.listOrders(patientId = patientId, status = status, resultStatus = resultStatus, hospitalId = principal.hospitalId))
 
   @GetMapping("/orders/{id}")
   @RequiresPermission("laboratory:read:lab")
   @Transactional(readOnly = true)
   fun getOrder(
     @PathVariable id: UUID,
-  ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.getOrder(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.getOrder(id, principal.hospitalId))
 
   @PostMapping("/orders/{id}/collect")
   @RequiresPermission("laboratory:collect:lab")

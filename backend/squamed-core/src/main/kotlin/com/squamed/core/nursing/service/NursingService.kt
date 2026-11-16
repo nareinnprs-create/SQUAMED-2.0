@@ -72,12 +72,15 @@ class NursingService(
   }
 
   @Transactional(readOnly = true)
-  fun listAssessments(patientId: UUID?): List<NursingAssessmentView> {
+  fun listAssessments(
+    patientId: UUID?,
+    hospitalId: UUID?,
+  ): List<NursingAssessmentView> {
     val rows =
       if (patientId != null) {
-        assessmentRepository.findByPatientIdOrderByAssessedAtDesc(patientId)
+        assessmentRepository.findByPatientIdOrderByAssessedAtDesc(patientId, hospitalId)
       } else {
-        assessmentRepository.findAll()
+        assessmentRepository.findAllByHospital(hospitalId)
       }
     return rows.sortedByDescending { it.assessedAt }.map { NursingAssessmentView.from(it) }
   }
@@ -105,12 +108,15 @@ class NursingService(
   }
 
   @Transactional(readOnly = true)
-  fun listCarePlans(patientId: UUID?): List<NursingCarePlanView> {
+  fun listCarePlans(
+    patientId: UUID?,
+    hospitalId: UUID?,
+  ): List<NursingCarePlanView> {
     val rows =
       if (patientId != null) {
-        carePlanRepository.findByPatientIdOrderByCreatedAtDesc(patientId)
+        carePlanRepository.findByPatientIdOrderByCreatedAtDesc(patientId, hospitalId)
       } else {
-        carePlanRepository.findAll()
+        carePlanRepository.findAllByHospital(hospitalId)
       }
     return rows.sortedByDescending { it.createdAt ?: Instant.EPOCH }.map { NursingCarePlanView.from(it) }
   }
@@ -159,12 +165,15 @@ class NursingService(
   }
 
   @Transactional(readOnly = true)
-  fun listNotes(patientId: UUID?): List<NursingNoteView> {
+  fun listNotes(
+    patientId: UUID?,
+    hospitalId: UUID?,
+  ): List<NursingNoteView> {
     val rows =
       if (patientId != null) {
-        noteRepository.findByPatientIdOrderByAuthoredAtDesc(patientId)
+        noteRepository.findByPatientIdOrderByAuthoredAtDesc(patientId, hospitalId)
       } else {
-        noteRepository.findAll()
+        noteRepository.findAllByHospital(hospitalId)
       }
     return rows.sortedByDescending { it.authoredAt }.map { NursingNoteView.from(it) }
   }
@@ -194,12 +203,15 @@ class NursingService(
   }
 
   @Transactional(readOnly = true)
-  fun listHandovers(wardId: UUID?): List<NursingHandoverView> {
+  fun listHandovers(
+    wardId: UUID?,
+    hospitalId: UUID?,
+  ): List<NursingHandoverView> {
     val rows =
       if (wardId != null) {
-        handoverRepository.findByWardIdOrderByAuthoredAtDesc(wardId)
+        handoverRepository.findByWardIdOrderByAuthoredAtDesc(wardId, hospitalId)
       } else {
-        handoverRepository.findAllByOrderByAuthoredAtDesc()
+        handoverRepository.findAllByOrderByAuthoredAtDesc(hospitalId)
       }
     return rows.map { NursingHandoverView.from(it) }
   }
@@ -244,12 +256,15 @@ class NursingService(
   }
 
   @Transactional(readOnly = true)
-  fun listVitals(patientId: UUID?): List<VitalsView> {
+  fun listVitals(
+    patientId: UUID?,
+    hospitalId: UUID?,
+  ): List<VitalsView> {
     val rows =
       if (patientId != null) {
-        vitalsRepository.findByPatientIdOrderByRecordedAtDesc(patientId)
+        vitalsRepository.findByPatientIdOrderByRecordedAtDesc(patientId, hospitalId)
       } else {
-        vitalsRepository.findAll()
+        vitalsRepository.findAllByHospital(hospitalId)
       }
     return rows.sortedByDescending { it.recordedAt }.map { VitalsView.from(it) }
   }
@@ -279,12 +294,15 @@ class NursingService(
   }
 
   @Transactional(readOnly = true)
-  fun listMar(patientId: UUID?): List<MarView> {
+  fun listMar(
+    patientId: UUID?,
+    hospitalId: UUID?,
+  ): List<MarView> {
     val rows =
       if (patientId != null) {
-        marRepository.findByPatientIdOrderByScheduledAtDesc(patientId)
+        marRepository.findByPatientIdOrderByScheduledAtDesc(patientId, hospitalId)
       } else {
-        marRepository.findAll()
+        marRepository.findAllByHospital(hospitalId)
       }
     return rows.sortedByDescending { it.scheduledAt }.map { MarView.from(it) }
   }
@@ -362,12 +380,15 @@ class NursingService(
   }
 
   @Transactional(readOnly = true)
-  fun listRiskAssessments(patientId: UUID?): List<RiskAssessmentView> {
+  fun listRiskAssessments(
+    patientId: UUID?,
+    hospitalId: UUID?,
+  ): List<RiskAssessmentView> {
     val rows =
       if (patientId != null) {
-        riskAssessmentRepository.findByPatientIdOrderByAssessedAtDesc(patientId)
+        riskAssessmentRepository.findByPatientIdOrderByAssessedAtDesc(patientId, hospitalId)
       } else {
-        riskAssessmentRepository.findAll()
+        riskAssessmentRepository.findAllByHospital(hospitalId)
       }
     return rows.sortedByDescending { it.assessedAt }.map { RiskAssessmentView.from(it) }
   }

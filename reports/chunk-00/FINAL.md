@@ -128,7 +128,7 @@ E1 (ABDM sandbox creds), E2 (SMS DLT header), E3 (WABA approval) remain owed fro
 ### 10.1 Verdicts and dispositions
 | Section | Verdict | Disposition |
 |---|---|---|
-| 00.02 Contract foundation | PARTIAL | Doc-accuracy fixes in this PR; pagination meta + cursor + OpenAPI 3.1 → remediation block |
+| 00.02 Contract foundation | PARTIAL | Doc-accuracy fixes in this PR; pagination meta + cursor + OpenAPI 3.1 **LANDED 2026-11-16** (PR #31 squash `d30bee7`, run 43792285116, ledger row 52) — meta on 10 catalog endpoints, audit cursor mode, snapshot 3.1.0; patient search + child lists deliberately unpaged (style guide documents this) |
 | 00.04 Tenancy & RLS | PARTIAL | Fix-now: 11 patient tenant guards + 5 tenant-suite assertions (this PR); full tenant sweep → remediation block |
 | 00.14 Design system | FAIL | Failed the fresh-agent brief it was re-verified against; reopened in the ledger (IN PROGRESS) → full rework in the remediation block |
 

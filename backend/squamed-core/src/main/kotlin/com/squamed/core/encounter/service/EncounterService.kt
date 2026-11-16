@@ -1,5 +1,6 @@
 package com.squamed.core.encounter.service
 
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.encounter.api.ClinicalNoteRequestDto
 import com.squamed.core.encounter.api.ClinicalNoteView
 import com.squamed.core.encounter.api.DiagnosisRequestDto
@@ -26,6 +27,7 @@ import com.squamed.core.encounter.repository.PrescriptionRepository
 import com.squamed.core.encounter.repository.VitalSignRepository
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
+import com.squamed.core.patient.repository.PatientRecordRepository
 import com.squamed.core.search.SearchIndexer
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -44,6 +46,7 @@ class EncounterService(
   private val prescriptionRepository: PrescriptionRepository,
   private val eventPublisher: DomainEventPublisher,
   private val searchIndexer: SearchIndexer,
+  private val patientRecordRepository: PatientRecordRepository,
 ) {
   @Transactional
   fun startEncounter(
@@ -84,8 +87,11 @@ class EncounterService(
   }
 
   @Transactional
-  fun completeEncounter(encounterId: UUID): EncounterView {
-    val encounter = findEncounter(encounterId)
+  fun completeEncounter(
+    encounterId: UUID,
+    hospitalId: UUID?,
+  ): EncounterView {
+    val encounter = findEncounter(encounterId, hospitalId)
     encounter.status = "completed"
     encounter.endedAt = Instant.now()
     encounterRepository.save(encounter)
@@ -97,8 +103,9 @@ class EncounterService(
   fun recordVitals(
     encounterId: UUID,
     dto: VitalSignRequestDto,
+    hospitalId: UUID?,
   ): VitalSignView {
-    val encounter = findEncounter(encounterId)
+    val encounter = findEncounter(encounterId, hospitalId)
     val height = dto.heightCm
     val weight = dto.weightKg
     val bmi =
@@ -132,18 +139,26 @@ class EncounterService(
   }
 
   @Transactional(readOnly = true)
-  fun recentVitals(patientId: UUID): List<VitalSignView> =
-    vitalSignRepository
+  fun recentVitals(
+    patientId: UUID,
+    hospitalId: UUID?,
+  ): List<VitalSignView> {
+    // 00.04 tenant sweep (U5): the parent patient record carries the tenant; vitals rows do not.
+    val patient = patientRecordRepository.findById(patientId).orElseThrow { IllegalArgumentException("PATIENT_NOT_FOUND") }
+    requireSameHospital(hospitalId, patient.hospitalId)
+    return vitalSignRepository
       .findTop10ByPatientIdOrderByRecordedAtDesc(patientId)
       .map { VitalSignView.from(it) }
+  }
 
   @Transactional
   fun addNote(
     encounterId: UUID,
     dto: ClinicalNoteRequestDto,
     authorId: UUID? = null,
+    hospitalId: UUID?,
   ): ClinicalNoteView {
-    val encounter = findEncounter(encounterId)
+    val encounter = findEncounter(encounterId, hospitalId)
     val note =
       clinicalNoteRepository
         .save(
@@ -166,8 +181,11 @@ class EncounterService(
   fun signNote(
     noteId: UUID,
     signerId: UUID,
+    hospitalId: UUID?,
   ): ClinicalNoteView {
     val note = clinicalNoteRepository.findById(noteId).orElseThrow { IllegalArgumentException("NOTE_NOT_FOUND") }
+    // 00.04 tenant sweep (D7): notes carry no hospital_id — verify via the parent encounter.
+    findEncounter(note.encounterId, hospitalId)
     note.isSigned = true
     note.signedAt = Instant.now()
     note.signedBy = signerId
@@ -176,18 +194,24 @@ class EncounterService(
   }
 
   @Transactional(readOnly = true)
-  fun listNotes(encounterId: UUID): List<ClinicalNoteView> =
-    clinicalNoteRepository
+  fun listNotes(
+    encounterId: UUID,
+    hospitalId: UUID?,
+  ): List<ClinicalNoteView> {
+    findEncounter(encounterId, hospitalId)
+    return clinicalNoteRepository
       .findByEncounterId(encounterId)
       .sortedByDescending { it.createdAt ?: Instant.EPOCH }
       .map { ClinicalNoteView.from(it) }
+  }
 
   @Transactional
   fun addDiagnosis(
     encounterId: UUID,
     dto: DiagnosisRequestDto,
+    hospitalId: UUID?,
   ): DiagnosisView {
-    val encounter = findEncounter(encounterId)
+    val encounter = findEncounter(encounterId, hospitalId)
     val diagnosis =
       diagnosisRepository.save(
         Diagnosis(
@@ -204,13 +228,21 @@ class EncounterService(
   }
 
   @Transactional(readOnly = true)
-  fun listDiagnoses(encounterId: UUID): List<DiagnosisView> = diagnosisRepository.findByEncounterId(encounterId).map { DiagnosisView.from(it) }
+  fun listDiagnoses(
+    encounterId: UUID,
+    hospitalId: UUID?,
+  ): List<DiagnosisView> {
+    findEncounter(encounterId, hospitalId)
+    return diagnosisRepository.findByEncounterId(encounterId).map { DiagnosisView.from(it) }
+  }
 
   @Transactional
   fun removeDiagnosis(
     encounterId: UUID,
     diagnosisId: UUID,
+    hospitalId: UUID?,
   ) {
+    findEncounter(encounterId, hospitalId)
     val diagnosis =
       diagnosisRepository
         .findById(diagnosisId)
@@ -225,8 +257,9 @@ class EncounterService(
   fun placeOrder(
     encounterId: UUID,
     dto: OrderRequestDto,
+    hospitalId: UUID?,
   ): OrderView {
-    val encounter = findEncounter(encounterId)
+    val encounter = findEncounter(encounterId, hospitalId)
     val order =
       orderEntryRepository.save(
         OrderEntry(
@@ -250,22 +283,31 @@ class EncounterService(
   fun cancelOrder(
     orderId: UUID,
     reason: String? = null,
+    hospitalId: UUID?,
   ): OrderView {
     val order = orderEntryRepository.findById(orderId).orElseThrow { IllegalArgumentException("ORDER_NOT_FOUND") }
+    requireSameHospital(hospitalId, order.hospitalId)
     order.status = "cancelled"
     orderEntryRepository.save(order)
     return OrderView.from(order)
   }
 
   @Transactional(readOnly = true)
-  fun listOrders(encounterId: UUID): List<OrderView> = orderEntryRepository.findByEncounterId(encounterId).map { OrderView.from(it) }
+  fun listOrders(
+    encounterId: UUID,
+    hospitalId: UUID?,
+  ): List<OrderView> {
+    findEncounter(encounterId, hospitalId)
+    return orderEntryRepository.findByEncounterId(encounterId).map { OrderView.from(it) }
+  }
 
   @Transactional
   fun prescribe(
     encounterId: UUID,
     dto: PrescriptionRequestDto,
+    hospitalId: UUID?,
   ): PrescriptionView {
-    val encounter = findEncounter(encounterId)
+    val encounter = findEncounter(encounterId, hospitalId)
     val prescription =
       prescriptionRepository.save(
         Prescription(
@@ -291,11 +333,20 @@ class EncounterService(
   }
 
   @Transactional(readOnly = true)
-  fun listPrescriptions(encounterId: UUID): List<PrescriptionView> = prescriptionRepository.findByEncounterId(encounterId).map { PrescriptionView.from(it) }
+  fun listPrescriptions(
+    encounterId: UUID,
+    hospitalId: UUID?,
+  ): List<PrescriptionView> {
+    findEncounter(encounterId, hospitalId)
+    return prescriptionRepository.findByEncounterId(encounterId).map { PrescriptionView.from(it) }
+  }
 
   @Transactional(readOnly = true)
-  fun getEncounterDetail(encounterId: UUID): EncounterDetailView {
-    val encounter = findEncounter(encounterId)
+  fun getEncounterDetail(
+    encounterId: UUID,
+    hospitalId: UUID?,
+  ): EncounterDetailView {
+    val encounter = findEncounter(encounterId, hospitalId)
     val latestVital = vitalSignRepository.findTopByPatientIdOrderByRecordedAtDesc(encounter.patientId)
     val notes =
       clinicalNoteRepository
@@ -315,5 +366,12 @@ class EncounterService(
     )
   }
 
-  private fun findEncounter(id: UUID): Encounter = encounterRepository.findById(id).orElseThrow { IllegalArgumentException("ENCOUNTER_NOT_FOUND") }
+  private fun findEncounter(
+    id: UUID,
+    hospitalId: UUID?,
+  ): Encounter {
+    val encounter = encounterRepository.findById(id).orElseThrow { IllegalArgumentException("ENCOUNTER_NOT_FOUND") }
+    requireSameHospital(hospitalId, encounter.hospitalId)
+    return encounter
+  }
 }

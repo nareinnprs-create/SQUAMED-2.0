@@ -10,13 +10,29 @@ import com.squamed.core.surgery.domain.PreOpChecklist
 import com.squamed.core.surgery.domain.SurgerySchedule
 import com.squamed.core.surgery.domain.SurgicalTeam
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.time.Instant
 import java.util.UUID
 
 interface SurgeryScheduleRepository : JpaRepository<SurgerySchedule, UUID> {
-  fun findByStatus(status: String): List<SurgerySchedule>
+  // 00.04 tenant sweep: null-safe hospital scope (U12) — admin callers pass null.
+  @Query("select s from SurgerySchedule s where (:hid is null or s.hospitalId = :hid) and s.status = :status")
+  fun findByStatus(
+    @Param("hid") hospitalId: UUID?,
+    @Param("status") status: String,
+  ): List<SurgerySchedule>
 
-  fun findByPatientId(patientId: UUID): List<SurgerySchedule>
+  @Query("select s from SurgerySchedule s where (:hid is null or s.hospitalId = :hid) and s.patientId = :patientId")
+  fun findByPatientId(
+    @Param("hid") hospitalId: UUID?,
+    @Param("patientId") patientId: UUID,
+  ): List<SurgerySchedule>
+
+  @Query("select s from SurgerySchedule s where (:hid is null or s.hospitalId = :hid)")
+  fun findAllForHospital(
+    @Param("hid") hospitalId: UUID?,
+  ): List<SurgerySchedule>
 }
 
 interface OtRoomRepository : JpaRepository<OtRoom, UUID> {

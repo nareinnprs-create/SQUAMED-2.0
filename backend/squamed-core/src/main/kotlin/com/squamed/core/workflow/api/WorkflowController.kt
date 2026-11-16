@@ -81,14 +81,17 @@ class WorkflowController(
   @Transactional(readOnly = true)
   fun listInstances(
     @RequestParam(name = "status", required = false) status: String?,
-  ): ApiResponse<List<WorkflowInstanceView>> = ApiResponse.ok(workflowService.listInstances(status))
+    // 00.04 tenant sweep: instance reads are pinned to the caller's hospital (null = admin).
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<WorkflowInstanceView>> = ApiResponse.ok(workflowService.listInstances(status, principal.hospitalId))
 
   @GetMapping("/instances/{id}")
   @RequiresPermission("workflow:read:workflow")
   @Transactional(readOnly = true)
   fun getInstance(
     @PathVariable id: UUID,
-  ): ApiResponse<WorkflowInstanceView> = ApiResponse.ok(workflowService.getInstance(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<WorkflowInstanceView> = ApiResponse.ok(workflowService.getInstance(id, principal.hospitalId))
 
   @PostMapping("/instances/{id}/approvals/{approvalId}/decide")
   @RequiresPermission("workflow:approve:workflow")

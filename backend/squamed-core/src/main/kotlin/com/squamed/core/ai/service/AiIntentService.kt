@@ -106,7 +106,7 @@ class AiIntentService(
     }
 
     if (q.contains("approval") || q.contains("workflow")) {
-      val pending = workflowPendingCount()
+      val pending = workflowPendingCount(hospitalId)
       return AiIntent(
         AiIntentType.WORKFLOW,
         count = pending,
@@ -117,7 +117,7 @@ class AiIntentService(
     if (q.contains("revenue") || q.contains("how much") || q.contains("money") ||
       q.startsWith("analytics") || q.startsWith("overview") || q.startsWith("summary") || q == "numbers"
     ) {
-      return analyze()
+      return analyze(hospitalId)
     }
 
     if (q.contains("search patient") || q.contains("find patient") || q.contains("patient named") || q.startsWith("search ")) {
@@ -196,7 +196,7 @@ class AiIntentService(
       }
 
       AiIntentType.ANALYTICS -> {
-        intent.detail ?: analyze().detail ?: "No analytics available."
+        intent.detail ?: analyze(hospitalId).detail ?: "No analytics available."
       }
 
       AiIntentType.HELP -> {
@@ -269,45 +269,48 @@ class AiIntentService(
     val (label: String, value: Long) =
       when (key) {
         "patients" -> {
-          val s = analyticsService.patients()
+          val s = analyticsService.patients(hospitalId)
           "patients" to s.total
         }
 
         "encounters" -> {
-          val s = analyticsService.encounters()
+          val s = analyticsService.encounters(hospitalId)
           "encounters" to s.total
         }
 
         "appointments" -> {
-          val s = analyticsService.appointments()
+          val s = analyticsService.appointments(hospitalId)
           "appointments (total)" to s.total
         }
 
         "queue" -> {
-          val s = analyticsService.queue()
+          val s = analyticsService.queue(hospitalId)
           "queue entries waiting" to s.waiting
         }
 
         "labOrders" -> {
-          val s = analyticsService.lab()
+          val s = analyticsService.lab(hospitalId)
           "lab orders (total)" to s.total
         }
 
         "invoices" -> {
           "invoices (total)" to
-            entityManager.createQuery("select count(i) from Invoice i", Long::class.java).singleResult
+            entityManager
+              .createQuery("select count(i) from Invoice i where (:hid is null or i.hospitalId = :hid)", Long::class.java)
+              .setParameter("hid", hospitalId)
+              .singleResult
         }
 
         "approvals" -> {
-          "pending approvals" to workflowPendingCount()
+          "pending approvals" to workflowPendingCount(hospitalId)
         }
 
         "workflow" -> {
-          "workflow instances" to workflowInstanceCount()
+          "workflow instances" to workflowInstanceCount(hospitalId)
         }
 
         "tasks" -> {
-          "open tasks" to taskCount()
+          "open tasks" to taskCount(hospitalId)
         }
 
         else -> {
@@ -317,8 +320,8 @@ class AiIntentService(
     return AiIntent(AiIntentType.COUNT, entityLabel = label, count = value)
   }
 
-  private fun analyze(): AiIntent {
-    val o = analyticsService.overview()
+  private fun analyze(hospitalId: UUID?): AiIntent {
+    val o = analyticsService.overview(hospitalId)
     val detail =
       buildString {
         appendLine("**Operational snapshot**")
@@ -390,22 +393,25 @@ class AiIntentService(
     }
   }
 
-  private fun workflowPendingCount(): Long =
+  private fun workflowPendingCount(hospitalId: UUID?): Long =
     entityManager
       .createQuery(
-        "select count(w) from WorkflowInstance w where w.status = 'WAITING_APPROVAL'",
+        "select count(w) from WorkflowInstance w where w.status = 'WAITING_APPROVAL' and (:hid is null or w.hospitalId = :hid)",
         Long::class.java,
-      ).singleResult
-
-  private fun workflowInstanceCount(): Long =
-    entityManager
-      .createQuery("select count(w) from WorkflowInstance w", Long::class.java)
+      ).setParameter("hid", hospitalId)
       .singleResult
 
-  private fun taskCount(): Long =
+  private fun workflowInstanceCount(hospitalId: UUID?): Long =
+    entityManager
+      .createQuery("select count(w) from WorkflowInstance w where (:hid is null or w.hospitalId = :hid)", Long::class.java)
+      .setParameter("hid", hospitalId)
+      .singleResult
+
+  private fun taskCount(hospitalId: UUID?): Long =
     entityManager
       .createQuery(
-        "select count(t) from Task t where t.status in ('open', 'in_progress')",
+        "select count(t) from Task t where t.status in ('open', 'in_progress') and (:hid is null or t.hospitalId = :hid)",
         Long::class.java,
-      ).singleResult
+      ).setParameter("hid", hospitalId)
+      .singleResult
 }

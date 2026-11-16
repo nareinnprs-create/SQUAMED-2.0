@@ -1,5 +1,6 @@
 package com.squamed.core.ipd.service
 
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.hospitalconfig.domain.Bed
@@ -88,13 +89,14 @@ class AdmissionService(
     patientId: UUID?,
     status: String?,
     wardId: UUID?,
+    hospitalId: UUID?,
   ): List<AdmissionView> {
     val admissions =
       when {
-        patientId != null -> admissionRepository.findByPatientId(patientId)
-        status != null -> admissionRepository.findByStatus(status)
-        wardId != null -> admissionRepository.findByWardId(wardId)
-        else -> admissionRepository.findAll()
+        patientId != null -> admissionRepository.findByPatientId(patientId, hospitalId)
+        status != null -> admissionRepository.findByStatus(status, hospitalId)
+        wardId != null -> admissionRepository.findByWardId(wardId, hospitalId)
+        else -> admissionRepository.findAllByHospital(hospitalId)
       }
     return admissions
       .sortedByDescending { it.admittedAt ?: Instant.EPOCH }
@@ -102,11 +104,25 @@ class AdmissionService(
   }
 
   @Transactional(readOnly = true)
-  fun getAdmission(id: UUID): AdmissionView = AdmissionView.from(findAdmission(id))
+  fun getAdmission(
+    id: UUID,
+    hospitalId: UUID?,
+  ): AdmissionView {
+    val admission = findAdmission(id)
+    // 00.04 tenant sweep: the parent admission's hospital gates this read.
+    requireSameHospital(hospitalId, admission.hospitalId)
+    return AdmissionView.from(admission)
+  }
 
   @Transactional(readOnly = true)
-  fun listTransfers(admissionId: UUID): List<AdmissionTransferView> =
-    transferRepository.findByAdmissionIdOrderByTransferredAtDesc(admissionId).map { AdmissionTransferView.from(it) }
+  fun listTransfers(
+    admissionId: UUID,
+    hospitalId: UUID?,
+  ): List<AdmissionTransferView> {
+    // 00.04 tenant sweep: sub-resources are admission-keyed — one parent check covers them.
+    requireSameHospital(hospitalId, findAdmission(admissionId).hospitalId)
+    return transferRepository.findByAdmissionIdOrderByTransferredAtDesc(admissionId).map { AdmissionTransferView.from(it) }
+  }
 
   @Transactional
   fun transfer(
@@ -208,14 +224,25 @@ class AdmissionService(
   ): DischargeSummaryView = upsertSummary(admissionId, dto, actorId)
 
   @Transactional(readOnly = true)
-  fun getDischargeSummary(admissionId: UUID): DischargeSummaryView =
-    dischargeSummaryRepository
+  fun getDischargeSummary(
+    admissionId: UUID,
+    hospitalId: UUID?,
+  ): DischargeSummaryView {
+    requireSameHospital(hospitalId, findAdmission(admissionId).hospitalId)
+    return dischargeSummaryRepository
       .findByAdmissionId(admissionId)
       .map { DischargeSummaryView.from(it) }
       .orElseThrow { IllegalArgumentException("ADMISSION_SUMMARY_MISSING") }
+  }
 
   @Transactional(readOnly = true)
-  fun listAttendants(admissionId: UUID): List<AttendantView> = attendantRepository.findByAdmissionId(admissionId).map { AttendantView.from(it) }
+  fun listAttendants(
+    admissionId: UUID,
+    hospitalId: UUID?,
+  ): List<AttendantView> {
+    requireSameHospital(hospitalId, findAdmission(admissionId).hospitalId)
+    return attendantRepository.findByAdmissionId(admissionId).map { AttendantView.from(it) }
+  }
 
   @Transactional
   fun addAttendant(

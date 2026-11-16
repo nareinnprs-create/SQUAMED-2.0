@@ -24,7 +24,7 @@ class AiIntentServiceTest {
   @BeforeEach
   fun setUp() {
     intentService = AiIntentService(analyticsService, patientService)
-    every { analyticsService.patients() } returns
+    every { analyticsService.patients(any()) } returns
       PatientsStats(
         total = 5,
         byGender = emptyList(),
@@ -32,7 +32,7 @@ class AiIntentServiceTest {
         registrationsByMonth = emptyList(),
         byNationality = emptyList(),
       )
-    every { analyticsService.overview() } returns
+    every { analyticsService.overview(any()) } returns
       OverviewStats(
         totalPatients = 5,
         patientsToday = 2,

@@ -55,13 +55,17 @@ class ScribeController(
 ) {
   @GetMapping("/sessions")
   @RequiresPermission("ai:read:agent")
-  fun list(): ApiResponse<List<Map<String, Any?>>> = ApiResponse.ok(scribeService.list().map { it.toView(segmentCodec) })
+  fun list(
+    // 00.04 tenant sweep: dictation transcripts are pinned to the caller's hospital (null = admin).
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<Map<String, Any?>>> = ApiResponse.ok(scribeService.list(principal.hospitalId).map { it.toView(segmentCodec) })
 
   @GetMapping("/sessions/{id}")
   @RequiresPermission("ai:read:agent")
   fun detail(
     @PathVariable id: UUID,
-  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(scribeService.find(id).toView(segmentCodec))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(scribeService.find(id, principal.hospitalId).toView(segmentCodec))
 
   @PostMapping("/sessions")
   @RequiresPermission("ai:manage:agent")

@@ -51,14 +51,16 @@ class EncounterController(
   @Transactional(readOnly = true)
   fun getEncounterDetail(
     @PathVariable id: UUID,
-  ): ApiResponse<EncounterDetailView> = ApiResponse.ok(encounterService.getEncounterDetail(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<EncounterDetailView> = ApiResponse.ok(encounterService.getEncounterDetail(id, principal.hospitalId))
 
   @PatchMapping("/{id}/complete")
   @RequiresPermission("encounter:write:encounter")
   @Transactional
   fun completeEncounter(
     @PathVariable id: UUID,
-  ): ApiResponse<EncounterView> = ApiResponse.ok(encounterService.completeEncounter(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<EncounterView> = ApiResponse.ok(encounterService.completeEncounter(id, principal.hospitalId))
 
   @PostMapping("/{id}/vitals")
   @RequiresPermission("clinical:write:vital")
@@ -66,14 +68,16 @@ class EncounterController(
   fun recordVitals(
     @PathVariable id: UUID,
     @RequestBody dto: VitalSignRequestDto,
-  ): ApiResponse<VitalSignView> = ApiResponse.ok(encounterService.recordVitals(id, dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<VitalSignView> = ApiResponse.ok(encounterService.recordVitals(id, dto, principal.hospitalId))
 
   @GetMapping("/patients/{patientId}/vitals")
   @RequiresPermission("encounter:read:encounter")
   @Transactional(readOnly = true)
   fun recentVitals(
     @PathVariable patientId: UUID,
-  ): ApiResponse<List<VitalSignView>> = ApiResponse.ok(encounterService.recentVitals(patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<VitalSignView>> = ApiResponse.ok(encounterService.recentVitals(patientId, principal.hospitalId))
 
   @PostMapping("/{id}/notes")
   @ResponseStatus(HttpStatus.CREATED)
@@ -83,14 +87,15 @@ class EncounterController(
     @PathVariable id: UUID,
     @RequestBody dto: ClinicalNoteRequestDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<ClinicalNoteView> = ApiResponse.ok(encounterService.addNote(id, dto, principal.userId))
+  ): ApiResponse<ClinicalNoteView> = ApiResponse.ok(encounterService.addNote(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/{id}/notes")
   @RequiresPermission("clinical:read:note")
   @Transactional(readOnly = true)
   fun listNotes(
     @PathVariable id: UUID,
-  ): ApiResponse<List<ClinicalNoteView>> = ApiResponse.ok(encounterService.listNotes(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ClinicalNoteView>> = ApiResponse.ok(encounterService.listNotes(id, principal.hospitalId))
 
   @PostMapping("/notes/{noteId}/sign")
   @RequiresPermission("clinical:write:note")
@@ -99,7 +104,7 @@ class EncounterController(
     @PathVariable noteId: UUID,
     @RequestBody body: SignNoteRequest,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<ClinicalNoteView> = ApiResponse.ok(encounterService.signNote(noteId, principal.userId))
+  ): ApiResponse<ClinicalNoteView> = ApiResponse.ok(encounterService.signNote(noteId, principal.userId, principal.hospitalId))
 
   @PostMapping("/{id}/diagnoses")
   @ResponseStatus(HttpStatus.CREATED)
@@ -108,14 +113,16 @@ class EncounterController(
   fun addDiagnosis(
     @PathVariable id: UUID,
     @RequestBody dto: DiagnosisRequestDto,
-  ): ApiResponse<DiagnosisView> = ApiResponse.ok(encounterService.addDiagnosis(id, dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DiagnosisView> = ApiResponse.ok(encounterService.addDiagnosis(id, dto, principal.hospitalId))
 
   @GetMapping("/{id}/diagnoses")
   @RequiresPermission("clinical:read:note")
   @Transactional(readOnly = true)
   fun listDiagnoses(
     @PathVariable id: UUID,
-  ): ApiResponse<List<DiagnosisView>> = ApiResponse.ok(encounterService.listDiagnoses(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<DiagnosisView>> = ApiResponse.ok(encounterService.listDiagnoses(id, principal.hospitalId))
 
   @DeleteMapping("/{id}/diagnoses/{diagnosisId}")
   @RequiresPermission("clinical:write:diagnosis")
@@ -123,8 +130,9 @@ class EncounterController(
   fun removeDiagnosis(
     @PathVariable id: UUID,
     @PathVariable diagnosisId: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<Unit> {
-    encounterService.removeDiagnosis(id, diagnosisId)
+    encounterService.removeDiagnosis(id, diagnosisId, principal.hospitalId)
     return ApiResponse.ok()
   }
 
@@ -135,14 +143,16 @@ class EncounterController(
   fun placeOrder(
     @PathVariable id: UUID,
     @RequestBody dto: OrderRequestDto,
-  ): ApiResponse<OrderView> = ApiResponse.ok(encounterService.placeOrder(id, dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<OrderView> = ApiResponse.ok(encounterService.placeOrder(id, dto, principal.hospitalId))
 
   @GetMapping("/{id}/orders")
   @RequiresPermission("encounter:read:encounter")
   @Transactional(readOnly = true)
   fun listOrders(
     @PathVariable id: UUID,
-  ): ApiResponse<List<OrderView>> = ApiResponse.ok(encounterService.listOrders(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<OrderView>> = ApiResponse.ok(encounterService.listOrders(id, principal.hospitalId))
 
   @PostMapping("/{id}/prescriptions")
   @ResponseStatus(HttpStatus.CREATED)
@@ -151,12 +161,14 @@ class EncounterController(
   fun prescribe(
     @PathVariable id: UUID,
     @RequestBody dto: PrescriptionRequestDto,
-  ): ApiResponse<PrescriptionView> = ApiResponse.ok(encounterService.prescribe(id, dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<PrescriptionView> = ApiResponse.ok(encounterService.prescribe(id, dto, principal.hospitalId))
 
   @GetMapping("/{id}/prescriptions")
   @RequiresPermission("encounter:read:encounter")
   @Transactional(readOnly = true)
   fun listPrescriptions(
     @PathVariable id: UUID,
-  ): ApiResponse<List<PrescriptionView>> = ApiResponse.ok(encounterService.listPrescriptions(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<PrescriptionView>> = ApiResponse.ok(encounterService.listPrescriptions(id, principal.hospitalId))
 }

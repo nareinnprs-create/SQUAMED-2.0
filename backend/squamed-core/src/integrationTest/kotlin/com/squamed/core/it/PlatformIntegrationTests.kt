@@ -1705,6 +1705,105 @@ class PlatformIntegrationTests {
       assert2xx(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals/$h1/tree", token = admin), "admin tree A")
       assert2xx(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals/$h2/tree", token = admin), "admin tree B")
     }
+
+    // 00.04 tenant sweep denial matrix: one scenario per fixed module family,
+    // run in one test because each needs its own two fresh tenants.
+    @Test
+    fun tenantSweepDenialMatrix() {
+      val admin = adminToken()
+      val s = suffix()
+      val h1r = api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Sweep A $s", "code" to "SA-$s", "country" to "Qatar"), admin)
+      assert2xx(h1r, "create sweep hospital A")
+      val h1 = `data`(h1r)["id"].asText()
+      val h2r = api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Sweep B $s", "code" to "SB-$s", "country" to "Qatar"), admin)
+      assert2xx(h2r, "create sweep hospital B")
+      val h2 = `data`(h2r)["id"].asText()
+
+      val doc1 = hospitalLogin(registerDoctor(h1))
+      val doc2 = hospitalLogin(registerDoctor(h2))
+      val p2 = createPatient(doc2)
+      val foreignPatientId = p2["id"].asText()
+      val foreignLastName = p2["lastName"].asText()
+
+      // U22/D6 hospital directory: platform-admin-only.
+      assertEquals(
+        403,
+        api(HttpMethod.GET, "/api/v1/hospital-config/hospitals", token = doc1).status,
+        "U22: hospital directory must be denied for hospital-bound users",
+      )
+      assert2xx(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals", token = admin), "U22: admin directory read allowed")
+
+      // U1 OpenSearch: doc1 must never see h2 patients even after the index settles.
+      var doc1ForeignHits = -1
+      for (i in 0 until 8) {
+        val sr = api(HttpMethod.GET, "/api/v1/search/search?q=$foreignLastName", token = doc1)
+        assert2xx(sr, "U1 doc1 search: ${sr.body.take(300)}")
+        doc1ForeignHits = `data`(sr)["hits"].toList().count { it["fields"]["hospitalId"].asText() == h2 }
+        if (doc1ForeignHits > 0) break
+        Thread.sleep(1500)
+      }
+      assertEquals(0, doc1ForeignHits, "U1: doc1 search must not return h2 patients")
+      var adminFound = false
+      for (i in 0 until 8) {
+        val ar = api(HttpMethod.GET, "/api/v1/search/search?q=$foreignLastName", token = admin)
+        assert2xx(ar, "U1 admin search: ${ar.body.take(300)}")
+        adminFound = `data`(ar)["hits"].toList().any { it["fields"]["hospitalId"].asText() == h2 }
+        if (adminFound) break
+        Thread.sleep(1500)
+      }
+      assertTrue(adminFound, "U1: admin must find the h2 patient (patient was never indexed)")
+
+      // U2 analytics: report endpoints are SYSTEM_ADMIN-gated by pre-existing RBAC (no hospital-bound
+      // role holds report:*); hospital scoping of hid-bound analytics is covered at service level
+      // (AnalyticsService hid-first JPQL). Admin (hid=null) must get unbounded totals.
+      assertEquals(
+        403,
+        api(HttpMethod.GET, "/api/v1/analytics/patients", token = doc1).status,
+        "U2: analytics must stay SYSTEM_ADMIN-gated for hospital-bound users",
+      )
+      assert2xx(api(HttpMethod.GET, "/api/v1/analytics/patients", token = admin), "U2: analytics allowed for platform admin")
+
+      // U4/D2 + U10 + U20: scheduling, queue, and scribe endpoints are SYSTEM_ADMIN-gated by pre-existing
+      // RBAC (no hospital-bound role holds those permissions), so hospital-bound users are denied outright.
+      // Cross-tenant by-id guards in these domains are therefore unreachable via API under current RBAC;
+      // they are covered at service level (TenantGuards.requireSameHospital wiring + hid-first repo tests).
+      assertEquals(
+        403,
+        api(HttpMethod.GET, "/api/v1/appointments", token = doc1).status,
+        "U4: appointment list must be denied for hospital-bound user",
+      )
+      assertEquals(
+        403,
+        api(HttpMethod.POST, "/api/v1/appointments", json("x" to 1), doc2).status,
+        "U4/D2: appointment create must be denied for hospital-bound user",
+      )
+      assert2xx(api(HttpMethod.GET, "/api/v1/appointments", token = admin), "U4: appointment list allowed for platform admin")
+
+      val queueType = "SW$s"
+      assertEquals(
+        403,
+        api(HttpMethod.POST, "/api/v1/queue/entries", json("queueType" to queueType, "patientId" to foreignPatientId), doc2).status,
+        "U10: queue add must be denied for hospital-bound user",
+      )
+      assertEquals(
+        403,
+        api(HttpMethod.GET, "/api/v1/queue/board?queueType=$queueType", token = doc1).status,
+        "U10: queue board must be denied for hospital-bound user",
+      )
+      assert2xx(api(HttpMethod.GET, "/api/v1/queue/board?queueType=$queueType", token = admin), "U10: queue board allowed for platform admin")
+
+      assertEquals(
+        403,
+        api(HttpMethod.POST, "/api/v1/scribe/sessions", json("patientId" to foreignPatientId, "patientName" to p2["lastName"].asText()), doc2).status,
+        "U20: scribe create must be denied for hospital-bound user",
+      )
+      assertEquals(
+        403,
+        api(HttpMethod.GET, "/api/v1/scribe/sessions", token = doc1).status,
+        "U20: scribe list must be denied for hospital-bound user",
+      )
+      assert2xx(api(HttpMethod.GET, "/api/v1/scribe/sessions", token = admin), "U20: scribe list allowed for platform admin")
+    }
   }
 
   @Nested

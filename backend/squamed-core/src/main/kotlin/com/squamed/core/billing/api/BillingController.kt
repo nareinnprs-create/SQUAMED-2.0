@@ -32,7 +32,8 @@ class BillingController(
   fun listTariffs(
     @RequestParam(name = "search", required = false) search: String?,
     @RequestParam(name = "active", required = false) active: Boolean?,
-  ): ApiResponse<List<TariffDto>> = ApiResponse.ok(billingService.listTariffs(search, active))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<TariffDto>> = ApiResponse.ok(billingService.listTariffs(search, active, principal.hospitalId))
 
   @PostMapping("/tariffs")
   @ResponseStatus(HttpStatus.CREATED)
@@ -67,7 +68,8 @@ class BillingController(
   fun listCharges(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
     @RequestParam(name = "visitId", required = false) visitId: UUID?,
-  ): ApiResponse<List<ChargeView>> = ApiResponse.ok(billingService.listCharges(patientId, visitId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ChargeView>> = ApiResponse.ok(billingService.listCharges(patientId, visitId, principal.hospitalId))
 
   @PostMapping("/invoices")
   @ResponseStatus(HttpStatus.CREATED)
@@ -75,9 +77,10 @@ class BillingController(
   @Transactional
   fun issueInvoice(
     @RequestBody dto: IssueInvoiceDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<InvoiceDetailView> {
     val patientId = dto.patientId ?: throw IllegalArgumentException("PATIENT_ID_REQUIRED")
-    return ApiResponse.ok(billingService.issueInvoice(patientId, dto.visitId, dto.discountQar))
+    return ApiResponse.ok(billingService.issueInvoice(patientId, dto.visitId, dto.discountQar, principal.hospitalId))
   }
 
   @GetMapping("/invoices")
@@ -86,14 +89,16 @@ class BillingController(
   fun listInvoices(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
     @RequestParam(name = "status", required = false) status: String?,
-  ): ApiResponse<List<InvoiceView>> = ApiResponse.ok(billingService.listInvoices(patientId, status))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<InvoiceView>> = ApiResponse.ok(billingService.listInvoices(patientId, status, principal.hospitalId))
 
   @GetMapping("/invoices/{id}")
   @RequiresPermission("billing:read:invoice")
   @Transactional(readOnly = true)
   fun getInvoice(
     @PathVariable id: UUID,
-  ): ApiResponse<InvoiceDetailView> = ApiResponse.ok(billingService.getInvoice(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<InvoiceDetailView> = ApiResponse.ok(billingService.getInvoice(id, principal.hospitalId))
 
   @PostMapping("/invoices/{id}/payments")
   @ResponseStatus(HttpStatus.CREATED)
@@ -103,7 +108,7 @@ class BillingController(
     @PathVariable id: UUID,
     @RequestBody dto: PaymentCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<PaymentView> = ApiResponse.ok(billingService.recordPayment(id, dto, principal.userId))
+  ): ApiResponse<PaymentView> = ApiResponse.ok(billingService.recordPayment(id, dto, principal.userId, principal.hospitalId))
 
   @PostMapping("/invoices/{id}/cancel")
   @RequiresPermission("billing:write:invoice")
@@ -111,5 +116,6 @@ class BillingController(
   fun cancelInvoice(
     @PathVariable id: UUID,
     @RequestBody(required = false) dto: CancelInvoiceDto?,
-  ): ApiResponse<InvoiceDetailView> = ApiResponse.ok(billingService.cancelInvoice(id, dto?.reason))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<InvoiceDetailView> = ApiResponse.ok(billingService.cancelInvoice(id, dto?.reason, principal.hospitalId))
 }

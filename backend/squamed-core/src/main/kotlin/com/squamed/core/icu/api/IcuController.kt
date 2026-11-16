@@ -41,7 +41,9 @@ class IcuController(
   @Transactional(readOnly = true)
   fun listVitals(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<IcuVitalsView>> = ApiResponse.ok(icuService.listVitals(patientId))
+    // 00.04 tenant sweep: list reads are pinned to the caller's hospital (null = admin).
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<IcuVitalsView>> = ApiResponse.ok(icuService.listVitals(patientId, principal.hospitalId))
 
   @PostMapping("/fluid-balance")
   @ResponseStatus(HttpStatus.CREATED)
@@ -58,7 +60,8 @@ class IcuController(
   @Transactional(readOnly = true)
   fun listFluidBalance(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<FluidBalanceView>> = ApiResponse.ok(icuService.listFluidBalance(patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<FluidBalanceView>> = ApiResponse.ok(icuService.listFluidBalance(patientId, principal.hospitalId))
 
   @PostMapping("/ventilation")
   @ResponseStatus(HttpStatus.CREATED)
@@ -75,7 +78,8 @@ class IcuController(
   @Transactional(readOnly = true)
   fun listVentilation(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<VentilationView>> = ApiResponse.ok(icuService.listVentilation(patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<VentilationView>> = ApiResponse.ok(icuService.listVentilation(patientId, principal.hospitalId))
 
   @PostMapping("/infusions")
   @ResponseStatus(HttpStatus.CREATED)
@@ -92,7 +96,8 @@ class IcuController(
   @Transactional(readOnly = true)
   fun listInfusions(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<InfusionView>> = ApiResponse.ok(icuService.listInfusions(patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<InfusionView>> = ApiResponse.ok(icuService.listInfusions(patientId, principal.hospitalId))
 
   @PatchMapping("/infusions/{id}/status")
   @RequiresPermission("icu:write:icu")
@@ -119,7 +124,8 @@ class IcuController(
   fun listAlerts(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
     @RequestParam(name = "status", required = false) status: String?,
-  ): ApiResponse<List<CriticalAlertView>> = ApiResponse.ok(icuService.listAlerts(patientId, status))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<CriticalAlertView>> = ApiResponse.ok(icuService.listAlerts(patientId, status, principal.hospitalId))
 
   @PatchMapping("/alerts/{id}/acknowledge")
   @RequiresPermission("icu:write:icu")

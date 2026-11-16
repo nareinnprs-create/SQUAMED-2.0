@@ -41,21 +41,25 @@ class AdmissionController(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
     @RequestParam(name = "status", required = false) status: String?,
     @RequestParam(name = "wardId", required = false) wardId: UUID?,
-  ): ApiResponse<List<AdmissionView>> = ApiResponse.ok(admissionService.listAdmissions(patientId, status, wardId))
+    // 00.04 tenant sweep: read paths are pinned to the caller's hospital (null = admin).
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<AdmissionView>> = ApiResponse.ok(admissionService.listAdmissions(patientId, status, wardId, principal.hospitalId))
 
   @GetMapping("/{id}")
   @RequiresPermission("ipd:read:admission")
   @Transactional(readOnly = true)
   fun getAdmission(
     @PathVariable id: UUID,
-  ): ApiResponse<AdmissionView> = ApiResponse.ok(admissionService.getAdmission(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AdmissionView> = ApiResponse.ok(admissionService.getAdmission(id, principal.hospitalId))
 
   @GetMapping("/{id}/transfers")
   @RequiresPermission("ipd:read:admission")
   @Transactional(readOnly = true)
   fun listTransfers(
     @PathVariable id: UUID,
-  ): ApiResponse<List<AdmissionTransferView>> = ApiResponse.ok(admissionService.listTransfers(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<AdmissionTransferView>> = ApiResponse.ok(admissionService.listTransfers(id, principal.hospitalId))
 
   @PostMapping("/{id}/transfer")
   @RequiresPermission("ipd:write:admission")
@@ -80,7 +84,8 @@ class AdmissionController(
   @Transactional(readOnly = true)
   fun getDischargeSummary(
     @PathVariable id: UUID,
-  ): ApiResponse<DischargeSummaryView> = ApiResponse.ok(admissionService.getDischargeSummary(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DischargeSummaryView> = ApiResponse.ok(admissionService.getDischargeSummary(id, principal.hospitalId))
 
   @PutMapping("/{id}/discharge-summary")
   @RequiresPermission("ipd:write:admission")
@@ -96,7 +101,8 @@ class AdmissionController(
   @Transactional(readOnly = true)
   fun listAttendants(
     @PathVariable id: UUID,
-  ): ApiResponse<List<AttendantView>> = ApiResponse.ok(admissionService.listAttendants(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<AttendantView>> = ApiResponse.ok(admissionService.listAttendants(id, principal.hospitalId))
 
   @PostMapping("/{id}/attendants")
   @ResponseStatus(HttpStatus.CREATED)

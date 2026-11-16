@@ -7,6 +7,7 @@ import com.squamed.core.ai.repository.AgentConfigRepository
 import com.squamed.core.ai.repository.InteractionLogRepository
 import com.squamed.core.ai.repository.ModelConfigRepository
 import com.squamed.core.ai.repository.ToolConfigRepository
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -127,7 +128,7 @@ class AiService(
     }
 
   @Transactional(readOnly = true)
-  fun logs(): List<InteractionLog> = logRepository.findTop100ByOrderByCreatedAtDesc()
+  fun logs(hospitalId: UUID?): List<InteractionLog> = logRepository.findTop100ByOrderByCreatedAtDesc(hospitalId, PageRequest.of(0, 100))
 
   @Transactional
   fun chat(

@@ -43,7 +43,7 @@ class BloodBankController(
     @PathVariable id: UUID,
     @RequestBody dto: DonorStatusDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<DonorView> = ApiResponse.ok(bloodBankService.updateDonorStatus(id, dto, principal.userId))
+  ): ApiResponse<DonorView> = ApiResponse.ok(bloodBankService.updateDonorStatus(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/donors")
   @RequiresPermission("bloodbank:read:bloodbank")
@@ -51,7 +51,8 @@ class BloodBankController(
   fun listDonors(
     @RequestParam(name = "status", required = false) status: String?,
     @RequestParam(name = "bloodGroup", required = false) bloodGroup: String?,
-  ): ApiResponse<List<DonorView>> = ApiResponse.ok(bloodBankService.listDonors(status, bloodGroup))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<DonorView>> = ApiResponse.ok(bloodBankService.listDonors(status, bloodGroup, principal.hospitalId))
 
   @PostMapping("/units")
   @ResponseStatus(HttpStatus.CREATED)
@@ -69,7 +70,7 @@ class BloodBankController(
     @PathVariable id: UUID,
     @RequestBody dto: UnitStatusDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<UnitView> = ApiResponse.ok(bloodBankService.updateUnitStatus(id, dto, principal.userId))
+  ): ApiResponse<UnitView> = ApiResponse.ok(bloodBankService.updateUnitStatus(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/units")
   @RequiresPermission("bloodbank:read:bloodbank")
@@ -78,7 +79,8 @@ class BloodBankController(
     @RequestParam(name = "status", required = false) status: String?,
     @RequestParam(name = "bloodGroup", required = false) bloodGroup: String?,
     @RequestParam(name = "component", required = false) component: String?,
-  ): ApiResponse<List<UnitView>> = ApiResponse.ok(bloodBankService.listUnits(status, bloodGroup, component))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<UnitView>> = ApiResponse.ok(bloodBankService.listUnits(status, bloodGroup, component, principal.hospitalId))
 
   @PostMapping("/grouping")
   @ResponseStatus(HttpStatus.CREATED)
@@ -96,14 +98,15 @@ class BloodBankController(
   fun confirmGrouping(
     @PathVariable id: UUID,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<GroupingView> = ApiResponse.ok(bloodBankService.confirmGrouping(id, principal.userId))
+  ): ApiResponse<GroupingView> = ApiResponse.ok(bloodBankService.confirmGrouping(id, principal.userId, principal.hospitalId))
 
   @GetMapping("/grouping")
   @RequiresPermission("bloodbank:read:bloodbank")
   @Transactional(readOnly = true)
   fun getGrouping(
     @RequestParam(name = "unitId", required = true) unitId: UUID,
-  ): ApiResponse<GroupingView> = ApiResponse.ok(bloodBankService.getGrouping(unitId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<GroupingView> = ApiResponse.ok(bloodBankService.getGrouping(unitId, principal.hospitalId))
 
   @PostMapping("/crossmatch")
   @ResponseStatus(HttpStatus.CREATED)
@@ -122,7 +125,7 @@ class BloodBankController(
     @PathVariable id: UUID,
     @RequestBody dto: CrossmatchResultDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<CrossmatchView> = ApiResponse.ok(bloodBankService.updateCrossmatchResult(id, dto, principal.userId))
+  ): ApiResponse<CrossmatchView> = ApiResponse.ok(bloodBankService.updateCrossmatchResult(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/crossmatch")
   @RequiresPermission("bloodbank:read:bloodbank")
@@ -130,7 +133,8 @@ class BloodBankController(
   fun listCrossmatches(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
     @RequestParam(name = "unitId", required = false) unitId: UUID?,
-  ): ApiResponse<List<CrossmatchView>> = ApiResponse.ok(bloodBankService.listCrossmatches(patientId, unitId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<CrossmatchView>> = ApiResponse.ok(bloodBankService.listCrossmatches(patientId, unitId, principal.hospitalId))
 
   @PostMapping("/reservations")
   @ResponseStatus(HttpStatus.CREATED)
@@ -148,7 +152,7 @@ class BloodBankController(
   fun releaseReservation(
     @PathVariable unitId: UUID,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<ReservationView> = ApiResponse.ok(bloodBankService.releaseReservation(unitId, principal.userId))
+  ): ApiResponse<ReservationView> = ApiResponse.ok(bloodBankService.releaseReservation(unitId, principal.userId, principal.hospitalId))
 
   @PostMapping("/issues")
   @ResponseStatus(HttpStatus.CREATED)
@@ -164,7 +168,8 @@ class BloodBankController(
   @Transactional(readOnly = true)
   fun listIssues(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<IssueView>> = ApiResponse.ok(bloodBankService.listIssues(patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<IssueView>> = ApiResponse.ok(bloodBankService.listIssues(patientId, principal.hospitalId))
 
   @PostMapping("/transfusions")
   @ResponseStatus(HttpStatus.CREATED)
@@ -183,14 +188,15 @@ class BloodBankController(
     @PathVariable id: UUID,
     @RequestBody dto: TransfusionStatusDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<TransfusionView> = ApiResponse.ok(bloodBankService.updateTransfusionStatus(id, dto, principal.userId))
+  ): ApiResponse<TransfusionView> = ApiResponse.ok(bloodBankService.updateTransfusionStatus(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/transfusions")
   @RequiresPermission("bloodbank:read:bloodbank")
   @Transactional(readOnly = true)
   fun listTransfusions(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<TransfusionView>> = ApiResponse.ok(bloodBankService.listTransfusions(patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<TransfusionView>> = ApiResponse.ok(bloodBankService.listTransfusions(patientId, principal.hospitalId))
 
   @PostMapping("/transfusions/{id}/reactions")
   @ResponseStatus(HttpStatus.CREATED)
@@ -200,12 +206,13 @@ class BloodBankController(
     @PathVariable id: UUID,
     @RequestBody dto: ReactionCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<ReactionView> = ApiResponse.ok(bloodBankService.reportReaction(id, dto, principal.userId))
+  ): ApiResponse<ReactionView> = ApiResponse.ok(bloodBankService.reportReaction(id, dto, principal.userId, principal.hospitalId))
 
   @GetMapping("/transfusions/{id}/reactions")
   @RequiresPermission("bloodbank:read:bloodbank")
   @Transactional(readOnly = true)
   fun listReactions(
     @PathVariable id: UUID,
-  ): ApiResponse<List<ReactionView>> = ApiResponse.ok(bloodBankService.listReactions(id))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ReactionView>> = ApiResponse.ok(bloodBankService.listReactions(id, principal.hospitalId))
 }

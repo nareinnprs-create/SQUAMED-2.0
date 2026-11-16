@@ -31,7 +31,8 @@ class PharmacyController(
   fun listStock(
     @RequestParam(name = "search", required = false) search: String?,
     @RequestParam(name = "active", required = false) active: Boolean?,
-  ): ApiResponse<List<PharmacyStockView>> = ApiResponse.ok(pharmacyService.listStock(search, active))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<PharmacyStockView>> = ApiResponse.ok(pharmacyService.listStock(search, active, principal.hospitalId))
 
   @PostMapping("/stock")
   @ResponseStatus(HttpStatus.CREATED)
@@ -40,7 +41,7 @@ class PharmacyController(
   fun addStock(
     @RequestBody dto: StockRequestDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<PharmacyStockView> = ApiResponse.ok(pharmacyService.addStock(dto.copy(hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId))))
+  ): ApiResponse<PharmacyStockView> = ApiResponse.ok(pharmacyService.addStock(dto, principal))
 
   @PutMapping("/stock/{id}")
   @RequiresPermission("pharmacy:write:stock")
@@ -48,7 +49,8 @@ class PharmacyController(
   fun updateStock(
     @PathVariable id: UUID,
     @RequestBody dto: StockUpdateDto,
-  ): ApiResponse<PharmacyStockView> = ApiResponse.ok(pharmacyService.updateStock(id, dto))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<PharmacyStockView> = ApiResponse.ok(pharmacyService.updateStock(id, dto, principal.hospitalId))
 
   @PostMapping("/dispensations")
   @ResponseStatus(HttpStatus.CREATED)
@@ -65,7 +67,8 @@ class PharmacyController(
   fun listDispensations(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
     @RequestParam(name = "status", required = false) status: String?,
-  ): ApiResponse<List<DispensationView>> = ApiResponse.ok(pharmacyService.listDispensations(patientId, status))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<DispensationView>> = ApiResponse.ok(pharmacyService.listDispensations(patientId, status, principal.hospitalId))
 
   @PostMapping("/dispensations/{id}/verify")
   @RequiresPermission("pharmacy:dispense:prescription")
@@ -73,7 +76,7 @@ class PharmacyController(
   fun verifyDispensation(
     @PathVariable id: UUID,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<DispensationView> = ApiResponse.ok(pharmacyService.verifyDispensation(id, principal.userId))
+  ): ApiResponse<DispensationView> = ApiResponse.ok(pharmacyService.verifyDispensation(id, principal.userId, principal.hospitalId))
 
   @PostMapping("/dispensations/{id}/return")
   @RequiresPermission("pharmacy:write:stock")
@@ -81,5 +84,6 @@ class PharmacyController(
   fun returnOrCancel(
     @PathVariable id: UUID,
     @RequestBody(required = false) dto: ReturnDispensationRequest?,
-  ): ApiResponse<DispensationView> = ApiResponse.ok(pharmacyService.returnOrCancel(id, dto?.reason))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DispensationView> = ApiResponse.ok(pharmacyService.returnOrCancel(id, dto?.reason, principal.hospitalId))
 }

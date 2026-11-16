@@ -57,8 +57,9 @@ class QueueService(
   fun call(
     queueType: String,
     tokenNumber: String,
+    hospitalId: UUID?,
   ): QueueEntryView {
-    val entry = findTodayEntry(queueType, tokenNumber)
+    val entry = findTodayEntry(queueType, tokenNumber, hospitalId)
     entry.status = "called"
     entry.calledAt = Instant.now()
     queueEntryRepository.save(entry)
@@ -85,8 +86,9 @@ class QueueService(
     queueType: String,
     tokenNumber: String,
     servedBy: UUID?,
+    hospitalId: UUID?,
   ): QueueEntryView {
-    val entry = findTodayEntry(queueType, tokenNumber)
+    val entry = findTodayEntry(queueType, tokenNumber, hospitalId)
     entry.status = "in-progress"
     entry.startedAt = Instant.now()
     entry.servedBy = servedBy ?: entry.servedBy
@@ -98,8 +100,9 @@ class QueueService(
   fun complete(
     queueType: String,
     tokenNumber: String,
+    hospitalId: UUID?,
   ): QueueEntryView {
-    val entry = findTodayEntry(queueType, tokenNumber)
+    val entry = findTodayEntry(queueType, tokenNumber, hospitalId)
     entry.status = "completed"
     entry.completedAt = Instant.now()
     queueEntryRepository.save(entry)
@@ -110,8 +113,9 @@ class QueueService(
   fun skip(
     queueType: String,
     tokenNumber: String,
+    hospitalId: UUID?,
   ): QueueEntryView {
-    val entry = findTodayEntry(queueType, tokenNumber)
+    val entry = findTodayEntry(queueType, tokenNumber, hospitalId)
     entry.status = "skipped"
     entry.skippedAt = Instant.now()
     queueEntryRepository.save(entry)
@@ -122,8 +126,9 @@ class QueueService(
   fun postpone(
     queueType: String,
     tokenNumber: String,
+    hospitalId: UUID?,
   ): QueueEntryView {
-    val entry = findTodayEntry(queueType, tokenNumber)
+    val entry = findTodayEntry(queueType, tokenNumber, hospitalId)
     entry.status = "postponed"
     queueEntryRepository.save(entry)
     return QueueEntryView.from(entry)
@@ -133,8 +138,9 @@ class QueueService(
   fun noShow(
     queueType: String,
     tokenNumber: String,
+    hospitalId: UUID?,
   ): QueueEntryView {
-    val entry = findTodayEntry(queueType, tokenNumber)
+    val entry = findTodayEntry(queueType, tokenNumber, hospitalId)
     entry.status = "no-show"
     entry.noShowAt = Instant.now()
     queueEntryRepository.save(entry)
@@ -142,21 +148,28 @@ class QueueService(
   }
 
   @Transactional(readOnly = true)
-  fun board(queueType: String): List<BoardEntry> {
+  fun board(
+    queueType: String,
+    hospitalId: UUID?,
+  ): List<BoardEntry> {
     val today = LocalDate.now()
     val statuses = listOf("waiting", "called", "in-progress", "postponed")
     return queueEntryRepository
-      .findByQueueTypeAndStatusInAndQueueDate(queueType, statuses, today)
+      .findByQueueTypeAndStatusInAndQueueDate(hospitalId, queueType, statuses, today)
       .sortedWith(compareBy({ statusRank(it.status) }, { priorityRank(it.priority) }, { it.createdAt ?: Instant.EPOCH }))
       .map { BoardEntry.from(it) }
   }
 
   @Transactional
-  fun callNext(queueType: String): BoardEntry {
+  fun callNext(
+    queueType: String,
+    hospitalId: UUID?,
+  ): BoardEntry {
     val today = LocalDate.now()
+    // 00.04 tenant sweep (U10): calling next must pull from the caller's own hospital queue.
     val next =
       queueEntryRepository
-        .findByQueueTypeAndStatusAndQueueDate(queueType, "waiting", today)
+        .findByQueueTypeAndStatusAndQueueDate(hospitalId, queueType, "waiting", today)
         .sortedWith(compareBy({ priorityRank(it.priority) }, { it.createdAt ?: Instant.EPOCH }))
         .firstOrNull() ?: throw IllegalStateException("QUEUE_EMPTY")
     next.status = "called"
@@ -166,9 +179,12 @@ class QueueService(
   }
 
   @Transactional(readOnly = true)
-  fun statistics(queueType: String): QueueStatsView {
+  fun statistics(
+    queueType: String,
+    hospitalId: UUID?,
+  ): QueueStatsView {
     val today = LocalDate.now()
-    val entries = queueEntryRepository.findByQueueTypeAndQueueDate(queueType, today)
+    val entries = queueEntryRepository.findByQueueTypeAndQueueDate(hospitalId, queueType, today)
     val waiting = entries.count { it.status == "waiting" }
     val inService = entries.count { it.status == "in-progress" }
     val completed = entries.count { it.status == "completed" }
@@ -190,11 +206,15 @@ class QueueService(
   fun getEntry(
     queueType: String,
     tokenNumber: String,
-  ): QueueEntryView = QueueEntryView.from(findTodayEntry(queueType, tokenNumber))
+    hospitalId: UUID?,
+  ): QueueEntryView = QueueEntryView.from(findTodayEntry(queueType, tokenNumber, hospitalId))
 
   @Transactional(readOnly = true)
-  fun listServicePoints(queueType: String?): List<ServicePointDto> {
-    val points = if (queueType != null) servicePointRepository.findByQueueType(queueType) else servicePointRepository.findAll()
+  fun listServicePoints(
+    queueType: String?,
+    hospitalId: UUID?,
+  ): List<ServicePointDto> {
+    val points = if (queueType != null) servicePointRepository.findByQueueType(hospitalId, queueType) else servicePointRepository.findAllForHospital(hospitalId)
     return points.map { ServicePointDto.from(it) }
   }
 
@@ -234,8 +254,9 @@ class QueueService(
   private fun findTodayEntry(
     queueType: String,
     tokenNumber: String,
+    hospitalId: UUID?,
   ): QueueEntry =
-    queueEntryRepository.findByQueueTypeAndTokenNumberAndQueueDate(queueType, tokenNumber, LocalDate.now())
+    queueEntryRepository.findByQueueTypeAndTokenNumberAndQueueDate(hospitalId, queueType, tokenNumber, LocalDate.now())
       ?: throw IllegalArgumentException("QUEUE_ENTRY_NOT_FOUND")
 
   private fun statusRank(status: String): Int =

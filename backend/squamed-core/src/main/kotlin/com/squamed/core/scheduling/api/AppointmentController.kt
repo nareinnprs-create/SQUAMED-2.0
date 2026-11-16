@@ -2,6 +2,7 @@ package com.squamed.core.scheduling.api
 
 import com.squamed.core.common.api.ApiResponse
 import com.squamed.core.common.tenant.TenantResolver
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.identity.security.RequiresPermission
@@ -73,8 +74,10 @@ class AppointmentController(
   @Transactional(readOnly = true)
   fun getAppointment(
     @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<AppointmentView> {
     val appointment = appointmentRepository.findById(id).orElseThrow { IllegalArgumentException("APPOINTMENT_NOT_FOUND") }
+    requireSameHospital(principal, appointment.hospitalId)
     return ApiResponse.ok(AppointmentView.from(appointment))
   }
 
@@ -87,27 +90,29 @@ class AppointmentController(
     @RequestParam(name = "status", required = false) status: String?,
     @RequestParam(name = "from", required = false) from: String?,
     @RequestParam(name = "to", required = false) to: String?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<List<AppointmentView>> {
+    val hid = principal.hospitalId
     val appointments =
       when {
         from != null && to != null -> {
-          appointmentRepository.findByScheduledStartBetween(Instant.parse(from), Instant.parse(to))
+          appointmentRepository.findByScheduledStartBetween(hid, Instant.parse(from), Instant.parse(to))
         }
 
         patientId != null -> {
-          appointmentRepository.findByPatientId(patientId)
+          appointmentRepository.findByPatientId(hid, patientId)
         }
 
         doctorId != null -> {
-          appointmentRepository.findByDoctorId(doctorId)
+          appointmentRepository.findByDoctorId(hid, doctorId)
         }
 
         status != null -> {
-          appointmentRepository.findByStatus(status)
+          appointmentRepository.findByStatus(hid, status)
         }
 
         else -> {
-          appointmentRepository.findAllByOrderByScheduledStartAsc()
+          appointmentRepository.findAllByOrderByScheduledStartAsc(hid)
         }
       }
     return ApiResponse.ok(appointments.map { AppointmentView.from(it) })
@@ -122,6 +127,7 @@ class AppointmentController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<AppointmentView> {
     val appointment = appointmentRepository.findById(id).orElseThrow { IllegalArgumentException("APPOINTMENT_NOT_FOUND") }
+    requireSameHospital(principal, appointment.hospitalId)
     appointment.hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId ?: appointment.hospitalId)
     appointment.patientId = dto.patientId ?: appointment.patientId
     appointment.departmentId = dto.departmentId ?: appointment.departmentId
@@ -153,8 +159,10 @@ class AppointmentController(
   fun updateAppointmentStatus(
     @PathVariable id: UUID,
     @RequestBody dto: AppointmentStatusDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<AppointmentView> {
     val appointment = appointmentRepository.findById(id).orElseThrow { IllegalArgumentException("APPOINTMENT_NOT_FOUND") }
+    requireSameHospital(principal, appointment.hospitalId)
     val status = dto.status ?: throw IllegalArgumentException("APPOINTMENT_STATUS_REQUIRED")
     val now = Instant.now()
     when (status) {

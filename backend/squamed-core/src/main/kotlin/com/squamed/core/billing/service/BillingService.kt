@@ -17,6 +17,7 @@ import com.squamed.core.billing.repository.InvoiceLineRepository
 import com.squamed.core.billing.repository.InvoiceRepository
 import com.squamed.core.billing.repository.PaymentRepository
 import com.squamed.core.billing.repository.TariffItemRepository
+import com.squamed.core.common.tenant.requireSameHospital
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -53,12 +54,13 @@ class BillingService(
   fun listTariffs(
     search: String?,
     activeOnly: Boolean?,
+    hospitalId: UUID?,
   ): List<TariffDto> {
     val tariffs =
       when {
-        search != null -> tariffItemRepository.findByCode(search) + tariffItemRepository.findByNameContainingIgnoreCase(search)
-        activeOnly == true -> tariffItemRepository.findByIsActiveTrue()
-        else -> tariffItemRepository.findAll()
+        search != null -> tariffItemRepository.findByCode(hospitalId, search) + tariffItemRepository.findByNameContainingIgnoreCase(hospitalId, search)
+        activeOnly == true -> tariffItemRepository.findByIsActiveTrue(hospitalId)
+        else -> tariffItemRepository.findAllForHospital(hospitalId)
       }
     return tariffs
       .filter { activeOnly != true || it.isActive }
@@ -121,12 +123,13 @@ class BillingService(
   fun listCharges(
     patientId: UUID?,
     visitId: UUID?,
+    hospitalId: UUID?,
   ): List<ChargeView> {
     val charges =
       when {
-        patientId != null -> chargeRepository.findByPatientIdOrderByPostedAtDesc(patientId)
-        visitId != null -> chargeRepository.findByVisitIdOrderByPostedAtDesc(visitId)
-        else -> chargeRepository.findAll().sortedByDescending { it.postedAt }
+        patientId != null -> chargeRepository.findByPatientIdOrderByPostedAtDesc(hospitalId, patientId)
+        visitId != null -> chargeRepository.findByVisitIdOrderByPostedAtDesc(hospitalId, visitId)
+        else -> chargeRepository.findAllForHospital(hospitalId).sortedByDescending { it.postedAt }
       }
     return charges.map { ChargeView.from(it) }
   }
@@ -136,15 +139,16 @@ class BillingService(
     patientId: UUID,
     visitId: UUID?,
     discountQar: BigDecimal?,
+    hospitalId: UUID?,
   ): InvoiceDetailView {
-    if (visitId != null && invoiceRepository.findByVisitId(visitId).any { it.status == "unpaid" }) {
+    if (visitId != null && invoiceRepository.findByVisitId(hospitalId, visitId).any { it.status == "unpaid" }) {
       throw IllegalArgumentException("INVOICE_ALREADY_EXISTS")
     }
     val charges =
       if (visitId != null) {
-        chargeRepository.findByVisitId(visitId).filter { it.status == "posted" }
+        chargeRepository.findByVisitId(hospitalId, visitId).filter { it.status == "posted" }
       } else {
-        chargeRepository.findByPatientId(patientId).filter { it.status == "posted" }
+        chargeRepository.findByPatientId(hospitalId, patientId).filter { it.status == "posted" }
       }
     if (charges.isEmpty()) {
       throw IllegalArgumentException("NO_CHARGES_TO_INVOICE")
@@ -186,12 +190,15 @@ class BillingService(
       charge.status = "invoiced"
       chargeRepository.save(charge)
     }
-    return getInvoice(invoiceId)
+    return getInvoice(invoiceId, hospitalId)
   }
 
   @Transactional(readOnly = true)
-  fun getInvoice(id: UUID): InvoiceDetailView {
-    val invoice = findInvoice(id)
+  fun getInvoice(
+    id: UUID,
+    hospitalId: UUID?,
+  ): InvoiceDetailView {
+    val invoice = findInvoice(id, hospitalId)
     return InvoiceDetailView.from(
       invoice = invoice,
       lines = invoiceLineRepository.findByInvoiceId(id),
@@ -203,12 +210,13 @@ class BillingService(
   fun listInvoices(
     patientId: UUID?,
     status: String?,
+    hospitalId: UUID?,
   ): List<InvoiceView> {
     val invoices =
       when {
-        patientId != null -> invoiceRepository.findByPatientId(patientId)
-        status != null -> invoiceRepository.findByStatus(status)
-        else -> invoiceRepository.findAll()
+        patientId != null -> invoiceRepository.findByPatientId(hospitalId, patientId)
+        status != null -> invoiceRepository.findByStatus(hospitalId, status)
+        else -> invoiceRepository.findAllForHospital(hospitalId)
       }
     return invoices
       .sortedByDescending { it.issuedAt }
@@ -220,8 +228,9 @@ class BillingService(
     invoiceId: UUID,
     dto: PaymentCreateDto,
     receivedBy: UUID? = null,
+    hospitalId: UUID?,
   ): PaymentView {
-    val invoice = findInvoice(invoiceId)
+    val invoice = findInvoice(invoiceId, hospitalId)
     val method = dto.method ?: throw IllegalArgumentException("PAYMENT_METHOD_REQUIRED")
     val amount = dto.amountQar ?: throw IllegalArgumentException("PAYMENT_AMOUNT_REQUIRED")
     if (amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -258,8 +267,9 @@ class BillingService(
   fun cancelInvoice(
     invoiceId: UUID,
     reason: String?,
+    hospitalId: UUID?,
   ): InvoiceDetailView {
-    val invoice = findInvoice(invoiceId)
+    val invoice = findInvoice(invoiceId, hospitalId)
     if (invoice.amountPaidQar.compareTo(BigDecimal.ZERO) != 0) {
       throw IllegalArgumentException("INVOICE_HAS_PAYMENTS")
     }
@@ -276,10 +286,17 @@ class BillingService(
           }
         }
       }
-    return getInvoice(invoiceId)
+    return getInvoice(invoiceId, hospitalId)
   }
 
-  private fun findInvoice(id: UUID): Invoice = invoiceRepository.findById(id).orElseThrow { IllegalArgumentException("INVOICE_NOT_FOUND") }
+  private fun findInvoice(
+    id: UUID,
+    hospitalId: UUID?,
+  ): Invoice {
+    val invoice = invoiceRepository.findById(id).orElseThrow { IllegalArgumentException("INVOICE_NOT_FOUND") }
+    requireSameHospital(hospitalId, invoice.hospitalId) // 00.04 tenant sweep
+    return invoice
+  }
 
   private fun nextInvoiceNumber(): String {
     val year = Year.now().value

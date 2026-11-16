@@ -1,5 +1,6 @@
 package com.squamed.core.laboratory.service
 
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.laboratory.api.CreateLabOrderDto
@@ -65,12 +66,13 @@ class LabService(
     patientId: UUID? = null,
     status: String? = null,
     resultStatus: String? = null,
+    hospitalId: UUID? = null,
   ): List<LabOrderView> {
     var orders =
       if (patientId != null) {
-        labOrderRepository.findByPatientId(patientId)
+        labOrderRepository.findByPatientId(hospitalId, patientId)
       } else {
-        labOrderRepository.findAll()
+        labOrderRepository.findAllForHospital(hospitalId)
       }
     if (status != null) orders = orders.filter { it.status == status }
     if (resultStatus != null) orders = orders.filter { it.resultStatus == resultStatus }
@@ -80,7 +82,10 @@ class LabService(
   }
 
   @Transactional(readOnly = true)
-  fun getOrder(orderId: UUID): LabOrderDetailView = getOrderDetail(orderId)
+  fun getOrder(
+    orderId: UUID,
+    hospitalId: UUID?,
+  ): LabOrderDetailView = getOrderDetail(orderId, hospitalId)
 
   @Transactional
   fun collectSpecimen(
@@ -196,8 +201,13 @@ class LabService(
     return getOrderDetail(orderId)
   }
 
-  private fun getOrderDetail(orderId: UUID): LabOrderDetailView {
+  private fun getOrderDetail(
+    orderId: UUID,
+    hospitalId: UUID? = null,
+  ): LabOrderDetailView {
     val labOrder = findOrder(orderId)
+    // 00.04 tenant sweep (U8): null hospitalId means internal/system caller (mutations, createOrder) — unguarded.
+    requireSameHospital(hospitalId, labOrder.hospitalId)
     val tests = labTestRequestRepository.findByLabOrderId(orderId).map { LabTestRequestView.from(it) }
     return LabOrderDetailView(order = LabOrderView.from(labOrder), tests = tests)
   }

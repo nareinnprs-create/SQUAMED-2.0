@@ -1,11 +1,13 @@
 package com.squamed.core.search
 
 import org.opensearch.client.opensearch.OpenSearchClient
+import org.opensearch.client.opensearch._types.FieldValue
 import org.opensearch.client.opensearch._types.query_dsl.Query
 import org.opensearch.client.opensearch.core.SearchRequest
 import org.opensearch.client.opensearch.core.search.Hit
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import java.util.UUID
 
 @Service
 class SearchService(
@@ -30,6 +32,7 @@ class SearchService(
     type: String? = null,
     from: Int = 0,
     size: Int = 20,
+    hospitalId: UUID? = null,
   ): List<SearchHitView> {
     val query = q.trim()
     if (query.isEmpty()) {
@@ -43,30 +46,52 @@ class SearchService(
       }
     return try {
       val request =
-        SearchRequest.of { it ->
-          it
+        SearchRequest.of { req ->
+          req
             .index(indices)
             .from(from)
             .size(size)
-            .query(Query.of { qq -> qq.queryString { qs -> qs.query(query).fields(searchFields) } })
+            .query(
+              Query.of { qq ->
+                qq.bool { b ->
+                  b.must { m -> m.queryString { qs -> qs.query(query).fields(searchFields) } }
+                  // 00.04 tenant sweep: OpenSearch sits outside any future Postgres RLS — tenant-filter explicitly.
+                  // Trailing `b`: a `?.let` last expression yields null for hid=null and the Java client NPEs on build().
+                  if (hospitalId != null) {
+                    b.filter { f -> f.term { t -> t.field("hospitalId.keyword").value(FieldValue.of(hospitalId.toString())) } }
+                  }
+                  b
+                }
+              },
+            )
         }
       val response = client.search(request, Map::class.java)
       response.hits().hits().map { hit -> toView(hit) }
     } catch (e: Exception) {
-      logger.warn("Search failed for query [{}]: {}", query, e.message)
+      logger.warn("Search failed for query [{}]: {}", query, e.toString(), e)
       emptyList()
     }
   }
 
-  fun indexCounts(): Map<String, Long> =
+  fun indexCounts(hospitalId: UUID? = null): Map<String, Long> =
     mapOf(
-      SearchIndexer.INDEX_PATIENTS to countIndex(SearchIndexer.INDEX_PATIENTS),
-      SearchIndexer.INDEX_ENCOUNTERS to countIndex(SearchIndexer.INDEX_ENCOUNTERS),
+      SearchIndexer.INDEX_PATIENTS to countIndex(SearchIndexer.INDEX_PATIENTS, hospitalId),
+      SearchIndexer.INDEX_ENCOUNTERS to countIndex(SearchIndexer.INDEX_ENCOUNTERS, hospitalId),
     )
 
-  private fun countIndex(name: String): Long =
+  private fun countIndex(
+    name: String,
+    hospitalId: UUID?,
+  ): Long =
     try {
-      client.count { it.index(name) }.count()
+      client
+        .count { req ->
+          req.index(name)
+          if (hospitalId != null) {
+            req.query { q -> q.term { t -> t.field("hospitalId.keyword").value(FieldValue.of(hospitalId.toString())) } }
+          }
+          req
+        }.count()
     } catch (e: Exception) {
       logger.warn("Count failed for index [{}]: {}", name, e.message)
       0L

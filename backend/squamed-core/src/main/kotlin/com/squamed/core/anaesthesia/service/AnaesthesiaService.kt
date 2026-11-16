@@ -25,6 +25,7 @@ import com.squamed.core.anaesthesia.repository.AnaesthesiaRecordRepository
 import com.squamed.core.anaesthesia.repository.IntraOpMonitoringRepository
 import com.squamed.core.anaesthesia.repository.PacuRecordRepository
 import com.squamed.core.anaesthesia.repository.RecoveryRecordRepository
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.surgery.repository.SurgeryScheduleRepository
@@ -48,8 +49,9 @@ class AnaesthesiaService(
   fun createEvaluation(
     dto: EvaluationCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): EvaluationView {
-    val schedule = requireSurgerySchedule(dto.surgeryScheduleId)
+    val schedule = requireSurgerySchedule(dto.surgeryScheduleId, hospitalId)
     val patientId = dto.patientId ?: throw IllegalArgumentException("ANAESTHESIA_PATIENT_REQUIRED")
     val asaStatus = dto.asaStatus ?: throw IllegalArgumentException("ANAESTHESIA_ASA_REQUIRED")
     if (asaStatus !in ASA_STATUSES) throw IllegalArgumentException("ANAESTHESIA_INVALID_ASA")
@@ -77,8 +79,9 @@ class AnaesthesiaService(
   fun confirmEvaluation(
     id: UUID,
     actorId: UUID,
+    hospitalId: UUID?,
   ): EvaluationView {
-    val evaluation = findEvaluation(id)
+    val evaluation = findEvaluation(id, hospitalId)
     if (evaluation.status != "draft") throw IllegalArgumentException("ANAESTHESIA_EVALUATION_NOT_DRAFT")
     evaluation.status = "confirmed"
     evaluation.evaluatedBy = actorId
@@ -104,12 +107,13 @@ class AnaesthesiaService(
   fun listEvaluations(
     surgeryScheduleId: UUID?,
     patientId: UUID?,
+    hospitalId: UUID?,
   ): List<EvaluationView> {
     val rows =
       when {
-        surgeryScheduleId != null -> evaluationRepository.findBySurgeryScheduleId(surgeryScheduleId)
-        patientId != null -> evaluationRepository.findByPatientId(patientId)
-        else -> evaluationRepository.findAll()
+        surgeryScheduleId != null -> evaluationRepository.findBySurgeryScheduleId(hospitalId, surgeryScheduleId)
+        patientId != null -> evaluationRepository.findByPatientId(hospitalId, patientId)
+        else -> evaluationRepository.findAllForHospital(hospitalId)
       }
     return rows.map { EvaluationView.from(it) }
   }
@@ -118,8 +122,9 @@ class AnaesthesiaService(
   fun createRecord(
     dto: AnaesthesiaRecordCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): AnaesthesiaRecordView {
-    val schedule = requireSurgerySchedule(dto.surgeryScheduleId)
+    val schedule = requireSurgerySchedule(dto.surgeryScheduleId, hospitalId)
     val patientId = dto.patientId ?: throw IllegalArgumentException("ANAESTHESIA_PATIENT_REQUIRED")
     val airwayDevice = dto.airwayDevice
     if (airwayDevice != null && airwayDevice !in AIRWAY_DEVICES) throw IllegalArgumentException("ANAESTHESIA_INVALID_AIRWAY_DEVICE")
@@ -142,8 +147,9 @@ class AnaesthesiaService(
     id: UUID,
     dto: AnaesthesiaRecordStatusDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): AnaesthesiaRecordView {
-    val record = findRecord(id)
+    val record = findRecord(id, hospitalId)
     val target = dto.status ?: throw IllegalArgumentException("ANAESTHESIA_STATUS_REQUIRED")
     if (target !in RECORD_STATUSES) throw IllegalArgumentException("ANAESTHESIA_INVALID_STATUS")
     val now = Instant.now()
@@ -185,8 +191,9 @@ class AnaesthesiaService(
     recordId: UUID,
     dto: MonitoringCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): MonitoringView {
-    val record = findRecord(recordId)
+    val record = findRecord(recordId, hospitalId)
     val heartRate = dto.heartRate ?: throw IllegalArgumentException("ANAESTHESIA_HEART_RATE_REQUIRED")
     return MonitoringView.from(
       monitoringRepository.save(
@@ -211,8 +218,11 @@ class AnaesthesiaService(
   }
 
   @Transactional(readOnly = true)
-  fun listMonitoring(recordId: UUID): List<MonitoringView> {
-    findRecord(recordId)
+  fun listMonitoring(
+    recordId: UUID,
+    hospitalId: UUID?,
+  ): List<MonitoringView> {
+    findRecord(recordId, hospitalId)
     return monitoringRepository.findByAnaesthesiaRecordId(recordId).map { MonitoringView.from(it) }
   }
 
@@ -221,8 +231,9 @@ class AnaesthesiaService(
     recordId: UUID,
     dto: MedicationCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): MedicationView {
-    val record = findRecord(recordId)
+    val record = findRecord(recordId, hospitalId)
     val name = dto.medicationName ?: throw IllegalArgumentException("ANAESTHESIA_MEDICATION_NAME_REQUIRED")
     return MedicationView.from(
       medicationRepository.save(
@@ -242,8 +253,11 @@ class AnaesthesiaService(
   }
 
   @Transactional(readOnly = true)
-  fun listMedications(recordId: UUID): List<MedicationView> {
-    findRecord(recordId)
+  fun listMedications(
+    recordId: UUID,
+    hospitalId: UUID?,
+  ): List<MedicationView> {
+    findRecord(recordId, hospitalId)
     return medicationRepository.findByAnaesthesiaRecordId(recordId).map { MedicationView.from(it) }
   }
 
@@ -252,8 +266,9 @@ class AnaesthesiaService(
     recordId: UUID,
     dto: RecoveryCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): RecoveryView {
-    val record = findRecord(recordId)
+    val record = findRecord(recordId, hospitalId)
     val aldreteScore = dto.aldreteScore ?: throw IllegalArgumentException("ANAESTHESIA_ALDRE_TE_SCORE_REQUIRED")
     if (aldreteScore !in 0..10) throw IllegalArgumentException("ANAESTHESIA_INVALID_ALDRE_TE_SCORE")
     val dischargeMet = dto.dischargeCriteriaMet ?: false
@@ -288,9 +303,12 @@ class AnaesthesiaService(
   }
 
   @Transactional(readOnly = true)
-  fun listRecovery(recordId: UUID): List<RecoveryView> {
-    findRecord(recordId)
-    return recoveryRepository.findBySurgeryScheduleId(findRecord(recordId).surgeryScheduleId).map { RecoveryView.from(it) }
+  fun listRecovery(
+    recordId: UUID,
+    hospitalId: UUID?,
+  ): List<RecoveryView> {
+    val record = findRecord(recordId, hospitalId)
+    return recoveryRepository.findBySurgeryScheduleId(record.surgeryScheduleId).map { RecoveryView.from(it) }
   }
 
   @Transactional
@@ -298,8 +316,9 @@ class AnaesthesiaService(
     recordId: UUID,
     dto: PacuCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): PacuView {
-    val record = findRecord(recordId)
+    val record = findRecord(recordId, hospitalId)
     return PacuView.from(
       pacuRepository.save(
         PacuRecord(
@@ -322,22 +341,45 @@ class AnaesthesiaService(
   }
 
   @Transactional(readOnly = true)
-  fun listPacu(recordId: UUID): List<PacuView> {
-    findRecord(recordId)
-    return pacuRepository.findBySurgeryScheduleId(findRecord(recordId).surgeryScheduleId).map { PacuView.from(it) }
+  fun listPacu(
+    recordId: UUID,
+    hospitalId: UUID?,
+  ): List<PacuView> {
+    val record = findRecord(recordId, hospitalId)
+    return pacuRepository.findBySurgeryScheduleId(record.surgeryScheduleId).map { PacuView.from(it) }
   }
 
-  private fun requireSurgerySchedule(scheduleId: UUID?): com.squamed.core.surgery.domain.SurgerySchedule {
+  private fun requireSurgerySchedule(
+    scheduleId: UUID?,
+    hospitalId: UUID?,
+  ): com.squamed.core.surgery.domain.SurgerySchedule {
     val id = scheduleId ?: throw IllegalArgumentException("ANAESTHESIA_SURGERY_SCHEDULE_REQUIRED")
-    return surgeryScheduleRepository
-      .findById(id)
-      .orElseThrow { IllegalArgumentException("ANAESTHESIA_SURGERY_SCHEDULE_NOT_FOUND") }
+    val schedule =
+      surgeryScheduleRepository
+        .findById(id)
+        .orElseThrow { IllegalArgumentException("ANAESTHESIA_SURGERY_SCHEDULE_NOT_FOUND") }
+    // 00.04 tenant sweep (D1): write rows inherit the schedule's hospital, so pin the write at the parent load
+    requireSameHospital(hospitalId, schedule.hospitalId)
+    return schedule
   }
 
-  private fun findEvaluation(id: UUID): AnaesthesiaEvaluation =
-    evaluationRepository.findById(id).orElseThrow { IllegalArgumentException("ANAESTHESIA_EVALUATION_NOT_FOUND") }
+  private fun findEvaluation(
+    id: UUID,
+    hospitalId: UUID?,
+  ): AnaesthesiaEvaluation {
+    val evaluation = evaluationRepository.findById(id).orElseThrow { IllegalArgumentException("ANAESTHESIA_EVALUATION_NOT_FOUND") }
+    requireSameHospital(hospitalId, evaluation.hospitalId) // 00.04 tenant sweep
+    return evaluation
+  }
 
-  private fun findRecord(id: UUID): AnaesthesiaRecord = recordRepository.findById(id).orElseThrow { IllegalArgumentException("ANAESTHESIA_RECORD_NOT_FOUND") }
+  private fun findRecord(
+    id: UUID,
+    hospitalId: UUID?,
+  ): AnaesthesiaRecord {
+    val record = recordRepository.findById(id).orElseThrow { IllegalArgumentException("ANAESTHESIA_RECORD_NOT_FOUND") }
+    requireSameHospital(hospitalId, record.hospitalId) // 00.04 tenant sweep
+    return record
+  }
 
   companion object {
     val ASA_STATUSES = setOf("I", "II", "III", "IV", "V", "VI")

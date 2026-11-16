@@ -51,14 +51,17 @@ class QueueController(
   @Transactional(readOnly = true)
   fun board(
     @RequestParam(name = "queueType") queueType: String,
-  ): ApiResponse<List<BoardEntry>> = ApiResponse.ok(queueService.board(queueType))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<BoardEntry>> = ApiResponse.ok(queueService.board(queueType, principal.hospitalId))
 
   @PostMapping("/entries/call-next")
   @RequiresPermission("queue:manage:queue")
   @Transactional
   fun callNext(
     @RequestBody dto: QueueTypeDto,
-  ): ApiResponse<BoardEntry> = ApiResponse.ok(queueService.callNext(dto.queueType ?: throw IllegalArgumentException("QUEUE_TYPE_REQUIRED")))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<BoardEntry> =
+    ApiResponse.ok(queueService.callNext(dto.queueType ?: throw IllegalArgumentException("QUEUE_TYPE_REQUIRED"), principal.hospitalId))
 
   @PatchMapping("/entries/{queueType}/{tokenNumber}/call")
   @RequiresPermission("queue:manage:queue")
@@ -66,7 +69,8 @@ class QueueController(
   fun call(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.call(queueType, tokenNumber))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.call(queueType, tokenNumber, principal.hospitalId))
 
   @PatchMapping("/entries/{queueType}/{tokenNumber}/start")
   @RequiresPermission("queue:manage:queue")
@@ -75,7 +79,8 @@ class QueueController(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
     @RequestBody dto: QueueStartDto,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.start(queueType, tokenNumber, dto.servedBy))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.start(queueType, tokenNumber, dto.servedBy, principal.hospitalId))
 
   @PatchMapping("/entries/{queueType}/{tokenNumber}/complete")
   @RequiresPermission("queue:manage:queue")
@@ -83,7 +88,8 @@ class QueueController(
   fun complete(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.complete(queueType, tokenNumber))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.complete(queueType, tokenNumber, principal.hospitalId))
 
   @PatchMapping("/entries/{queueType}/{tokenNumber}/skip")
   @RequiresPermission("queue:manage:queue")
@@ -91,7 +97,8 @@ class QueueController(
   fun skip(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.skip(queueType, tokenNumber))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.skip(queueType, tokenNumber, principal.hospitalId))
 
   @PatchMapping("/entries/{queueType}/{tokenNumber}/postpone")
   @RequiresPermission("queue:manage:queue")
@@ -99,7 +106,8 @@ class QueueController(
   fun postpone(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.postpone(queueType, tokenNumber))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.postpone(queueType, tokenNumber, principal.hospitalId))
 
   @PatchMapping("/entries/{queueType}/{tokenNumber}/no-show")
   @RequiresPermission("queue:manage:queue")
@@ -107,7 +115,8 @@ class QueueController(
   fun noShow(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.noShow(queueType, tokenNumber))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.noShow(queueType, tokenNumber, principal.hospitalId))
 
   @GetMapping("/entries/{queueType}/{tokenNumber}")
   @RequiresPermission("queue:read:queue")
@@ -115,14 +124,16 @@ class QueueController(
   fun getEntry(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.getEntry(queueType, tokenNumber))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.getEntry(queueType, tokenNumber, principal.hospitalId))
 
   @GetMapping("/service-points")
   @RequiresPermission("queue:read:queue")
   @Transactional(readOnly = true)
   fun listServicePoints(
     @RequestParam(name = "queueType", required = false) queueType: String?,
-  ): ApiResponse<List<ServicePointDto>> = ApiResponse.ok(queueService.listServicePoints(queueType))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ServicePointDto>> = ApiResponse.ok(queueService.listServicePoints(queueType, principal.hospitalId))
 
   @PostMapping("/service-points")
   @ResponseStatus(HttpStatus.CREATED)
@@ -148,5 +159,6 @@ class QueueController(
   @Transactional(readOnly = true)
   fun statistics(
     @RequestParam(name = "queueType") queueType: String,
-  ): ApiResponse<QueueStatsView> = ApiResponse.ok(queueService.statistics(queueType))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QueueStatsView> = ApiResponse.ok(queueService.statistics(queueType, principal.hospitalId))
 }

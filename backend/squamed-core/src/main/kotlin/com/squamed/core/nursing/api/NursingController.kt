@@ -41,7 +41,9 @@ class NursingController(
   @Transactional(readOnly = true)
   fun listAssessments(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<NursingAssessmentView>> = ApiResponse.ok(nursingService.listAssessments(patientId))
+    // 00.04 tenant sweep: list reads are pinned to the caller's hospital (null = admin).
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<NursingAssessmentView>> = ApiResponse.ok(nursingService.listAssessments(patientId, principal.hospitalId))
 
   @PostMapping("/careplans")
   @ResponseStatus(HttpStatus.CREATED)
@@ -58,7 +60,8 @@ class NursingController(
   @Transactional(readOnly = true)
   fun listCarePlans(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<NursingCarePlanView>> = ApiResponse.ok(nursingService.listCarePlans(patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<NursingCarePlanView>> = ApiResponse.ok(nursingService.listCarePlans(patientId, principal.hospitalId))
 
   @PatchMapping("/careplans/{id}/status")
   @RequiresPermission("nursing:write:nursing")
@@ -84,7 +87,8 @@ class NursingController(
   @Transactional(readOnly = true)
   fun listNotes(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<NursingNoteView>> = ApiResponse.ok(nursingService.listNotes(patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<NursingNoteView>> = ApiResponse.ok(nursingService.listNotes(patientId, principal.hospitalId))
 
   @PostMapping("/handovers")
   @ResponseStatus(HttpStatus.CREATED)
@@ -101,7 +105,8 @@ class NursingController(
   @Transactional(readOnly = true)
   fun listHandovers(
     @RequestParam(name = "wardId", required = false) wardId: UUID?,
-  ): ApiResponse<List<NursingHandoverView>> = ApiResponse.ok(nursingService.listHandovers(wardId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<NursingHandoverView>> = ApiResponse.ok(nursingService.listHandovers(wardId, principal.hospitalId))
 
   @PostMapping("/vitals")
   @ResponseStatus(HttpStatus.CREATED)
@@ -118,7 +123,8 @@ class NursingController(
   @Transactional(readOnly = true)
   fun listVitals(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<VitalsView>> = ApiResponse.ok(nursingService.listVitals(patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<VitalsView>> = ApiResponse.ok(nursingService.listVitals(patientId, principal.hospitalId))
 
   @PostMapping("/mar")
   @ResponseStatus(HttpStatus.CREATED)
@@ -134,7 +140,8 @@ class NursingController(
   @Transactional(readOnly = true)
   fun listMar(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<MarView>> = ApiResponse.ok(nursingService.listMar(patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<MarView>> = ApiResponse.ok(nursingService.listMar(patientId, principal.hospitalId))
 
   @PatchMapping("/mar/{id}/status")
   @RequiresPermission("nursing:write:nursing")
@@ -160,5 +167,6 @@ class NursingController(
   @Transactional(readOnly = true)
   fun listRiskAssessments(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
-  ): ApiResponse<List<RiskAssessmentView>> = ApiResponse.ok(nursingService.listRiskAssessments(patientId))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<RiskAssessmentView>> = ApiResponse.ok(nursingService.listRiskAssessments(patientId, principal.hospitalId))
 }

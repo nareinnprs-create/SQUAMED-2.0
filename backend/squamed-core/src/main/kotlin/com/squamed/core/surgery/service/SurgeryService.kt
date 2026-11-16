@@ -1,5 +1,6 @@
 package com.squamed.core.surgery.service
 
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.surgery.api.ChecklistCreateDto
@@ -109,26 +110,31 @@ class SurgeryService(
   fun listSchedules(
     status: String?,
     patientId: UUID?,
+    hospitalId: UUID?,
   ): List<SurgeryScheduleView> {
     val rows =
       when {
-        status != null -> scheduleRepository.findByStatus(status)
-        patientId != null -> scheduleRepository.findByPatientId(patientId)
-        else -> scheduleRepository.findAll()
+        status != null -> scheduleRepository.findByStatus(hospitalId, status)
+        patientId != null -> scheduleRepository.findByPatientId(hospitalId, patientId)
+        else -> scheduleRepository.findAllForHospital(hospitalId)
       }
     return rows.sortedBy { it.scheduledStartAt }.map { SurgeryScheduleView.from(it) }
   }
 
   @Transactional(readOnly = true)
-  fun getSchedule(id: UUID): SurgeryScheduleView = SurgeryScheduleView.from(findSchedule(id))
+  fun getSchedule(
+    id: UUID,
+    hospitalId: UUID?,
+  ): SurgeryScheduleView = SurgeryScheduleView.from(findSchedule(id, hospitalId))
 
   @Transactional
   fun updateStatus(
     id: UUID,
     dto: SurgeryStatusDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): SurgeryScheduleView {
-    val schedule = findSchedule(id)
+    val schedule = findSchedule(id, hospitalId)
     val target = dto.status ?: throw IllegalArgumentException("SURGERY_STATUS_REQUIRED")
     if (target !in SCHEDULE_STATUSES) throw IllegalArgumentException("SURGERY_INVALID_STATUS")
     val now = Instant.now()
@@ -167,8 +173,9 @@ class SurgeryService(
     id: UUID,
     dto: OtAllocationCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): OtAllocationView {
-    val schedule = findSchedule(id)
+    val schedule = findSchedule(id, hospitalId)
     val otRoomId = dto.otRoomId ?: throw IllegalArgumentException("SURGERY_OT_ROOM_REQUIRED")
     otRoomRepository.findById(otRoomId).orElseThrow { IllegalArgumentException("SURGERY_OT_ROOM_NOT_FOUND") }
     val start = dto.startTime ?: throw IllegalArgumentException("SURGERY_ALLOCATION_START_REQUIRED")
@@ -202,8 +209,9 @@ class SurgeryService(
     id: UUID,
     dto: SurgicalTeamCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): SurgicalTeamView {
-    val schedule = findSchedule(id)
+    val schedule = findSchedule(id, hospitalId)
     val staffName = dto.staffName ?: throw IllegalArgumentException("SURGERY_TEAM_NAME_REQUIRED")
     val role = dto.role ?: throw IllegalArgumentException("SURGERY_TEAM_ROLE_REQUIRED")
     if (role !in TEAM_ROLES) throw IllegalArgumentException("SURGERY_TEAM_INVALID_ROLE")
@@ -220,8 +228,11 @@ class SurgeryService(
   }
 
   @Transactional(readOnly = true)
-  fun listTeam(id: UUID): List<SurgicalTeamView> {
-    findSchedule(id)
+  fun listTeam(
+    id: UUID,
+    hospitalId: UUID?,
+  ): List<SurgicalTeamView> {
+    findSchedule(id, hospitalId)
     return teamRepository.findBySurgeryScheduleId(id).map { SurgicalTeamView.from(it) }
   }
 
@@ -230,8 +241,9 @@ class SurgeryService(
     id: UUID,
     dto: InstrumentCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): InstrumentView {
-    val schedule = findSchedule(id)
+    val schedule = findSchedule(id, hospitalId)
     val name = dto.instrumentName ?: throw IllegalArgumentException("SURGERY_INSTRUMENT_NAME_REQUIRED")
     return InstrumentView.from(
       instrumentRepository.save(
@@ -251,9 +263,12 @@ class SurgeryService(
     instrumentId: UUID,
     dto: InstrumentStatusDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): InstrumentView {
-    findSchedule(scheduleId)
+    findSchedule(scheduleId, hospitalId)
     val instrument = findInstrument(instrumentId)
+    // 00.04 tenant sweep: instrumentId is not schedule-scoped, so check the row itself
+    requireSameHospital(hospitalId, instrument.hospitalId)
     val status = dto.status ?: throw IllegalArgumentException("SURGERY_INSTRUMENT_STATUS_REQUIRED")
     if (status !in INSTRUMENT_STATUSES) throw IllegalArgumentException("SURGERY_INSTRUMENT_INVALID_STATUS")
     instrument.status = status
@@ -263,8 +278,11 @@ class SurgeryService(
   }
 
   @Transactional(readOnly = true)
-  fun listInstruments(scheduleId: UUID): List<InstrumentView> {
-    findSchedule(scheduleId)
+  fun listInstruments(
+    scheduleId: UUID,
+    hospitalId: UUID?,
+  ): List<InstrumentView> {
+    findSchedule(scheduleId, hospitalId)
     return instrumentRepository.findBySurgeryScheduleId(scheduleId).map { InstrumentView.from(it) }
   }
 
@@ -273,8 +291,9 @@ class SurgeryService(
     id: UUID,
     dto: ImplantCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): ImplantView {
-    val schedule = findSchedule(id)
+    val schedule = findSchedule(id, hospitalId)
     val name = dto.implantName ?: throw IllegalArgumentException("SURGERY_IMPLANT_NAME_REQUIRED")
     val implant =
       implantRepository.save(
@@ -294,8 +313,11 @@ class SurgeryService(
   }
 
   @Transactional(readOnly = true)
-  fun listImplants(scheduleId: UUID): List<ImplantView> {
-    findSchedule(scheduleId)
+  fun listImplants(
+    scheduleId: UUID,
+    hospitalId: UUID?,
+  ): List<ImplantView> {
+    findSchedule(scheduleId, hospitalId)
     return implantRepository.findBySurgeryScheduleId(scheduleId).map { ImplantView.from(it) }
   }
 
@@ -304,8 +326,9 @@ class SurgeryService(
     id: UUID,
     dto: ChecklistCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): PreOpChecklistView {
-    val schedule = findSchedule(id)
+    val schedule = findSchedule(id, hospitalId)
     val item = dto.checklistItem ?: throw IllegalArgumentException("SURGERY_CHECKLIST_ITEM_REQUIRED")
     return PreOpChecklistView.from(
       checklistRepository.save(
@@ -324,12 +347,15 @@ class SurgeryService(
     scheduleId: UUID,
     itemId: UUID,
     actorId: UUID,
+    hospitalId: UUID?,
   ): PreOpChecklistView {
-    findSchedule(scheduleId)
+    findSchedule(scheduleId, hospitalId)
     val item =
       checklistRepository
         .findById(itemId)
         .orElseThrow { IllegalArgumentException("SURGERY_CHECKLIST_ITEM_NOT_FOUND") }
+    // 00.04 tenant sweep: itemId is not schedule-scoped, so check the row itself
+    requireSameHospital(hospitalId, item.hospitalId)
     item.checked = true
     item.checkedBy = actorId
     item.checkedAt = Instant.now()
@@ -338,8 +364,11 @@ class SurgeryService(
   }
 
   @Transactional(readOnly = true)
-  fun listChecklist(scheduleId: UUID): List<PreOpChecklistView> {
-    findSchedule(scheduleId)
+  fun listChecklist(
+    scheduleId: UUID,
+    hospitalId: UUID?,
+  ): List<PreOpChecklistView> {
+    findSchedule(scheduleId, hospitalId)
     return checklistRepository.findBySurgeryScheduleId(scheduleId).map { PreOpChecklistView.from(it) }
   }
 
@@ -348,8 +377,9 @@ class SurgeryService(
     id: UUID,
     dto: IntraOpCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): IntraOpView {
-    val schedule = findSchedule(id)
+    val schedule = findSchedule(id, hospitalId)
     val eventName = dto.eventName ?: throw IllegalArgumentException("SURGERY_INTRAOP_EVENT_REQUIRED")
     return IntraOpView.from(
       intraOpRepository.save(
@@ -365,8 +395,11 @@ class SurgeryService(
   }
 
   @Transactional(readOnly = true)
-  fun listIntraOp(scheduleId: UUID): List<IntraOpView> {
-    findSchedule(scheduleId)
+  fun listIntraOp(
+    scheduleId: UUID,
+    hospitalId: UUID?,
+  ): List<IntraOpView> {
+    findSchedule(scheduleId, hospitalId)
     return intraOpRepository.findBySurgeryScheduleId(scheduleId).map { IntraOpView.from(it) }
   }
 
@@ -375,8 +408,9 @@ class SurgeryService(
     id: UUID,
     dto: PostOpCreateDto,
     actorId: UUID,
+    hospitalId: UUID?,
   ): PostOpView {
-    val schedule = findSchedule(id)
+    val schedule = findSchedule(id, hospitalId)
     val destination = dto.destination ?: throw IllegalArgumentException("SURGERY_POSTOP_DESTINATION_REQUIRED")
     if (destination !in POSTOP_DESTINATIONS) throw IllegalArgumentException("SURGERY_POSTOP_INVALID_DESTINATION")
     return PostOpView.from(
@@ -396,15 +430,25 @@ class SurgeryService(
   }
 
   @Transactional(readOnly = true)
-  fun getPostOp(scheduleId: UUID): PostOpView {
-    findSchedule(scheduleId)
+  fun getPostOp(
+    scheduleId: UUID,
+    hospitalId: UUID?,
+  ): PostOpView {
+    findSchedule(scheduleId, hospitalId)
     val record =
       postOpRepository.findFirstBySurgeryScheduleIdOrderByRecordedAtDesc(scheduleId)
         ?: throw IllegalArgumentException("SURGERY_POSTOP_NOT_FOUND")
     return PostOpView.from(record)
   }
 
-  private fun findSchedule(id: UUID): SurgerySchedule = scheduleRepository.findById(id).orElseThrow { IllegalArgumentException("SURGERY_SCHEDULE_NOT_FOUND") }
+  private fun findSchedule(
+    id: UUID,
+    hospitalId: UUID?,
+  ): SurgerySchedule {
+    val schedule = scheduleRepository.findById(id).orElseThrow { IllegalArgumentException("SURGERY_SCHEDULE_NOT_FOUND") }
+    requireSameHospital(hospitalId, schedule.hospitalId) // 00.04 tenant sweep
+    return schedule
+  }
 
   private fun findInstrument(id: UUID): InstrumentTracking =
     instrumentRepository.findById(id).orElseThrow { IllegalArgumentException("SURGERY_INSTRUMENT_NOT_FOUND") }

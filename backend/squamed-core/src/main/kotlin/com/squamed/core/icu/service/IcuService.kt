@@ -68,12 +68,15 @@ class IcuService(
   }
 
   @Transactional(readOnly = true)
-  fun listVitals(patientId: UUID?): List<IcuVitalsView> {
+  fun listVitals(
+    patientId: UUID?,
+    hospitalId: UUID?,
+  ): List<IcuVitalsView> {
     val rows =
       if (patientId != null) {
-        vitalsRepository.findByPatientIdOrderByRecordedAtDesc(patientId)
+        vitalsRepository.findByPatientIdOrderByRecordedAtDesc(patientId, hospitalId)
       } else {
-        vitalsRepository.findAll()
+        vitalsRepository.findAllByHospital(hospitalId)
       }
     return rows.sortedByDescending { it.recordedAt }.map { IcuVitalsView.from(it) }
   }
@@ -103,12 +106,15 @@ class IcuService(
   }
 
   @Transactional(readOnly = true)
-  fun listFluidBalance(patientId: UUID?): List<FluidBalanceView> {
+  fun listFluidBalance(
+    patientId: UUID?,
+    hospitalId: UUID?,
+  ): List<FluidBalanceView> {
     val rows =
       if (patientId != null) {
-        fluidBalanceRepository.findByPatientIdOrderByBalanceAtDesc(patientId)
+        fluidBalanceRepository.findByPatientIdOrderByBalanceAtDesc(patientId, hospitalId)
       } else {
-        fluidBalanceRepository.findAll()
+        fluidBalanceRepository.findAllByHospital(hospitalId)
       }
     return rows.sortedByDescending { it.balanceAt }.map { FluidBalanceView.from(it) }
   }
@@ -141,12 +147,15 @@ class IcuService(
   }
 
   @Transactional(readOnly = true)
-  fun listVentilation(patientId: UUID?): List<VentilationView> {
+  fun listVentilation(
+    patientId: UUID?,
+    hospitalId: UUID?,
+  ): List<VentilationView> {
     val rows =
       if (patientId != null) {
-        ventilationRepository.findByPatientIdOrderByRecordedAtDesc(patientId)
+        ventilationRepository.findByPatientIdOrderByRecordedAtDesc(patientId, hospitalId)
       } else {
-        ventilationRepository.findAll()
+        ventilationRepository.findAllByHospital(hospitalId)
       }
     return rows.sortedByDescending { it.recordedAt }.map { VentilationView.from(it) }
   }
@@ -177,12 +186,15 @@ class IcuService(
   }
 
   @Transactional(readOnly = true)
-  fun listInfusions(patientId: UUID?): List<InfusionView> {
+  fun listInfusions(
+    patientId: UUID?,
+    hospitalId: UUID?,
+  ): List<InfusionView> {
     val rows =
       if (patientId != null) {
-        infusionRepository.findByPatientIdOrderByStartedAtDesc(patientId)
+        infusionRepository.findByPatientIdOrderByStartedAtDesc(patientId, hospitalId)
       } else {
-        infusionRepository.findAll()
+        infusionRepository.findAllByHospital(hospitalId)
       }
     return rows.sortedByDescending { it.startedAt }.map { InfusionView.from(it) }
   }
@@ -248,12 +260,13 @@ class IcuService(
   fun listAlerts(
     patientId: UUID?,
     status: String?,
+    hospitalId: UUID?,
   ): List<CriticalAlertView> {
     val rows =
       when {
-        patientId != null && status != null -> alertRepository.findByPatientIdAndStatusOrderByTriggeredAtDesc(patientId, status)
-        patientId != null -> alertRepository.findByPatientIdOrderByTriggeredAtDesc(patientId)
-        else -> alertRepository.findAll()
+        patientId != null && status != null -> alertRepository.findByPatientIdAndStatusOrderByTriggeredAtDesc(patientId, status, hospitalId)
+        patientId != null -> alertRepository.findByPatientIdOrderByTriggeredAtDesc(patientId, hospitalId)
+        else -> alertRepository.findAllByHospital(hospitalId)
       }
     return rows.sortedByDescending { it.triggeredAt }.map { CriticalAlertView.from(it) }
   }

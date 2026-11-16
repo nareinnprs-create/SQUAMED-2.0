@@ -1,5 +1,6 @@
 package com.squamed.core.scribe.service
 
+import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.scribe.domain.ScribeSession
 import com.squamed.core.scribe.repository.ScribeSessionRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -31,10 +32,18 @@ class ScribeService(
   }
 
   @Transactional(readOnly = true)
-  fun list(): List<ScribeSession> = repository.findAllByOrderByCreatedAtDesc()
+  fun list(hospitalId: UUID?): List<ScribeSession> = repository.findAllByOrderByCreatedAtDesc(hospitalId)
 
   @Transactional(readOnly = true)
-  fun find(id: UUID): ScribeSession = repository.findById(id).orElseThrow { IllegalArgumentException("SCRIBE_SESSION_NOT_FOUND") }
+  fun find(
+    id: UUID,
+    hospitalId: UUID?,
+  ): ScribeSession {
+    val session = repository.findById(id).orElseThrow { IllegalArgumentException("SCRIBE_SESSION_NOT_FOUND") }
+    // 00.04 tenant sweep: session reads (full transcript) are gated on the row's hospital.
+    requireSameHospital(hospitalId, session.hospitalId)
+    return session
+  }
 
   @Transactional
   fun create(
@@ -57,7 +66,7 @@ class ScribeService(
 
   @Transactional
   fun startRecording(id: UUID): ScribeSession {
-    val session = find(id)
+    val session = find(id, null)
     requireStage(session, "CREATED", "TRANSCRIBING")
     session.stage = "TRANSCRIBING"
     return repository.save(session)
@@ -69,7 +78,7 @@ class ScribeService(
     audioBytes: ByteArray,
     contentType: String?,
   ): ScribeSession {
-    val session = find(id)
+    val session = find(id, null)
     if (session.stage !in setOf("CREATED", "TRANSCRIBING")) {
       requireStage(session, null, "TRANSCRIBED")
     }
@@ -90,7 +99,7 @@ class ScribeService(
     transcriptText: String?,
     durationSeconds: Int?,
   ): ScribeSession {
-    val session = find(id)
+    val session = find(id, null)
     session.durationSeconds = durationSeconds ?: 0
     val text = transcriptText?.trim()?.let { if (it.isEmpty()) null else it }
     if (text != null) {
@@ -107,14 +116,14 @@ class ScribeService(
     text: String,
     segments: List<ScribeSegment>?,
   ): ScribeSession {
-    val session = find(id)
+    val session = find(id, null)
     applyTranscript(session, text.trim(), segments)
     return repository.save(session)
   }
 
   @Transactional
   fun generateDraft(id: UUID): ScribeSession {
-    val session = find(id)
+    val session = find(id, null)
     requireStage(session, null, "DRAFTED")
     if (session.stage == "TRANSCRIBING") {
       session.stage = "TRANSCRIBED"
@@ -134,7 +143,7 @@ class ScribeService(
     id: UUID,
     draft: String,
   ): ScribeSession {
-    val session = find(id)
+    val session = find(id, null)
     session.draft = draft
     if (session.stage in setOf("CREATED", "TRANSCRIBED", "SPEAKERS_RESOLVED")) {
       session.stage = "DRAFTED"
@@ -144,7 +153,7 @@ class ScribeService(
 
   @Transactional
   fun sign(id: UUID): ScribeSession {
-    val session = find(id)
+    val session = find(id, null)
     if (session.stage !in setOf("DRAFTED", "TRANSCRIBED", "SPEAKERS_RESOLVED")) {
       requireStage(session, null, "SIGNED")
     }
@@ -167,7 +176,7 @@ class ScribeService(
     mapOf(
       "stages" to STAGES.toList(),
       "currentStage" to null,
-      "sessions" to list().size,
+      "sessions" to list(null).size,
     )
 
   private fun applyTranscript(

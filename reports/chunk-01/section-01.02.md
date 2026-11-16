@@ -1,6 +1,6 @@
 # Section 01.02 — Queue & token engine (chunk 1)
 
-**Full build pass** on branch `feat/01.02-queue-token-engine` (off merged main `d0a76a1`). Supersedes the baseline assessment (PARTIAL → IN PROGRESS @ 886c51c): every named content of the chunk line is now implemented, integration-tested, and demoed. Local gates green at write time; CI evidence recorded after the PR opens (ledger row 61).
+**Full build pass** on branch `feat/01.02-queue-token-engine` (off merged main `d0a76a1`). Supersedes the baseline assessment (PARTIAL → IN PROGRESS @ 886c51c): every named content of the chunk line is now implemented, integration-tested, and demoed. Local gates green at write time; CI run 43951414791 green (ledger row 61).
 
 ## 1. Scope
 Per `14-CHUNK1-SECTIONS.md`: token issuance per dept/doctor, **config-driven** priority classes (emergency/VIP/assisted/appointment-order), transfer, re-print, estimated wait, QR queue ID, emergency bump < 2 s to display. The baseline tree had the token entity + lifecycle (call/start/complete/skip/postpone/no-show) + board + callNext + statistics, but priority ranks were hardcoded, the estimated-wait column was never written, and transfer/re-print/QR/bump did not exist.
@@ -35,7 +35,7 @@ Frontend/tooling:
 
 ## 4. Gates 1–12
 1. PASS — all named contents implemented: config-driven priority classes (vip above emergency proves the doc wins over the built-in order), transfer with fresh target token, stateless re-print, estimated-wait population, QR queue id payload, emergency bump.
-2. PASS — CI: branch run opened with the PR (id recorded in the following ledger PR, per the 01.01 flow); no `--admin`.
+2. PASS — CI: run 43951414791 green (PR #41, squash-merged as 95293b4; no `--admin`; first run 43949877857 failed `:ktlintCheck` — §7).
 3. PASS — types: `npx turbo typecheck` clean (28/28 tasks, 2026-11-17; web needed a forced `build` first for `.next/types` — tooling note, not a code change).
 4. PASS — lint/format: `ktlintFormat` clean; frontend lint unchanged (3 pre-existing chunk-00 warnings).
 5. PASS — tests: turbo **146** unit tests (web 88, ui 48, api-client 5, schemas 5); PIT **61/61** (external mode, real compose PG), including the new `QueueEngineTests`.
@@ -75,4 +75,4 @@ None new. QR **image rendering** needs the kiosk (01.08) / TV display (01.06) su
 - **Exit demo is 20 checks**, not the sketched minimum — grew during verification (RBAC trio, outbox, catalog as separate checks).
 
 ## 10. Exit-demo slice
-`pwsh scripts/demo-01.02-queue-token.ps1` against the app on :8081 (`SERVER_PORT=8081 SPRING_PROFILES_ACTIVE=dev .\gradlew.bat bootRun`, compose dev stack up): admin login → two fresh hospitals + receptionists (one foreign) → patients → queue config publish with `priorityClasses = [vip, emergency, routine]` (vip above emergency proves config-driven) → tokens C-01/C-02/C-03 → estimates 0/10/20 → QR payload → config-driven board `[C-02, C-03, C-01]` → callNext → C-02 → transfer C-01 → lab L-01 → lab board → called-entry transfer 409 → re-print stateless + QR → add C-04 → bump C-03 → emergency → outbox carries `queue.*` (≥3 incl. `queue.bumped`) → cross-tenant read 400 / own-board 200-empty / cross-tenant bump 400 → catalog 3 queue events. **20 passed, 0 failed**, live 2026-11-17. PIT 61/61 recorded above; CI run id recorded in the ledger PR.
+`pwsh scripts/demo-01.02-queue-token.ps1` against the app on :8081 (`SERVER_PORT=8081 SPRING_PROFILES_ACTIVE=dev .\gradlew.bat bootRun`, compose dev stack up): admin login → two fresh hospitals + receptionists (one foreign) → patients → queue config publish with `priorityClasses = [vip, emergency, routine]` (vip above emergency proves config-driven) → tokens C-01/C-02/C-03 → estimates 0/10/20 → QR payload → config-driven board `[C-02, C-03, C-01]` → callNext → C-02 → transfer C-01 → lab L-01 → lab board → called-entry transfer 409 → re-print stateless + QR → add C-04 → bump C-03 → emergency → outbox carries `queue.*` (≥3 incl. `queue.bumped`) → cross-tenant read 400 / own-board 200-empty / cross-tenant bump 400 → catalog 3 queue events. **20 passed, 0 failed**, live 2026-11-17. PIT 61/61 recorded above; CI run 43951414791 green.

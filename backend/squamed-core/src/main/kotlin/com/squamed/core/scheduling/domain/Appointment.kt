@@ -43,6 +43,9 @@ class Appointment(
   var telemedicine: Boolean = false,
   @Column(name = "room_id")
   var roomId: UUID? = null,
+  // 01.01: the bookable session_slot this appointment consumes (null = legacy direct-time booking)
+  @Column(name = "slot_id")
+  var slotId: UUID? = null,
   @Column(name = "external_ref", length = 100)
   var externalRef: String? = null,
   @Column(name = "source", nullable = false, length = 30)

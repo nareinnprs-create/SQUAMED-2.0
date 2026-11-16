@@ -8,6 +8,8 @@ import {
   Input,
   Modal,
   PageHeader,
+  Radio,
+  RadioGroup,
   Select,
   Stack,
   StatusIndicator,
@@ -17,6 +19,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  t,
   type BadgeVariant,
 } from '@squamed/ui';
 import { useApi } from '@/lib/use-api';
@@ -201,6 +204,17 @@ const initialForm: AppointmentForm = {
   reason: '',
 };
 
+// 01.01 scheduling engine: bookable session slot returned by GET /schedules/{doctorId}/slots.
+interface SlotOption {
+  id: string | null;
+  startTime: string;
+  endTime: string;
+  capacity: number;
+  bookedCount: number;
+  status: string;
+  sessionType: string;
+}
+
 export default function AppointmentsPage() {
   const { apiFetch, isReady } = useApi();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -231,6 +245,39 @@ export default function AppointmentsPage() {
     if (isReady) void loadAppointments();
   }, [isReady, loadAppointments]);
 
+  const [slots, setSlots] = useState<SlotOption[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [selectedSlotId, setSelectedSlotId] = useState<string>('');
+
+  // 01.01: doctor + date chosen → materialize that day's session slots; pick one to book.
+  useEffect(() => {
+    const doctorId = form.doctorId.trim();
+    if (!isReady || !doctorId || !form.date) {
+      setSlots([]);
+      setSelectedSlotId('');
+      return;
+    }
+    let cancelled = false;
+    setSlotsLoading(true);
+    apiFetch<SlotOption[]>(`/schedules/${encodeURIComponent(doctorId)}/slots?from=${form.date}&to=${form.date}`)
+      .then((data) => {
+        if (!cancelled) {
+          setSlots(data ?? []);
+          setSelectedSlotId('');
+        }
+      })
+      .catch(() => {
+        // Slot preview is best-effort: empty list falls back to the legacy direct-time form.
+        if (!cancelled) setSlots([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSlotsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiFetch, isReady, form.doctorId, form.date]);
+
   function openModal() {
     setForm(initialForm);
     setSelectedPatient(null);
@@ -247,7 +294,16 @@ export default function AppointmentsPage() {
       setError('Select a patient');
       return;
     }
-    if (!form.date || !form.time) {
+    if (!form.date) {
+      setError('Pick a date');
+      return;
+    }
+    const slotFlow = form.doctorId.trim() !== '' && slots.length > 0;
+    if (slotFlow && !selectedSlotId) {
+      setError('Select a slot');
+      return;
+    }
+    if (!slotFlow && !form.time) {
       setError('Pick a date and time');
       return;
     }
@@ -257,19 +313,32 @@ export default function AppointmentsPage() {
     setSubmitting(true);
     setError(null);
     try {
+      const slot = slots.find((s) => s.id === selectedSlotId);
       await apiFetch<Appointment>('/appointments', {
         method: 'POST',
-        body: JSON.stringify({
-          patientId: selectedPatient.id,
-          ...(form.doctorId.trim() ? { doctorId: form.doctorId.trim() } : {}),
-          appointmentType: form.appointmentType,
-          scheduledStart: start,
-          scheduledEnd: end,
-          durationMinutes,
-          reason: form.reason,
-          priority: form.priority,
-          visitType: 'outpatient',
-        }),
+        body: JSON.stringify(
+          slotFlow && slot
+            ? // Slot booking: the backend derives doctor/time/duration/telemedicine from the slot.
+              {
+                slotId: slot.id,
+                patientId: selectedPatient.id,
+                appointmentType: form.appointmentType,
+                reason: form.reason,
+                priority: form.priority,
+                visitType: 'outpatient',
+              }
+            : {
+                patientId: selectedPatient.id,
+                ...(form.doctorId.trim() ? { doctorId: form.doctorId.trim() } : {}),
+                appointmentType: form.appointmentType,
+                scheduledStart: start,
+                scheduledEnd: end,
+                durationMinutes,
+                reason: form.reason,
+                priority: form.priority,
+                visitType: 'outpatient',
+              },
+        ),
       });
       closeModal();
       await loadAppointments();
@@ -453,6 +522,36 @@ export default function AppointmentsPage() {
                 onChange={(e) => setForm({ ...form, time: e.target.value })}
               />
             </div>
+            {form.doctorId.trim() !== '' && form.date !== '' ? (
+              slotsLoading ? (
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--sq-fg-muted)' }}>{t('appointments.slot.loading')}</p>
+              ) : slots.length > 0 ? (
+                <RadioGroup
+                  aria-label={t('appointments.slot.label')}
+                  orientation="horizontal"
+                  value={selectedSlotId}
+                  onValueChange={setSelectedSlotId}
+                  style={{ flexWrap: 'wrap' }}
+                >
+                  {slots.map((slot) => (
+                    <Radio
+                      key={slot.id ?? slot.startTime}
+                      value={slot.id ?? slot.startTime}
+                      disabled={slot.status !== 'open' || slot.bookedCount >= slot.capacity}
+                      label={
+                        <>
+                          {slot.startTime}–{slot.endTime}
+                          {slot.sessionType === 'teleconsult' ? ' · Tele' : null}
+                          {slot.bookedCount >= slot.capacity ? ` · ${t('appointments.slot.full')}` : null}
+                        </>
+                      }
+                    />
+                  ))}
+                </RadioGroup>
+              ) : (
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--sq-fg-muted)' }}>{t('appointments.slot.empty')}</p>
+              )
+            ) : null}
             <Select
               label="Priority"
               value={form.priority}

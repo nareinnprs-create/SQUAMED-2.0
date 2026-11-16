@@ -60,6 +60,7 @@ Frontend/tooling:
 - **Fresh hospital per run**: daily token sequences would collide with leftovers in the shared seed hospital (same lesson as 01.01's lifecycle test); `QueueEngineTests` mints its own hospital `QUL-$s`/`QUF-$s`.
 - **Event-catalog count drift**: the two 17-type asserts updated to 20 (QueueCalled/Transferred/Bumped EMITTED).
 - **Demo script bugs, not engine bugs** (first run 17/20, API probed and confirmed correct): (a) pwsh interpolated `$h:` as a drive-qualified variable in `"SQM:$h:consult:…"` → empty; fixed with `${h}`; (b) the cross-tenant board check expected 400, but a foreign receptionist reading **their own** board is legitimately 200-empty — the leak property is "no foreign rows", corrected to assert an empty list; (c) the bump check initially targeted C-03 (already transferred context) → C-04.
+- **ktlint slip caught by CI, not locally**: the first PR commit had one `multiline-expression-wrapping` violation in the new PIT test — the local gate list ran `ktlintFormat` before the PIT edits landed (run order, not a tool gap). CI run 43949877857 failed `:ktlintCheck`; `ktlintFormat` applied (commit `73d7be1`) and the re-run is the recorded branch run.
 - **Infra**: Docker Desktop died mid-session (second time this chunk) — restarted, compose stack brought back up (PG healthy; Grafana :3005 bind conflict = known non-issue). One PIT attempt timed out on an orphaned test-app JVM from a killed shell; stale JVMs cleaned before the green run.
 
 ## 8. External blockers

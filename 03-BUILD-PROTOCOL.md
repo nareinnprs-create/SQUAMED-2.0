@@ -11,8 +11,8 @@
 | 1 | Functional completeness | Every code path works end-to-end against real data flow (DB/API/events/UI); the section's user journey works live | Demo-script run captured in section report |
 | 2 | Zero-stub scan | `grep` gate for `TODO, FIXME, stub, placeholder, mock, "not implemented", "for now"` across changed source — zero hits (allowlist: test fixtures with `// test-fixture` tag, this protocol file) | CI grep step, blocking |
 | 3 | Types | Compiler clean, zero `any`/`!` escapes on new code | CI, blocking |
-| 4 | Lint + format | Clean, incl. whitelabel string-lint + architecture (ArchUnit/boundary) rules | CI, blocking |
-| 5 | Tests | All pass; every new behavior has a test; clinical-safety cases for clinical sections green; coverage ≥ 80% changed-code | CI, blocking |
+| 4 | Lint + format | Clean, incl. whitelabel string-lint (ktlint for Kotlin, named tooling per language); boundary rules = package-layout convention (**no ArchUnit module exists**) | CI, blocking |
+| 5 | Tests | All pass; every new behavior has a test; clinical-safety cases for clinical sections green; coverage = JaCoCo instruction ≥ 0.80 module-wide (broad excludes per `build.gradle.kts`), verified on merged unit+PIT exec | CI, blocking |
 | 6 | Accessibility | axe-core: zero critical/serious; keyboard path for every new task; focus visible | CI + manual pass in report |
 | 7 | Design system | No hardcoded hex/strings; states complete (hover/focus/active/disabled/loading/empty/error); visual regression screenshots match | CI, blocking |
 | 8 | Contracts | OpenAPI/event schemas committed **before** code; generated clients regenerated; schema-registry test green | CI, blocking |

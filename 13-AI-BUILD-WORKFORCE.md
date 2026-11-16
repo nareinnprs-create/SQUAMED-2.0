@@ -7,7 +7,7 @@
 
 | Agent | Discipline | Spawned for | Constraint |
 |---|---|---|---|
-| **Builder-Core** (×2 parallel) | Kotlin backend: data, services, APIs, events, audit | Domain sections | ArchUnit + RLS tests are theirs to keep green |
+| **Builder-Core** (×2 parallel) | Kotlin backend: data, services, APIs, events, audit | Domain sections | Boundary = package-layout convention + PIT contract suite to keep green (**no ArchUnit module exists; RLS deferred to stage 2**) |
 | **Builder-Web** (×2 parallel) | React/TS: design system, shell, workspaces, forms, tables | UI sections | Design-system conformance + a11y gates |
 | **Builder-Data** | Schema/migrations, synthetic data, terminology loads, report engines | Data-heavy sections | Contract-before-code |
 | **QA-Agent** | Test authoring (unit/integration/E2E/CS-cases), coverage, flaky triage | Every section (independent of builder) | Writes tests from chunk contract, **never from builder's summary** |

@@ -26,7 +26,9 @@
 
 Scales linearly per hospital; group deployments shard by tenant (ADR-2) before vertical limits are approached.
 
-## 3. Observability (stack: OpenTelemetry + Prometheus + Grafana + Loki)
+**Dev reality (the truth until k8s):** `infrastructure/docker/docker-compose.yml` — Postgres 16 **:5433**, Redis 7 **:6380**, Kafka 3.7.1 **:9092**, OpenSearch 2.14.0 **:9200**, MinIO fork `pgsty/silo` **:9000/:9001** (minio/minio images were deleted from Docker Hub), Temporal 1.24.2 **:7233** + Temporal UI **:8088**, Prometheus **:9090**, Grafana **:3005**, Alertmanager **:9093**, otel-collector **:4317/:4318**. App boots on **:8081** (host :8080 is occupied by an unrelated container). **Keycloak, Orthanc/OHIF, Mirth, and Loki are not in the dev stack** — auth is the self-hosted JWT service, DICOM/HL7 paths are hand-rolled in-process (10 §2), logs go to stdout (no Loki).
+
+## 3. Observability (stack: OpenTelemetry + Prometheus + Grafana + Alertmanager; Loki not deployed — logs on stdout)
 - Traces: HTTP → service → DB → WS end-to-end; 10% sampling normal, 100% on error.
 - Metrics: RED per module + business metrics (events/min per type, SLA breach counts, DLQ depth).
 - Alerts → on-call: SLO burn (§6 NFRs), audit-chain breach, DLQ non-empty > 15 min, failover events, cert expiry.

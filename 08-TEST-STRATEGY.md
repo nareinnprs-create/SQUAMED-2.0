@@ -5,13 +5,13 @@
 | Level | Tooling | Target |
 |---|---|---|
 | Unit | JUnit5 (Kotlin), Vitest (TS) | ≥ 80% changed-code coverage; pure-domain logic fully covered |
-| Integration | Testcontainers (Postgres, Redis, Keycloak, MinIO) | Every repository/service against real DB; RLS denials; outbox→dispatch |
-| Contract | OpenAPI diff check + event JSON-schema validation | Breaking API/event change fails CI |
-| E2E | Playwright (chromium + webkit tablet) | Chunk exit scenarios scripted; clinical-safety UI flows |
-| Performance | k6 | NFR §6: 1,000 users, p95 targets, WS fan-out 200/display-zone |
-| **Sync chaos simulator** | CI job (chunk 0 §00.13+) | Offline queue replayed under randomized drop/duplicate/reorder/partition — replay must be exactly-once with net effect identical to the online path (extends CS-08) |
+| Integration | **PIT suite** (`backend/squamed-core`, Gradle task `integrationTest`): by default runs against the **compose dev stack** (`SQUAMED_IT_EXTERNAL=true` — PG 5433, Redis 6380, Kafka 9092, OpenSearch 9200, MinIO 9000); set `SQUAMED_IT_EXTERNAL=false` for Testcontainers mode (Postgres, Redis, Kafka, OpenSearch, MinIO — no Keycloak/Temporal containers). **Never run PIT while a bootRun app is alive** (HL7 MLLP listener collides on 127.0.0.1:2575) | Every repository/service against real DB; RLS denials; outbox→dispatch |
+| Contract | OpenAPI snapshot byte-compare + event JSON-schema validation | Breaking API/event change fails CI |
+| E2E | Playwright (chromium/firefox/webkit desktop projects; CI installs **chromium only** — no tablet emulation yet) | Chunk exit scenarios scripted; clinical-safety UI flows |
+| Performance | Custom Node `.mjs` load scripts (k6 not installed), app on **8081** | NFR §6: 1,000 users, p95 targets, WS fan-out 200/display-zone |
+| **Sync chaos simulator** | Nested PIT (`PlatformIntegrationTests` chaos test), **not a separate CI job** | Offline queue replayed under randomized drop/duplicate/reorder/partition — replay must be exactly-once with net effect identical to the online path (extends CS-08) |
 | **Architecture continuity drill** | Manual, every chunk exit | Fresh agent builds a throwaway module using **only** `00–13` docs; failure = docs defect, chunk cannot close (risk #9) |
-| Security | gitleaks, dep-scan, ZAP baseline | Blocking per §07 |
+| Security | gitleaks, dep-scan, ZAP baseline | Blocking per §07 — **scanning jobs not wired into CI yet** |
 | Accessibility | axe-core CI + manual keyboard/reader pass | Zero critical/serious |
 | Visual | Playwright screenshots per component (light/command/brand) | Pixel drift fails |
 
@@ -23,6 +23,8 @@
 | test-hospital (sandbox) | Training + UAT + chunk exit demos | **Synthetic only** (§4) — never real PHI in any non-prod system |
 | prod | Live | Real PHI, audit on |
 | DR | Standby | Restored copy, drill-verified |
+
+**PIT authoring conventions** (`src/integrationTest/.../it/PlatformIntegrationTests.kt`): run `$env:SQUAMED_IT_EXTERNAL='true'; .\gradlew.bat integrationTest --console=plain` from `backend/squamed-core` (task name is load-bearing, called literally by CI); test data must be unique per run via `suffix()` helpers (fresh hospitals per scenario where isolation matters); assert on API responses, not DB state, except where the property is DB-level (tenant guards, audit chain); test-JVM stdout lands in `build/test-results/integrationTest/TEST-*.xml`.
 
 ## 3. Clinical-safety test catalog (every case automated where possible; drills manual)
 | ID | Case | Assertion |

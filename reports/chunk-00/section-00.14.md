@@ -101,7 +101,7 @@ Running the re-derivation against the tree exposed the ten defects the rework fi
 - **Showcase** `/design-system` gains 7 sections (Context Spine, status parts, vitals, lab rows, range bars, med orders, dual confirm, feedback states).
 - **Exit demo** extended 17 → **29 checks, 29/29 PASS** (2026-11-16, production build on 3000 + 44-story Storybook).
 - **VRT**: only `design-system.png` re-baselined (new sections lengthen the page); the other 5 baselines byte-stable — `font-normalize.css` pins fonts, so the Plex adoption is correctly invisible to VRT, and Playwright's default `animations: 'disabled'` makes the pulse fix invisible.
-- **Font-budget note**: Lighthouse budget URL `/login` fetches only latin subsets via unicode-range (Devanagari files load only on Hindi-rendered pages); font budget 200KB not threatened.
+- **Font-budget note**: first CI attempt on the rework branch **failed gate 7** — font transfer 307.1 KB > 200 KB on `/login`. Root cause: `next/font` preloads **every declared subset** (7 files across the three faces) regardless of use; the original §11.3 assumption ("browser fetches only used subsets") only holds without preload. Fix: `preload: false` on all three font configs — unicode-range then fetches only what a page renders; local gate re-run **passes at 39.6 KB** (performance 0.91, a11y 1.0). Residual: no font preload → brief `display: swap` fallback on first paint, accepted. Budget stays at 200 KB (not raised — the waste was real, not the budget).
 - **Known limit**: the showcase/demo assertions verify the Plex faces are wired (built CSS + font-variable classes), not that each glyph renders Plex — visual verification is Storybook/eyeball, an accepted residual for a font-adoption change.
 
 ### 11.4 Rework gates

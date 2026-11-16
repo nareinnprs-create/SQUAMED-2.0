@@ -7,7 +7,7 @@ import { cn } from '../lib/cn';
 export type LabInterpretation = 'normal' | 'low' | 'high' | 'critical' | 'pending';
 export type LabResultStatus = 'pending' | 'in-progress' | 'completed' | 'cancelled';
 
-export interface LabResultRow {
+export interface LabResultViewerRow {
   testName: string;
   value: string | number;
   unit?: string;
@@ -16,7 +16,7 @@ export interface LabResultRow {
 }
 
 export interface LabResultViewerProps {
-  results: LabResultRow[];
+  results: LabResultViewerRow[];
   patientName?: string;
   orderedAt?: Date | string;
   status?: LabResultStatus;
@@ -60,7 +60,7 @@ function formatDate(value: Date | string): string {
   return format(date, 'dd MMM yyyy, h:mm a');
 }
 
-const columns: DataGridColumn<LabResultRow>[] = [
+const columns: DataGridColumn<LabResultViewerRow>[] = [
   {
     key: 'testName',
     header: 'Test',

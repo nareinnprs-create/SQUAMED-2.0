@@ -1,6 +1,7 @@
 :root,
 [data-theme='clinical'] {
   color-scheme: light;
+  --sq-font-mono: var(--font-plex-mono, ui-monospace), 'Cascadia Mono', 'Courier New', monospace;
   --sq-bg: #f7f8f6;
   --sq-surface: #ffffff;
   --sq-secondary: #eef1ef;

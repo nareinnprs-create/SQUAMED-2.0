@@ -1,7 +1,9 @@
 # Exit-demo slice for section 00.14 (Design system): the /design-system showcase
-# route served from the production build (tokens, both densities, i18n, task cards)
-# plus the committed Storybook static build (32 stories). Web on 3000, no API.
-# Server is started separately; node processes are killed after the run. ASCII only.
+# route served from the production build (tokens, both densities, i18n, task cards,
+# the reworked spec surfaces: Context Spine, instrument numerals, clinical data
+# components, feedback states) plus the committed Storybook static build (44 stories).
+# Web on 3000, no API. Server is started separately; node processes are killed after
+# the run. ASCII only.
 $ErrorActionPreference = 'Stop'
 $web = 'http://localhost:3000'
 $script:pass = 0
@@ -54,16 +56,37 @@ Check 'task card fixture rendered' ($ds.Content.Contains('Administer morning ins
 Check 'task card open action (i18n key)' ($ds.Content.Contains('Open task'))
 Check 'escalated badge rendered' ($ds.Content.Contains('Escalated'))
 
-# 9 Storybook static build committed output: entry page + iframe
+# 9 rework: Context Spine signature (name + mono MRN/ABHA + allergy glyph + statuses + stage)
+Check 'context spine fixture rendered' ($ds.Content.Contains('MQ-2026-0042') -and $ds.Content.Contains('12-3456-7890-1234'))
+Check 'context spine allergy flag rendered' ($ds.Content.Contains('Allergies: Penicillin'))
+Check 'context spine encounter stage rendered' ($ds.Content.Contains('Day 2'))
+
+# 10 rework: instrument numerals — Plex wired via next/font (variable classes on the
+# root; face names live in the built CSS, not the SSR HTML)
+$html = [string]$ds.Content
+Check 'font variable classes on root' ($html.Contains('__variable_'))
+$builtCss = Get-ChildItem 'apps/web/.next/static/css' -Filter '*.css' -ErrorAction SilentlyContinue
+Check 'IBM Plex Sans face in built CSS' ($null -ne $builtCss -and ($builtCss | Select-String -Pattern 'IBM Plex Sans' -Quiet))
+Check 'IBM Plex Mono face in built CSS' ($null -ne $builtCss -and ($builtCss | Select-String -Pattern 'IBM Plex Mono' -Quiet))
+Check 'vital chip mono fixture rendered' ($ds.Content.Contains('128/82') -and $ds.Content.Contains('mmHg'))
+
+# 11 rework: clinical data components
+Check 'status chip rendered' ($ds.Content.Contains('SLA at risk'))
+Check 'lab row on range track rendered' ($ds.Content.Contains('Potassium') -and $ds.Content.Contains('High'))
+Check 'med order line high-alert + second verify rendered' ($ds.Content.Contains('High alert') -and $ds.Content.Contains('Verify'))
+Check 'dual confirm signature rendered' ($ds.Content.Contains('Confirm patient identity') -and $ds.Content.Contains('Blood transfusion'))
+Check 'feedback states rendered' ($ds.Content.Contains('You are offline') -and $ds.Content.Contains('Could not save the note'))
+
+# 12 Storybook static build committed output: entry page + iframe
 $sbIndex = 'packages/ui/storybook-static/index.html'
 $sbIframe = 'packages/ui/storybook-static/iframe.html'
 Check 'storybook index.html built' (Test-Path $sbIndex)
 Check 'storybook iframe.html built' (Test-Path $sbIframe)
 
-# 10 Storybook carries the full component inventory (32 stories)
+# 13 Storybook carries the full component inventory (44 stories)
 $idx = Get-Content 'packages/ui/storybook-static/index.json' -Raw | ConvertFrom-Json
 $storyCount = ($idx.entries.PSObject.Properties | Where-Object { $_.Value.type -eq 'story' }).Count
-Check "storybook stories = 32 (got $storyCount)" ($storyCount -eq 32)
+Check "storybook stories = 44 (got $storyCount)" ($storyCount -eq 44)
 
 Write-Output "== $script:pass passed, $script:fail failed =="
 if ($script:fail -gt 0) { exit 1 }

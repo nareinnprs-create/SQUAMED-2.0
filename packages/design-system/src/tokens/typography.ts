@@ -1,5 +1,9 @@
 export const typography = {
-  fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  // 02-DESIGN-SYSTEM §3: IBM Plex Sans (Devanagari-capable spec choice; Inter is the
+  // banned default). Apps load the faces via next/font; this token states the stack
+  // for Storybook and token consumers.
+  fontFamily: '"IBM Plex Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  fontFamilyMono: '"IBM Plex Mono", ui-monospace, "Cascadia Mono", "Courier New", monospace',
   scale: {
     '10': { fontSize: '10px', lineHeight: '14px', fontWeight: 400 },
     '11': { fontSize: '11px', lineHeight: '15px', fontWeight: 400 },

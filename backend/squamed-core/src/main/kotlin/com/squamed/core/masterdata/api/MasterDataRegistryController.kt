@@ -65,25 +65,25 @@ class MasterDataRegistryController(
   ): ApiResponse<List<VendorDto>> {
     val pinned = tenantResolver.pinOrDefault(principal, hospitalId)
     val pageable = buildPageable(page, size)
-    val content =
+    val paged =
       when {
         search != null && active != null -> {
-          vendorRepository.search(pinned, "%$search%", "%$search%", active, pageable).content
+          vendorRepository.search(pinned, "%$search%", "%$search%", active, pageable)
         }
 
         search != null -> {
-          vendorRepository.search(pinned, "%$search%", "%$search%", pageable).content
+          vendorRepository.search(pinned, "%$search%", "%$search%", pageable)
         }
 
         active != null -> {
-          vendorRepository.findByHospitalIdAndIsActive(pinned, active, pageable).content
+          vendorRepository.findByHospitalIdAndIsActive(pinned, active, pageable)
         }
 
         else -> {
-          vendorRepository.findByHospitalId(pinned, pageable).content
+          vendorRepository.findByHospitalId(pinned, pageable)
         }
       }
-    return ApiResponse.ok(content.map { VendorDto.from(it) })
+    return ApiResponse.ok(paged.content.map { VendorDto.from(it) }, paged)
   }
 
   @PostMapping("/vendors")
@@ -165,25 +165,25 @@ class MasterDataRegistryController(
   ): ApiResponse<List<EquipmentDto>> {
     val pinned = tenantResolver.pinOrDefault(principal, hospitalId)
     val pageable = buildPageable(page, size)
-    val content =
+    val paged =
       when {
         search != null && active != null -> {
-          equipmentRepository.search(pinned, "%$search%", "%$search%", active, pageable).content
+          equipmentRepository.search(pinned, "%$search%", "%$search%", active, pageable)
         }
 
         search != null -> {
-          equipmentRepository.search(pinned, "%$search%", "%$search%", pageable).content
+          equipmentRepository.search(pinned, "%$search%", "%$search%", pageable)
         }
 
         active != null -> {
-          equipmentRepository.findByHospitalIdAndIsActive(pinned, active, pageable).content
+          equipmentRepository.findByHospitalIdAndIsActive(pinned, active, pageable)
         }
 
         else -> {
-          equipmentRepository.findByHospitalId(pinned, pageable).content
+          equipmentRepository.findByHospitalId(pinned, pageable)
         }
       }
-    return ApiResponse.ok(content.map { EquipmentDto.from(it) })
+    return ApiResponse.ok(paged.content.map { EquipmentDto.from(it) }, paged)
   }
 
   @PostMapping("/equipment")
@@ -267,25 +267,25 @@ class MasterDataRegistryController(
   ): ApiResponse<List<EmployeeDto>> {
     val pinned = tenantResolver.pinOrDefault(principal, hospitalId)
     val pageable = buildPageable(page, size)
-    val content =
+    val paged =
       when {
         search != null && active != null -> {
-          employeeRepository.search(pinned, "%$search%", "%$search%", active, pageable).content
+          employeeRepository.search(pinned, "%$search%", "%$search%", active, pageable)
         }
 
         search != null -> {
-          employeeRepository.search(pinned, "%$search%", "%$search%", pageable).content
+          employeeRepository.search(pinned, "%$search%", "%$search%", pageable)
         }
 
         active != null -> {
-          employeeRepository.findByHospitalIdAndIsActive(pinned, active, pageable).content
+          employeeRepository.findByHospitalIdAndIsActive(pinned, active, pageable)
         }
 
         else -> {
-          employeeRepository.findByHospitalId(pinned, pageable).content
+          employeeRepository.findByHospitalId(pinned, pageable)
         }
       }
-    return ApiResponse.ok(content.map { EmployeeDto.from(it) })
+    return ApiResponse.ok(paged.content.map { EmployeeDto.from(it) }, paged)
   }
 
   @PostMapping("/employees")
@@ -377,25 +377,25 @@ class MasterDataRegistryController(
   ): ApiResponse<List<PriceListDto>> {
     val pinned = tenantResolver.pinOrDefault(principal, hospitalId)
     val pageable = buildPageable(page, size)
-    val content =
+    val paged =
       when {
         search != null && active != null -> {
-          priceListRepository.search(pinned, "%$search%", "%$search%", active, pageable).content
+          priceListRepository.search(pinned, "%$search%", "%$search%", active, pageable)
         }
 
         search != null -> {
-          priceListRepository.search(pinned, "%$search%", "%$search%", pageable).content
+          priceListRepository.search(pinned, "%$search%", "%$search%", pageable)
         }
 
         active != null -> {
-          priceListRepository.findByHospitalIdAndIsActive(pinned, active, pageable).content
+          priceListRepository.findByHospitalIdAndIsActive(pinned, active, pageable)
         }
 
         else -> {
-          priceListRepository.findByHospitalId(pinned, pageable).content
+          priceListRepository.findByHospitalId(pinned, pageable)
         }
       }
-    return ApiResponse.ok(content.map { PriceListDto.from(it) })
+    return ApiResponse.ok(paged.content.map { PriceListDto.from(it) }, paged)
   }
 
   @PostMapping("/price-lists")

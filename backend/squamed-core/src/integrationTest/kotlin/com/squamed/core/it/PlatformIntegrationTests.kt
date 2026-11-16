@@ -7684,16 +7684,17 @@ class PlatformIntegrationTests {
           HttpMethod.PUT,
           "/api/v1/hospital-config/hospitals/$h/config/queue",
           json(
-            "queues" to listOf(
-              mapOf(
-                "code" to "consult",
-                "name" to "Consultation",
-                "strategy" to "priority",
-                "avgConsultMinutes" to 10,
-                "priorityClasses" to listOf("vip", "emergency", "routine"),
+            "queues" to
+              listOf(
+                mapOf(
+                  "code" to "consult",
+                  "name" to "Consultation",
+                  "strategy" to "priority",
+                  "avgConsultMinutes" to 10,
+                  "priorityClasses" to listOf("vip", "emergency", "routine"),
+                ),
+                mapOf("code" to "lab", "name" to "Laboratory", "strategy" to "fifo", "avgConsultMinutes" to 5),
               ),
-              mapOf("code" to "lab", "name" to "Laboratory", "strategy" to "fifo", "avgConsultMinutes" to 5),
-            ),
           ),
           admin,
         ),

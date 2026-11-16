@@ -35,3 +35,4 @@ keep everything honest:
 - The snapshot comparison normalizes only the `servers` block; every other diff (path, schema,
   response code) is a contract change and must be reviewed.
 - Breaking changes to `/api/v1` need a version bump — see `docs/api/openapi-style-guide.md`.
+

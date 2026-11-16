@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://squamed.local/schemas/config/scheduling.schema.json",
+  "title": "Scheduling configuration (overbooking + no-show policy, 01.01)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["overbookFactor", "noShowWindowDays", "noShowLimit"],
+  "properties": {
+    "overbookFactor": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 3,
+      "description": "Effective slot ceiling = capacity * overbookFactor; 1.0 disables overbooking."
+    },
+    "noShowWindowDays": { "type": "integer", "minimum": 1, "maximum": 365 },
+    "noShowLimit": { "type": "integer", "minimum": 1, "maximum": 50 }
+  }
+}

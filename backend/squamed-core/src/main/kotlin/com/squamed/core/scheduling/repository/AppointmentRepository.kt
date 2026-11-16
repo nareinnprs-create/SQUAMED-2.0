@@ -1,6 +1,7 @@
 package com.squamed.core.scheduling.repository
 
 import com.squamed.core.scheduling.domain.Appointment
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -11,50 +12,61 @@ interface AppointmentRepository : JpaRepository<Appointment, UUID> {
   // 00.04 tenant sweep: unfiltered variant kept for cross-module system callers (patient360).
   fun findByPatientId(patientId: UUID): List<Appointment>
 
-  // 00.04 tenant sweep: null-safe hospital scope (U4) — admin callers pass null.
-  @Query("select a from Appointment a where (:hid is null or a.hospitalId = :hid) and a.patientId = :patientId")
-  fun findByPatientId(
-    @Param("hid") hospitalId: UUID?,
-    @Param("patientId") patientId: UUID,
-  ): List<Appointment>
-
-  // 00.04 tenant sweep: null-safe hospital scope (U4).
-  @Query("select a from Appointment a where (:hid is null or a.hospitalId = :hid) and a.doctorId = :doctorId")
-  fun findByDoctorId(
-    @Param("hid") hospitalId: UUID?,
-    @Param("doctorId") doctorId: UUID,
-  ): List<Appointment>
-
   fun findByIdAndHospitalId(
     id: UUID,
     hospitalId: UUID,
   ): Appointment?
-
-  // 00.04 tenant sweep: null-safe hospital scope (U4).
-  @Query("select a from Appointment a where (:hid is null or a.hospitalId = :hid) and a.status = :status")
-  fun findByStatus(
-    @Param("hid") hospitalId: UUID?,
-    @Param("status") status: String,
-  ): List<Appointment>
-
-  // 00.04 tenant sweep: null-safe hospital scope (U4).
-  @Query(
-    "select a from Appointment a where (:hid is null or a.hospitalId = :hid) and a.scheduledStart between :start and :end",
-  )
-  fun findByScheduledStartBetween(
-    @Param("hid") hospitalId: UUID?,
-    @Param("start") start: Instant,
-    @Param("end") end: Instant,
-  ): List<Appointment>
 
   fun countByPatientIdAndStatus(
     patientId: UUID,
     status: String,
   ): Long
 
-  // 00.04 tenant sweep: null-safe hospital scope (U4).
-  @Query("select a from Appointment a where (:hid is null or a.hospitalId = :hid) order by a.scheduledStart asc")
-  fun findAllByOrderByScheduledStartAsc(
+  // 01.01 no-show policy: patient no-shows inside the rolling policy window.
+  fun countByPatientIdAndStatusAndNoShowAtAfter(
+    patientId: UUID,
+    status: String,
+    noShowAt: Instant,
+  ): Long
+
+  /** 01.01 cursor page (00.02 style guide): keyset over (scheduledStart, id), hid-scoped, optional filters. */
+  @Query(
+    """
+    select a from Appointment a
+    where (:hid is null or a.hospitalId = :hid)
+      and (:patientId is null or a.patientId = :patientId)
+      and (:doctorId is null or a.doctorId = :doctorId)
+      and (:status is null or a.status = :status)
+      and (a.scheduledStart > :cursorAt or (a.scheduledStart = :cursorAt and a.id > :cursorId))
+    order by a.scheduledStart asc, a.id asc
+    """,
+  )
+  fun pageAfter(
     @Param("hid") hospitalId: UUID?,
+    @Param("patientId") patientId: UUID?,
+    @Param("doctorId") doctorId: UUID?,
+    @Param("status") status: String?,
+    @Param("cursorAt") cursorAt: Instant,
+    @Param("cursorId") cursorId: UUID,
+    pageable: Pageable,
+  ): List<Appointment>
+
+  // 01.01: first keyset page (cursor page start).
+  @Query(
+    """
+    select a from Appointment a
+    where (:hid is null or a.hospitalId = :hid)
+      and (:patientId is null or a.patientId = :patientId)
+      and (:doctorId is null or a.doctorId = :doctorId)
+      and (:status is null or a.status = :status)
+    order by a.scheduledStart asc, a.id asc
+    """,
+  )
+  fun pageFirst(
+    @Param("hid") hospitalId: UUID?,
+    @Param("patientId") patientId: UUID?,
+    @Param("doctorId") doctorId: UUID?,
+    @Param("status") status: String?,
+    pageable: Pageable,
   ): List<Appointment>
 }

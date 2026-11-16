@@ -9,6 +9,8 @@ import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.scheduling.domain.Appointment
 import com.squamed.core.scheduling.repository.AppointmentRepository
+import com.squamed.core.scheduling.service.SchedulingService
+import org.springframework.data.domain.PageRequest
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.time.Instant
+import java.util.Base64
 import java.util.UUID
 
 @RestController
@@ -31,6 +34,7 @@ class AppointmentController(
   private val appointmentRepository: AppointmentRepository,
   private val eventPublisher: DomainEventPublisher,
   private val tenantResolver: TenantResolver,
+  private val schedulingService: SchedulingService,
 ) {
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
@@ -40,6 +44,29 @@ class AppointmentController(
     @RequestBody dto: AppointmentCreateDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<AppointmentView> {
+    // 01.01 slot-based booking: guards (tenancy, past, no-show policy, overbook factor) live in
+    // SchedulingService.book, which also consumes the slot and publishes appointment.created.
+    if (dto.slotId != null) {
+      val slotId = dto.slotId
+      val appointment =
+        schedulingService.book(
+          principal,
+          slotId,
+          SchedulingService.BookingRequest(
+            patientId = dto.patientId ?: throw IllegalArgumentException("APPOINTMENT_PATIENT_REQUIRED"),
+            appointmentType = dto.appointmentType ?: throw IllegalArgumentException("APPOINTMENT_TYPE_REQUIRED"),
+            reason = dto.reason,
+            notes = dto.notes,
+            visitType = dto.visitType,
+            priority = dto.priority,
+            externalRef = dto.externalRef,
+            source = dto.source,
+            cancellationFee = dto.cancellationFee,
+          ),
+          overrideNoShowLimit = dto.overrideNoShowLimit ?: false,
+        )
+      return ApiResponse.ok(AppointmentView.from(appointment))
+    }
     val start = dto.scheduledStart ?: throw IllegalArgumentException("APPOINTMENT_START_REQUIRED")
     val end = dto.scheduledEnd ?: throw IllegalArgumentException("APPOINTMENT_END_REQUIRED")
     if (!end.isAfter(start)) throw IllegalArgumentException("APPOINTMENT_END_BEFORE_START")
@@ -81,6 +108,7 @@ class AppointmentController(
     return ApiResponse.ok(AppointmentView.from(appointment))
   }
 
+  /** 01.01: keyset-paginated list (00.02 style guide cursor mode). Opaque cursor = base64url "<scheduledStart>|<id>". */
   @GetMapping
   @RequiresPermission("scheduling:read:appointment")
   @Transactional(readOnly = true)
@@ -88,34 +116,43 @@ class AppointmentController(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
     @RequestParam(name = "doctorId", required = false) doctorId: UUID?,
     @RequestParam(name = "status", required = false) status: String?,
-    @RequestParam(name = "from", required = false) from: String?,
-    @RequestParam(name = "to", required = false) to: String?,
+    @RequestParam(name = "limit", defaultValue = "50") limit: Int,
+    @RequestParam(name = "cursor", required = false) cursor: String?,
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<List<AppointmentView>> {
     val hid = principal.hospitalId
-    val appointments =
-      when {
-        from != null && to != null -> {
-          appointmentRepository.findByScheduledStartBetween(hid, Instant.parse(from), Instant.parse(to))
-        }
-
-        patientId != null -> {
-          appointmentRepository.findByPatientId(hid, patientId)
-        }
-
-        doctorId != null -> {
-          appointmentRepository.findByDoctorId(hid, doctorId)
-        }
-
-        status != null -> {
-          appointmentRepository.findByStatus(hid, status)
-        }
-
-        else -> {
-          appointmentRepository.findAllByOrderByScheduledStartAsc(hid)
-        }
+    val effectiveLimit = if (limit in 1..500) limit else 50
+    val pageRequest = PageRequest.of(0, effectiveLimit + 1)
+    val decoded = decodeCursor(cursor)
+    val rows =
+      if (decoded != null) {
+        appointmentRepository.pageAfter(hid, patientId, doctorId, status, decoded.first, decoded.second, pageRequest)
+      } else {
+        appointmentRepository.pageFirst(hid, patientId, doctorId, status, pageRequest)
       }
-    return ApiResponse.ok(appointments.map { AppointmentView.from(it) })
+    val hasNext = rows.size > effectiveLimit
+    val page = if (hasNext) rows.take(effectiveLimit) else rows
+    val last = page.lastOrNull()
+    val nextCursor =
+      if (hasNext && last != null) {
+        Base64.getUrlEncoder().withoutPadding().encodeToString("${last.scheduledStart}|${last.id}".toByteArray())
+      } else {
+        null
+      }
+    val meta =
+      buildMap {
+        put("limit", effectiveLimit)
+        if (nextCursor != null) put("nextCursor", nextCursor)
+      }
+    return ApiResponse.ok(page.map { AppointmentView.from(it) }, meta)
+  }
+
+  private fun decodeCursor(cursor: String?): Pair<Instant, UUID>? {
+    if (cursor == null) return null
+    val raw = String(Base64.getUrlDecoder().decode(cursor))
+    val separator = raw.indexOf('|')
+    require(separator > 0) { "INVALID_CURSOR" }
+    return Instant.parse(raw.substring(0, separator)) to UUID.fromString(raw.substring(separator + 1))
   }
 
   @PutMapping("/{id}")
@@ -180,6 +217,8 @@ class AppointmentController(
         appointment.status = status
         appointment.cancelledAt = now
         appointment.cancelledReason = dto.cancelledReason
+        // 01.01: cancelling a slot booking releases the slot (bookedCount--) + publishes appointment.cancelled.
+        schedulingService.releaseOnCancel(appointment)
       }
 
       "completed" -> {
@@ -190,6 +229,8 @@ class AppointmentController(
       "no-show" -> {
         appointment.status = status
         appointment.noShowAt = now
+        // 01.01: no-show tracked per slot (noShowCount) for the waitlist/overbook reporting.
+        schedulingService.markNoShow(appointment)
       }
 
       else -> {
@@ -210,5 +251,21 @@ class AppointmentController(
       ),
     )
     return ApiResponse.ok(AppointmentView.from(appointment))
+  }
+
+  /** 01.01: move an appointment to a different session slot (release old, consume new, same guards). */
+  @PostMapping("/{id}/reschedule")
+  @RequiresPermission("scheduling:write:appointment")
+  @Transactional
+  fun rescheduleAppointment(
+    @PathVariable id: UUID,
+    @RequestBody dto: RescheduleDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AppointmentView> {
+    val appointment = appointmentRepository.findById(id).orElseThrow { IllegalArgumentException("APPOINTMENT_NOT_FOUND") }
+    requireSameHospital(principal, appointment.hospitalId)
+    val slotId = dto.slotId ?: throw IllegalArgumentException("SCHEDULE_SLOT_REQUIRED")
+    val rescheduled = schedulingService.reschedule(principal, appointment, slotId)
+    return ApiResponse.ok(AppointmentView.from(rescheduled))
   }
 }

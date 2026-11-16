@@ -24,6 +24,10 @@ data class AppointmentCreateDto(
   val externalRef: String? = null,
   val source: String? = null,
   val cancellationFee: BigDecimal? = null,
+  // 01.01: slot-based booking; null = legacy direct-time booking (chunk-0 compat)
+  val slotId: UUID? = null,
+  // 01.01: book past the no-show policy limit; requires scheduling:override:booking
+  val overrideNoShowLimit: Boolean? = null,
 )
 
 data class AppointmentUpdateDto(
@@ -60,6 +64,8 @@ data class AppointmentView(
   val visitType: String?,
   val telemedicine: Boolean?,
   val roomId: UUID?,
+  val slotId: UUID?,
+  val source: String?,
   val createdAt: Instant?,
   val updatedAt: Instant?,
 ) {
@@ -78,6 +84,8 @@ data class AppointmentView(
         visitType = entity.visitType,
         telemedicine = entity.telemedicine,
         roomId = entity.roomId,
+        slotId = entity.slotId,
+        source = entity.source,
         createdAt = entity.createdAt,
         updatedAt = entity.updatedAt,
       )

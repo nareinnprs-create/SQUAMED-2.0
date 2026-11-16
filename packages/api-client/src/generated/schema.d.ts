@@ -20,6 +20,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/schedules/templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateTemplate"];
+        post?: never;
+        delete: operations["deactivateTemplate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pharmacy/stock/{id}": {
         parameters: {
             query?: never;
@@ -766,6 +782,54 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["transcribeAudio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schedules/waitlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["waitlist"];
+        put?: never;
+        post: operations["addToWaitlist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schedules/waitlist/{id}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["promoteWaitlistEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schedules/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listTemplates"];
+        put?: never;
+        post: operations["createTemplate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2404,6 +2468,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/appointments/{id}/reschedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rescheduleAppointment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/anaesthesia/records": {
         parameters: {
             query?: never;
@@ -3492,6 +3572,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/schedules/{doctorId}/slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["slots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reception/visits/{id}": {
         parameters: {
             query?: never;
@@ -4500,6 +4596,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/schedules/waitlist/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["cancelWaitlistEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/patients/{id}/relationships/{relationshipId}": {
         parameters: {
             query?: never;
@@ -4670,6 +4782,66 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        ScheduleTemplateUpdateDto: {
+            /** Format: int32 */
+            slotMinutes?: number;
+            /** Format: int32 */
+            capacity?: number;
+            /** Format: uuid */
+            roomId?: string;
+            equipmentIds?: string[];
+            /** Format: date */
+            validFrom?: string;
+            /** Format: date */
+            validTo?: string;
+            active?: boolean;
+        };
+        ApiResponseScheduleTemplateView: {
+            data?: components["schemas"]["ScheduleTemplateView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        LocalTime: {
+            /** Format: int32 */
+            hour?: number;
+            /** Format: int32 */
+            minute?: number;
+            /** Format: int32 */
+            second?: number;
+            /** Format: int32 */
+            nano?: number;
+        };
+        ScheduleTemplateView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
+            doctorId: string;
+            /** Format: uuid */
+            departmentId?: string;
+            sessionType: string;
+            /** Format: int32 */
+            weekday: number;
+            startTime: components["schemas"]["LocalTime"];
+            endTime: components["schemas"]["LocalTime"];
+            /** Format: int32 */
+            slotMinutes: number;
+            /** Format: int32 */
+            capacity: number;
+            /** Format: uuid */
+            roomId?: string;
+            equipmentIds?: string[];
+            /** Format: date */
+            validFrom?: string;
+            /** Format: date */
+            validTo?: string;
+            active: boolean;
+            /** Format: date-time */
+            createdAt?: string;
         };
         StockUpdateDto: {
             /** Format: uuid */
@@ -5316,6 +5488,9 @@ export interface components {
             telemedicine?: boolean;
             /** Format: uuid */
             roomId?: string;
+            /** Format: uuid */
+            slotId?: string;
+            source?: string;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -5770,6 +5945,74 @@ export interface components {
         };
         ScribeDraftRequest: {
             draft: string;
+        };
+        WaitlistCreateDto: {
+            /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
+            patientId?: string;
+            /** Format: uuid */
+            doctorId?: string;
+            /** Format: uuid */
+            departmentId?: string;
+            priority?: string;
+            /** Format: date */
+            desiredDate?: string;
+            notes?: string;
+        };
+        ApiResponseWaitlistView: {
+            data?: components["schemas"]["WaitlistView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        WaitlistView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            doctorId?: string;
+            /** Format: uuid */
+            departmentId?: string;
+            priority: string;
+            /** Format: date */
+            desiredDate?: string;
+            status: string;
+            /** Format: uuid */
+            bookedAppointmentId?: string;
+            notes?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        WaitlistPromoteDto: {
+            /** Format: uuid */
+            slotId?: string;
+        };
+        ScheduleTemplateCreateDto: {
+            /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
+            doctorId?: string;
+            /** Format: uuid */
+            departmentId?: string;
+            sessionType?: string;
+            /** Format: int32 */
+            weekday?: number;
+            startTime?: components["schemas"]["LocalTime"];
+            endTime?: components["schemas"]["LocalTime"];
+            /** Format: int32 */
+            slotMinutes?: number;
+            /** Format: int32 */
+            capacity?: number;
+            /** Format: uuid */
+            roomId?: string;
+            equipmentIds?: string[];
+            /** Format: date */
+            validFrom?: string;
+            /** Format: date */
+            validTo?: string;
         };
         VisitCreateDto: {
             /** Format: uuid */
@@ -8089,6 +8332,13 @@ export interface components {
             externalRef?: string;
             source?: string;
             cancellationFee?: number;
+            /** Format: uuid */
+            slotId?: string;
+            overrideNoShowLimit?: boolean;
+        };
+        RescheduleDto: {
+            /** Format: uuid */
+            slotId?: string;
         };
         AnaesthesiaRecordCreateDto: {
             /** Format: uuid */
@@ -8720,6 +8970,51 @@ export interface components {
             data?: {
                 [key: string]: unknown;
             }[];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListSlotView: {
+            data?: components["schemas"]["SlotView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        SlotView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            templateId?: string;
+            /** Format: uuid */
+            doctorId: string;
+            /** Format: uuid */
+            departmentId?: string;
+            sessionType: string;
+            /** Format: uuid */
+            roomId?: string;
+            /** Format: date */
+            slotDate: string;
+            startTime: components["schemas"]["LocalTime"];
+            endTime: components["schemas"]["LocalTime"];
+            /** Format: int32 */
+            capacity: number;
+            /** Format: int32 */
+            bookedCount: number;
+            /** Format: int32 */
+            noShowCount: number;
+            status: string;
+        };
+        ApiResponseListWaitlistView: {
+            data?: components["schemas"]["WaitlistView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListScheduleTemplateView: {
+            data?: components["schemas"]["ScheduleTemplateView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -9770,6 +10065,54 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseTaskView"];
+                };
+            };
+        };
+    };
+    updateTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduleTemplateUpdateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseScheduleTemplateView"];
+                };
+            };
+        };
+    };
+    deactivateTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseScheduleTemplateView"];
                 };
             };
         };
@@ -11375,6 +11718,124 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    waitlist: {
+        parameters: {
+            query?: {
+                doctorId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListWaitlistView"];
+                };
+            };
+        };
+    };
+    addToWaitlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WaitlistCreateDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseWaitlistView"];
+                };
+            };
+        };
+    };
+    promoteWaitlistEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WaitlistPromoteDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAppointmentView"];
+                };
+            };
+        };
+    };
+    listTemplates: {
+        parameters: {
+            query?: {
+                doctorId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListScheduleTemplateView"];
+                };
+            };
+        };
+    };
+    createTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduleTemplateCreateDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseScheduleTemplateView"];
                 };
             };
         };
@@ -15279,8 +15740,8 @@ export interface operations {
                 patientId?: string;
                 doctorId?: string;
                 status?: string;
-                from?: string;
-                to?: string;
+                limit?: number;
+                cursor?: string;
             };
             header?: never;
             path?: never;
@@ -15314,6 +15775,32 @@ export interface operations {
         responses: {
             /** @description Created */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAppointmentView"];
+                };
+            };
+        };
+    };
+    rescheduleAppointment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RescheduleDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -17227,6 +17714,31 @@ export interface operations {
             };
         };
     };
+    slots: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path: {
+                doctorId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListSlotView"];
+                };
+            };
+        };
+    };
     getVisit: {
         parameters: {
             query?: never;
@@ -18569,6 +19081,28 @@ export interface operations {
             };
         };
     };
+    cancelWaitlistEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseWaitlistView"];
+                };
+            };
+        };
+    };
     deleteRelationship: {
         parameters: {
             query?: never;
@@ -18729,4 +19263,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 23e182524374ee6235ab78f0fefcd1c999b04195c21627d0f1dfa040e76ed288
+// openapi snapshot sha256: aff1a71e69d3fc5c6c8465a1d0c5734a828e158e03f2c50186d398ad32efcbb7

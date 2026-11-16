@@ -1763,19 +1763,15 @@ class PlatformIntegrationTests {
       )
       assert2xx(api(HttpMethod.GET, "/api/v1/analytics/patients", token = admin), "U2: analytics allowed for platform admin")
 
-      // U4/D2 + U10 + U20: scheduling, queue, and scribe endpoints are SYSTEM_ADMIN-gated by pre-existing
-      // RBAC (no hospital-bound role holds those permissions), so hospital-bound users are denied outright.
-      // Cross-tenant by-id guards in these domains are therefore unreachable via API under current RBAC;
-      // they are covered at service level (TenantGuards.requireSameHospital wiring + hid-first repo tests).
-      assertEquals(
-        403,
-        api(HttpMethod.GET, "/api/v1/appointments", token = doc1).status,
-        "U4: appointment list must be denied for hospital-bound user",
-      )
+      // U4/D2 + U10 + U20: since V54 (01.01), hospital-bound roles hold scheduling READ, so the
+      // appointment list is allowed (hid-scoped by the interceptor + hid-first repo); writes stay
+      // admin/reception-only. Cross-tenant by-id guards in these domains are covered at service
+      // level (TenantGuards.requireSameHospital wiring + hid-first repo tests).
+      assert2xx(api(HttpMethod.GET, "/api/v1/appointments", token = doc1), "U4: appointment list allowed for hospital-bound user (V54 scheduling read)")
       assertEquals(
         403,
         api(HttpMethod.POST, "/api/v1/appointments", json("x" to 1), doc2).status,
-        "U4/D2: appointment create must be denied for hospital-bound user",
+        "U4/D2: appointment create must be denied for hospital-bound doctor",
       )
       assert2xx(api(HttpMethod.GET, "/api/v1/appointments", token = admin), "U4: appointment list allowed for platform admin")
 
@@ -4999,9 +4995,10 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types, emitted/planned; audit.chain_broken from 00.10).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* additions (17 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
-      assertEquals(13, catalog.size(), "event catalog lists the v1 set: $catalog")
+      assertEquals(17, catalog.size(), "event catalog lists the v1 set + 01.01 appointment events: $catalog")
+      assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "NotificationDispatched" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "AuditChainBroken" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "TaskEscalated" && it["status"].asText() == "EMITTED" })
@@ -5619,9 +5616,9 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* now EMITTED in the 13-type v1 set.
+      // Catalog: consent.* EMITTED in the 17-type v1 set (13 chunk-00 + 4 appointment.* from 01.01).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
-      assertEquals(13, catalog.size(), "event catalog lists the v1 set: $catalog")
+      assertEquals(17, catalog.size(), "event catalog lists the v1 set: $catalog")
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")
     }
@@ -7603,6 +7600,449 @@ class PlatformIntegrationTests {
           .substringAfterLast(" ")
           .toDouble()
       assertEquals(b0, afterRestore, "breach gauge returns to baseline after restore: b0=$b0 after=$afterRestore")
+    }
+  }
+
+  /** 01.01: scheduling engine PIT — template → slot generation → booking lifecycle, policy, waitlist, cursor list. */
+  @Nested
+  inner class SchedulingEngineTests {
+    private fun registerRoleUser(
+      role: String,
+      hospitalId: String,
+      s: String,
+      tag: String = role,
+    ): String {
+      val email = "sched-${tag.lowercase()}-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Sched",
+            "lastName" to "$role$s",
+            "roles" to listOf(role),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register $role $email",
+      )
+      return email
+    }
+
+    private fun login(email: String): String {
+      val login = api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123"))
+      assert2xx(login, "login $email: ${login.body.take(200)}")
+      return `data`(login)["accessToken"].asText()
+    }
+
+    /** Admin creates the patient with an explicit hospitalId (admin is not hospital-bound). */
+    private fun patientIn(
+      admin: String,
+      hospitalId: String,
+      tag: String,
+      s: String,
+    ): String =
+      `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json(
+            "firstName" to "Sched",
+            "lastName" to "$tag$s",
+            "gender" to "female",
+            "dateOfBirth" to "1990-02-02",
+            "hospitalId" to hospitalId,
+          ),
+          admin,
+        ),
+      )["patient"]["id"].asText()
+
+    private fun slotsOfDay(
+      token: String,
+      doctorId: String,
+      day: LocalDate,
+    ): ApiResp = api(HttpMethod.GET, "/api/v1/schedules/$doctorId/slots?from=$day&to=$day", token = token)
+
+    @Test
+    fun schedulingEngineBookingLifecycle() {
+      val admin = adminToken()
+      val adminId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = admin))["userId"].asText()
+      val s = suffix()
+      // Fresh hospital per run: slot keys (hospital, doctor, date, start) are unique, and leftover
+      // slots from earlier runs in the shared seed hospital would shadow a new template's slots.
+      val hid =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Sched L $s", "code" to "SCL-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val rec = login(registerRoleUser("RECEPTIONIST", hid, s))
+      val day = LocalDate.now().plusDays(3)
+
+      // Template validation errors surface as 400 with the guard code (house mapping).
+      val badWeekday =
+        api(
+          HttpMethod.POST,
+          "/api/v1/schedules/templates",
+          json("hospitalId" to hid, "doctorId" to adminId, "weekday" to 0, "startTime" to "09:00", "endTime" to "10:00"),
+          admin,
+        )
+      assertEquals(400, badWeekday.status, "weekday 0 rejected")
+      assertTrue(badWeekday.body.contains("SCHEDULE_WEEKDAY_INVALID"), "weekday guard code: ${badWeekday.body.take(200)}")
+      val badEnd =
+        api(
+          HttpMethod.POST,
+          "/api/v1/schedules/templates",
+          json("hospitalId" to hid, "doctorId" to adminId, "weekday" to 1, "startTime" to "10:00", "endTime" to "09:00"),
+          admin,
+        )
+      assertEquals(400, badEnd.status, "end before start rejected")
+      assertTrue(badEnd.body.contains("SCHEDULE_END_BEFORE_START"), "end guard code: ${badEnd.body.take(200)}")
+
+      // Template for the weekday of now+3 → two 30-min in_person slots (09:00, 09:30).
+      val template =
+        api(
+          HttpMethod.POST,
+          "/api/v1/schedules/templates",
+          json(
+            "hospitalId" to hid,
+            "doctorId" to adminId,
+            "weekday" to day.dayOfWeek.value,
+            "sessionType" to "in_person",
+            "startTime" to "09:00",
+            "endTime" to "10:00",
+            "slotMinutes" to 30,
+            "capacity" to 1,
+          ),
+          admin,
+        )
+      assert2xx(template, "create template: ${template.body.take(300)}")
+      val templateId = `data`(template)["id"].asText()
+
+      fun mySlots(r: ApiResp): List<JsonNode> = `data`(r).filter { it["templateId"].asText() == templateId }
+
+      val first = slotsOfDay(rec, adminId, day)
+      assert2xx(first, "slots page 1")
+      val slots = mySlots(first)
+      assertEquals(2, slots.size, "30-min template yields two slots: ${`data`(first)}")
+      assertEquals("09:00:00", slots[0]["startTime"].asText())
+      assertEquals("09:30:00", slots[1]["startTime"].asText())
+      assertEquals("10:00:00", slots[1]["endTime"].asText())
+      assertEquals("open", slots[0]["status"].asText())
+      val slot0 = slots[0]["id"].asText()
+      val slot1 = slots[1]["id"].asText()
+
+      // Slot generation is idempotent: the second call returns the same rows.
+      val second = slotsOfDay(rec, adminId, day)
+      assert2xx(second, "slots regeneration")
+      val again = mySlots(second)
+      assertEquals(listOf(slot0, slot1), again.map { it["id"].asText() }, "repeated generation returns identical slot ids")
+
+      val patient = patientIn(admin, hid, "Life", s)
+
+      fun book(slotId: String): ApiResp =
+        api(
+          HttpMethod.POST,
+          "/api/v1/appointments",
+          json(
+            "slotId" to slotId,
+            "patientId" to patient,
+            "appointmentType" to "OPD",
+            "reason" to "engine lifecycle",
+            "priority" to "routine",
+            "visitType" to "outpatient",
+          ),
+          rec,
+        )
+
+      val b1 = book(slot0)
+      assertEquals(201, b1.status, "book slot 0: ${b1.body.take(300)}")
+      val appt1 = `data`(b1)
+      assertEquals(slot0, appt1["slotId"].asText(), "booking carries the slot id")
+      assertEquals(adminId, appt1["doctorId"].asText(), "doctor derives from the slot")
+      assertEquals(false, appt1["telemedicine"].asBoolean(), "in_person slot books non-telemedicine")
+      assertEquals("${day}T09:00:00Z", appt1["scheduledStart"].asText(), "start is the slot time as a UTC instant")
+      assertEquals("${day}T09:30:00Z", appt1["scheduledEnd"].asText(), "end derives from slotMinutes")
+
+      val full = book(slot0)
+      assertEquals(400, full.status, "second booking on a full slot rejected")
+      assertTrue(full.body.contains("SCHEDULE_SLOT_FULL"), "capacity guard code: ${full.body.take(200)}")
+
+      // Cancel releases the slot; the freed slot can be booked again.
+      val appt1Id = appt1["id"].asText()
+      assert2xx(
+        api(HttpMethod.PATCH, "/api/v1/appointments/$appt1Id/status", json("status" to "cancelled", "cancelledReason" to "engine"), rec),
+        "cancel booking",
+      )
+      val released = mySlots(slotsOfDay(rec, adminId, day))
+      assertEquals(0, released[0]["bookedCount"].asInt(), "cancel releases the slot count")
+
+      val b2 = book(slot0)
+      assertEquals(201, b2.status, "rebook the released slot: ${b2.body.take(300)}")
+      val appt2Id = `data`(b2)["id"].asText()
+
+      // Reschedule moves the booking to slot 1 (release old + consume new).
+      val rescheduled = api(HttpMethod.POST, "/api/v1/appointments/$appt2Id/reschedule", json("slotId" to slot1), rec)
+      assert2xx(rescheduled, "reschedule to slot 1: ${rescheduled.body.take(300)}")
+      assertEquals(slot1, `data`(rescheduled)["slotId"].asText(), "reschedule carries the new slot")
+      assertEquals("${day}T09:30:00Z", `data`(rescheduled)["scheduledStart"].asText(), "reschedule adopts the new slot time")
+      val moved = mySlots(slotsOfDay(rec, adminId, day))
+      assertEquals(0, moved[0]["bookedCount"].asInt(), "old slot released on reschedule")
+      assertEquals(1, moved[1]["bookedCount"].asInt(), "new slot consumed on reschedule")
+
+      // No-show tracks the slot's noShowCount without changing the booking count.
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/appointments/$appt2Id/status", json("status" to "no-show"), rec), "mark no-show")
+      val afterNoShow = mySlots(slotsOfDay(rec, adminId, day))
+      assertEquals(1, afterNoShow[1]["noShowCount"].asInt(), "no-show increments the slot counter")
+      assertEquals(1, afterNoShow[1]["bookedCount"].asInt(), "no-show keeps the booking count")
+
+      // Deactivation rides DELETE (update active=false); the template stays listed for history.
+      assert2xx(api(HttpMethod.DELETE, "/api/v1/schedules/templates/$templateId", token = admin), "deactivate template")
+      val listed = `data`(api(HttpMethod.GET, "/api/v1/schedules/templates?doctorId=$adminId", token = rec))
+      val row = listed.first { it["id"].asText() == templateId }
+      assertEquals(false, row["active"].asBoolean(), "deactivated template stays listed with active=false")
+    }
+
+    @Test
+    fun schedulingPolicyOverbookNoshowRbacTenant() {
+      val admin = adminToken()
+      val adminId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = admin))["userId"].asText()
+      val s = suffix()
+      val h =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Sched H $s", "code" to "SCH-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val hForeign =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Sched F $s", "code" to "SCF-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val rec = login(registerRoleUser("RECEPTIONIST", h, s))
+      val doc = login(registerRoleUser("DOCTOR", h, s))
+      val foreign = login(registerRoleUser("RECEPTIONIST", hForeign, s, tag = "foreign"))
+
+      // Policy doc drives the overbook ceiling + no-show window/limit (defaults otherwise).
+      assert2xx(
+        api(
+          HttpMethod.PUT,
+          "/api/v1/hospital-config/hospitals/$h/config/scheduling",
+          json("overbookFactor" to 2.0, "noShowWindowDays" to 30, "noShowLimit" to 1),
+          admin,
+        ),
+        "publish scheduling config",
+      )
+
+      val day = LocalDate.now().plusDays(3)
+      // Reception owns template management (V54 grant); a 2-hour 60-min session → two slots.
+      val template =
+        api(
+          HttpMethod.POST,
+          "/api/v1/schedules/templates",
+          json("doctorId" to adminId, "weekday" to day.dayOfWeek.value, "startTime" to "09:00", "endTime" to "11:00", "slotMinutes" to 60, "capacity" to 1),
+          rec,
+        )
+      assert2xx(template, "receptionist creates template: ${template.body.take(300)}")
+
+      val slots = `data`(slotsOfDay(rec, adminId, day))
+      assertEquals(2, slots.size(), "fresh tenant yields exactly two slots: $slots")
+      val slotA = slots[0]["id"].asText()
+      val slotB = slots[1]["id"].asText()
+
+      val pA = patientIn(admin, h, "A", s)
+      val pB = patientIn(admin, h, "B", s)
+      val pC = patientIn(admin, h, "C", s)
+
+      fun book(
+        token: String,
+        slotId: String,
+        patientId: String,
+        overrideNoShow: Boolean = false,
+      ): ApiResp =
+        api(
+          HttpMethod.POST,
+          "/api/v1/appointments",
+          json(
+            "slotId" to slotId,
+            "patientId" to patientId,
+            "appointmentType" to "OPD",
+            "overrideNoShowLimit" to overrideNoShow,
+          ),
+          token,
+        )
+
+      // Overbook factor 2.0 on capacity 1 → ceil(2) = 2 concurrent bookings, the third rejected.
+      assertEquals(201, book(rec, slotA, pA).status, "first booking on slot A")
+      assertEquals(201, book(rec, slotA, pB).status, "overbook allows the second booking")
+      val third = book(rec, slotA, pC)
+      assertEquals(400, third.status, "overbook ceiling rejects the third booking")
+      assertTrue(third.body.contains("SCHEDULE_SLOT_FULL"), "capacity guard code: ${third.body.take(200)}")
+
+      // No-show policy: window counts 1 >= limit 1 → rebooking the same patient is denied; override wins.
+      val c1 = book(rec, slotB, pA)
+      assertEquals(201, c1.status, "first booking on slot B")
+      val c1Id = `data`(c1)["id"].asText()
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/appointments/$c1Id/status", json("status" to "no-show"), rec), "mark slot B no-show")
+      val rebook = book(rec, slotB, pA)
+      assertEquals(400, rebook.status, "no-show limit denies the rebooking before capacity is even consulted")
+      assertTrue(rebook.body.contains("SCHEDULE_NOSHOW_LIMIT"), "no-show guard code: ${rebook.body.take(200)}")
+      assertEquals(201, book(rec, slotB, pA, overrideNoShow = true).status, "override books past the no-show limit")
+
+      // RBAC: doctors read schedules but cannot write templates or book; foreign hospital is denied.
+      assert2xx(api(HttpMethod.GET, "/api/v1/schedules/templates?doctorId=$adminId", token = doc), "doctor reads schedules")
+      assertEquals(
+        403,
+        api(
+          HttpMethod.POST,
+          "/api/v1/schedules/templates",
+          json("doctorId" to adminId, "weekday" to 1, "startTime" to "09:00", "endTime" to "10:00"),
+          doc,
+        ).status,
+        "doctor template write denied",
+      )
+      assertEquals(403, book(doc, slotA, pB).status, "doctor booking denied")
+      val crossTenant = book(foreign, slotA, pB)
+      assertEquals(403, crossTenant.status, "cross-tenant booking denied")
+      assertTrue(crossTenant.body.contains("TENANT_FORBIDDEN"), "tenant guard message: ${crossTenant.body.take(200)}")
+    }
+
+    @Test
+    fun schedulingWaitlistTeleconsultCursorAudit() {
+      val admin = adminToken()
+      val adminId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = admin))["userId"].asText()
+      val s = suffix()
+      val h =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Sched W $s", "code" to "SCW-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val rec = login(registerRoleUser("RECEPTIONIST", h, s))
+
+      // Teleconsult session: booking inherits telemedicine from the slot's session type.
+      val dayT = LocalDate.now().plusDays(4)
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/schedules/templates",
+          json(
+            "doctorId" to adminId,
+            "weekday" to dayT.dayOfWeek.value,
+            "sessionType" to "teleconsult",
+            "startTime" to "14:00",
+            "endTime" to "14:30",
+            "slotMinutes" to 30,
+            "capacity" to 1,
+          ),
+          rec,
+        ),
+        "teleconsult template",
+      )
+      val teleSlots = `data`(slotsOfDay(rec, adminId, dayT))
+      assertEquals(1, teleSlots.size(), "teleconsult template yields one slot: $teleSlots")
+      val teleSlot = teleSlots[0]["id"].asText()
+      val pT = patientIn(admin, h, "Tele", s)
+      val teleBook = api(HttpMethod.POST, "/api/v1/appointments", json("slotId" to teleSlot, "patientId" to pT, "appointmentType" to "OPD"), rec)
+      assertEquals(201, teleBook.status, "book teleconsult slot: ${teleBook.body.take(300)}")
+      assertEquals(true, `data`(teleBook)["telemedicine"].asBoolean(), "teleconsult slot books a telemedicine appointment")
+
+      // Waitlist fairness: urgent heads the queue regardless of creation order.
+      val urgent = `data`(api(HttpMethod.POST, "/api/v1/schedules/waitlist", json("patientId" to pT, "priority" to "urgent"), rec))
+      val routine = `data`(api(HttpMethod.POST, "/api/v1/schedules/waitlist", json("patientId" to pT, "priority" to "routine"), rec))
+      val waiting = `data`(api(HttpMethod.GET, "/api/v1/schedules/waitlist", token = rec))
+      assertEquals(2, waiting.size(), "two waiting entries: $waiting")
+      assertEquals(urgent["id"].asText(), waiting[0]["id"].asText(), "urgent entry heads the queue")
+      assertEquals("waiting", waiting[0]["status"].asText())
+
+      // Promote into a concrete slot; the promoted entry leaves the waiting queue.
+      val dayP = LocalDate.now().plusDays(5)
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/schedules/templates",
+          json("doctorId" to adminId, "weekday" to dayP.dayOfWeek.value, "startTime" to "15:00", "endTime" to "16:00", "slotMinutes" to 30, "capacity" to 1),
+          rec,
+        ),
+        "promote target template",
+      )
+      val promoteSlot = `data`(slotsOfDay(rec, adminId, dayP))[0]["id"].asText()
+      val promoted = api(HttpMethod.POST, "/api/v1/schedules/waitlist/${urgent["id"].asText()}/promote", json("slotId" to promoteSlot), rec)
+      assertEquals(201, promoted.status, "promote urgent entry: ${promoted.body.take(300)}")
+      assertEquals(pT, `data`(promoted)["patientId"].asText(), "promoted booking belongs to the waitlisted patient")
+      assertEquals(
+        listOf(routine["id"].asText()),
+        `data`(api(HttpMethod.GET, "/api/v1/schedules/waitlist", token = rec)).map { it["id"].asText() },
+        "promoted entry leaves the waiting queue",
+      )
+      val rePromote = api(HttpMethod.POST, "/api/v1/schedules/waitlist/${urgent["id"].asText()}/promote", json("slotId" to promoteSlot), rec)
+      assertEquals(400, rePromote.status, "double promote rejected")
+      assertTrue(rePromote.body.contains("WAITLIST_ENTRY_NOT_WAITING"), "waitlist guard code: ${rePromote.body.take(200)}")
+
+      assert2xx(api(HttpMethod.DELETE, "/api/v1/schedules/waitlist/${routine["id"].asText()}", token = rec), "cancel routine entry")
+      assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/schedules/waitlist", token = rec)).size(), "cancelled entry leaves the queue")
+
+      // Legacy (no slot) creations feed the keyset-paginated list: ascending order + opaque cursor.
+      val pC = patientIn(admin, h, "Cursor", s)
+      val created = mutableListOf<String>()
+      repeat(3) { i ->
+        val d = LocalDate.now().plusDays(i + 1L)
+        val r =
+          api(
+            HttpMethod.POST,
+            "/api/v1/appointments",
+            json(
+              "patientId" to pC,
+              "doctorId" to adminId,
+              "appointmentType" to "OPD",
+              "scheduledStart" to "${d}T12:00:00Z",
+              "scheduledEnd" to "${d}T12:15:00Z",
+              "durationMinutes" to 15,
+            ),
+            rec,
+          )
+        assertEquals(201, r.status, "legacy appointment $i: ${r.body.take(300)}")
+        created += `data`(r)["id"].asText()
+      }
+
+      fun fetch(cursor: String?): ApiResp {
+        val q = if (cursor == null) "" else "&cursor=$cursor"
+        return api(HttpMethod.GET, "/api/v1/appointments?patientId=$pC&limit=2$q", token = rec)
+      }
+
+      val page1 = fetch(null)
+      assert2xx(page1, "appointments page 1")
+      val ids1 = `data`(page1).map { it["id"].asText() }
+      assertEquals(listOf(created[0], created[1]), ids1, "limit=2 yields the two earliest rows ascending")
+      val starts1 = `data`(page1).map { Instant.parse(it["scheduledStart"].asText()) }
+      assertTrue(starts1[0].isBefore(starts1[1]), "rows ascend by scheduledStart")
+      val cursor = om.readTree(page1.body)["meta"]["nextCursor"].asText()
+      assertTrue(cursor.isNotBlank(), "full page carries nextCursor")
+
+      val page2 = fetch(cursor)
+      assert2xx(page2, "appointments page 2")
+      val ids2 = `data`(page2).map { it["id"].asText() }
+      assertEquals(listOf(created[2]), ids2, "continuation returns the remaining row")
+      assertFalse(om.readTree(page2.body)["meta"].has("nextCursor"), "last page has no nextCursor")
+      assertTrue(ids1.toSet().intersect(ids2.toSet()).isEmpty(), "no id repeats across pages")
+
+      val bad =
+        fetch(
+          java.util.Base64
+            .getUrlEncoder()
+            .withoutPadding()
+            .encodeToString("nonsense".toByteArray()),
+        )
+      assertEquals(400, bad.status, "malformed cursor rejected")
+      assertTrue(bad.body.contains("INVALID_CURSOR"), "cursor guard code: ${bad.body.take(200)}")
+
+      assert2xx(
+        api(HttpMethod.PATCH, "/api/v1/appointments/${created[0]}/status", json("status" to "cancelled", "cancelledReason" to "cursor test"), rec),
+        "cancel one appointment",
+      )
+      val cancelled = api(HttpMethod.GET, "/api/v1/appointments?patientId=$pC&status=cancelled&limit=50", token = rec)
+      assert2xx(cancelled, "appointments filtered by status")
+      assertEquals(listOf(created[0]), `data`(cancelled).map { it["id"].asText() }, "status filter returns exactly the cancelled row")
+
+      // Audit: the PATCH write is recorded and queryable by entity id (00.02 semantics).
+      val audit = api(HttpMethod.GET, "/api/v1/audit/logs?entityId=${created[0]}&limit=10", token = admin)
+      assert2xx(audit, "audit logs for the cancelled appointment")
+      assertTrue(`data`(audit).size() >= 1, "status change audited: ${audit.body.take(300)}")
     }
   }
 }

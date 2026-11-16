@@ -71,6 +71,10 @@ const catalogs: Record<Locale, Record<string, string>> = {
     'offlinebanner.description': 'Showing the last synced data. Changes will queue until the connection returns.',
     'offlinebanner.retry': 'Retry',
     'errorstate.retry': 'Try again',
+    'appointments.slot.label': 'Available slots',
+    'appointments.slot.loading': 'Loading slots...',
+    'appointments.slot.empty': 'No open slots for this date',
+    'appointments.slot.full': 'Full',
   },
   hi: {
     'datagrid.empty': 'कोई डेटा नहीं',
@@ -123,6 +127,10 @@ const catalogs: Record<Locale, Record<string, string>> = {
     'offlinebanner.description': 'पिछला सिंक किया डेटा दिख रहा है। कनेक्शन लौटने तक बदलाव कतार में रहेंगे।',
     'offlinebanner.retry': 'पुनः प्रयास',
     'errorstate.retry': 'फिर से कोशिश करें',
+    'appointments.slot.label': 'उपलब्ध समय',
+    'appointments.slot.loading': 'समय लोड हो रहे हैं...',
+    'appointments.slot.empty': 'इस तारीख़ के लिए कोई समय उपलब्ध नहीं',
+    'appointments.slot.full': 'भरा हुआ',
   },
 };
 

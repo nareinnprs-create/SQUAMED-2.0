@@ -7,18 +7,31 @@ import {
   Button,
   Card,
   CardContent,
+  ContextSpine,
   DataGrid,
   type DataGridColumn,
+  DualConfirm,
+  EmptyState,
+  ErrorState,
   Field,
   Input,
   I18nProvider,
+  LabResultRow,
+  MedOrderLine,
+  OfflineBanner,
   PriorityIndicator,
+  RangeBar,
   Select,
+  StatusChip,
+  StatusDot,
   StatusIndicator,
   TaskCard,
+  VitalChip,
   type Locale,
   type PriorityLevel,
   type StatusTone,
+  TriangleIcon,
+  TrendUpIcon,
 } from '@squamed/ui';
 
 // Chunk-00 item 2 showcase: the living inventory of the design system (02-DESIGN-SYSTEM §6).
@@ -121,6 +134,116 @@ export default function DesignSystemPage() {
             {taskSamples.map((task) => (
               <TaskCard key={task.id} task={task} onOpen={() => undefined} />
             ))}
+          </div>
+        </Section>
+
+        <Section title="Context Spine - the signature patient bar">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <ContextSpine
+              name="Rohit Verma"
+              mrn="MQ-2026-0042"
+              abha="12-3456-7890-1234"
+              facts={['42 yrs', 'Male', 'O+']}
+              allergy="Penicillin, Sulfa drugs"
+              statuses={[
+                { tone: 'critical', label: 'Deteriorating', glyph: <TriangleIcon size={13} /> },
+                { tone: 'information', label: 'NPO since 22:00' },
+              ]}
+              encounterStage="Admitted · Day 2"
+            />
+            <ContextSpine
+              name="Anita Desai"
+              mrn="MQ-2026-0107"
+              facts={['29 yrs', 'Female']}
+              statuses={[{ tone: 'success', label: 'Stable', glyph: <TrendUpIcon size={13} /> }]}
+              encounterStage="Pre-op"
+            />
+          </div>
+        </Section>
+
+        <Section title="Status dots and chips - color + glyph + text, never color alone">
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <StatusDot tone="success" label="Validated" />
+            <StatusDot tone="critical" label="Deteriorating" glyph={<TriangleIcon size={13} />} />
+            <StatusChip tone="warning" label="SLA at risk" />
+            <StatusChip tone="critical" label="Blocked" glyph={<TriangleIcon size={13} />} />
+            <StatusChip tone="success" label="Settled" />
+          </div>
+        </Section>
+
+        <Section title="Vitals - instrument numerals in tabular mono">
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <VitalChip label="HR" value="88" unit="bpm" trend="up" />
+            <VitalChip label="BP" value="128/82" unit="mmHg" />
+            <VitalChip label="SpO2" value="89" unit="%" trend="down" outOfRange />
+            <VitalChip label="Temp" value="36.8" unit="°C" trend="flat" />
+          </div>
+        </Section>
+
+        <Section title="Lab results - values on the reference-range track">
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <LabResultRow test="Sodium" value={142} unit="mmol/L" scale={{ min: 110, max: 160 }} band={{ low: 135, high: 145 }} />
+            <LabResultRow
+              test="Potassium"
+              value={5.9}
+              unit="mmol/L"
+              scale={{ min: 2, max: 7 }}
+              band={{ low: 3.5, high: 5.1 }}
+              status="high"
+            />
+            <LabResultRow
+              test="Hemoglobin"
+              value={9.1}
+              unit="g/dL"
+              scale={{ min: 4, max: 18 }}
+              band={{ low: 12, high: 16 }}
+              status="low"
+            />
+          </div>
+        </Section>
+
+        <Section title="Range bars">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 460 }}>
+            <RangeBar min={110} max={160} low={135} high={145} value={142} ariaLabel="Sodium 142, in band" />
+            <RangeBar min={0} max={100} low={20} high={80} value={12} ariaLabel="Score 12, below band" />
+          </div>
+        </Section>
+
+        <Section title="Medication orders - fixed mono columns + second verification">
+          <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 860 }}>
+            <MedOrderLine drug="Insulin glargine" dose="10 units" route="SC" schedule="22:00 daily" highAlert />
+            <MedOrderLine drug="Amoxicillin" dose="500 mg" route="PO" schedule="8h × 5 days" verifiedBy="Dr. K. Rao" />
+            <MedOrderLine drug="Pantoprazole" dose="40 mg" route="PO" schedule="OD before food" />
+          </div>
+        </Section>
+
+        <Section title="Dual confirm - the two-identifier signature">
+          <div style={{ maxWidth: 440 }}>
+            <DualConfirm
+              name="Rohit Verma"
+              mrn="MQ-2026-0042"
+              abha="12-3456-7890-1234"
+              action="Blood transfusion — 2 units packed RBC"
+              onConfirm={() => undefined}
+            />
+          </div>
+        </Section>
+
+        <Section title="Feedback states - honest, never a dead end">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <OfflineBanner onRetry={() => undefined} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+              <EmptyState
+                title="No orders yet"
+                description="Orders placed for this encounter will appear here."
+                action={<Button size="sm" variant="primary">Place order</Button>}
+              />
+              <ErrorState
+                title="Could not save the note"
+                description="The server rejected the draft. Check your connection and retry."
+                onRetry={() => undefined}
+              />
+            </div>
           </div>
         </Section>
       </main>

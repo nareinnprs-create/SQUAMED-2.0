@@ -5,7 +5,7 @@ import { Fragment } from 'react';
 import { format } from 'date-fns';
 import { Badge } from '../primitives/Badge';
 import { useFocusVisible } from '../primitives/internal';
-import { ChevronRightIcon } from './icons';
+import { ChevronRightIcon, TriangleIcon } from './icons';
 
 export interface PatientBannerProps {
   name: string;
@@ -70,8 +70,18 @@ export function PatientBanner({
     facts.push(
       <span
         key="allergy"
-        style={{ color: 'var(--sq-warning)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
+          color: 'var(--sq-critical)',
+          fontWeight: 500,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
       >
+        <TriangleIcon size={13} />
         Allergies: {allergySummary}
       </span>,
     );
@@ -124,7 +134,17 @@ export function PatientBanner({
         <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--sq-fg)', lineHeight: 1.3, flexShrink: 0 }}>
           {name}
         </span>
-        <span style={{ fontSize: 12, color: 'var(--sq-fg-muted)', flexShrink: 0 }}>MRN {mrn}</span>
+        <span
+          style={{
+            fontSize: 12,
+            color: 'var(--sq-fg-muted)',
+            flexShrink: 0,
+            fontFamily: 'var(--sq-font-mono)',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          MRN {mrn}
+        </span>
         {facts.map((fact, index) => (
           <Fragment key={index}>
             {divider}

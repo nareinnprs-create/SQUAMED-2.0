@@ -66,3 +66,44 @@ None new. This section is frontend-only — no credentials, no approvals. E1 (AB
 
 ## 10. Exit-demo slice
 `pwsh scripts/demo-00.14-design-system.ps1` against the built web app on 3000 (merged main `4979106`; pwsh; Storybook static output on disk): web root 200 → `/design-system` 200 (public) → heading + spec summary line (light clinical mode, RTL-ready, WCAG 2.2 AA) → i18n declared (en, hi) + language toggle rendered → token palette hex values → clinical density (44px rows) + enterprise density (36px rows) sections → task card fixture + `Open task` action + escalation badge → Storybook `index.html` + `iframe.html` + `index.json` with exactly **32 stories**. **17 passed, 0 failed**, live 2026-11-15 pre-merge and again post-merge on `4979106`, first pass both times. VRT 6/6 and CI run 43658903590 green.
+
+## 11. Rework (2026-11-16, §7.6 FAIL remediation)
+
+### 11.1 The re-derived brief (persisted — the original was never written down)
+
+The §7.6 blind re-verification FAIL verdict said the section "failed the fresh-agent brief", but the brief itself existed only in the re-verifier's session and was never persisted — the same deviation class as the lost 12-item docs list (FINAL §10.2). **Deviation recorded**: the brief below is a re-derivation from the verdict record and `02-DESIGN-SYSTEM.md`, not a verbatim recover; its wording may differ from the lost original, and the rework is scoped to what the persisted verdict + spec text demonstrably require.
+
+> **Brief (re-derived):** *Using only `02-DESIGN-SYSTEM.md` and the `packages/ui` + `packages/design-system` tree — no product code, no backend — build a working patient observation pane for one admitted patient. It must: (a) head the pane with the spec §1 signature element, the Context Spine (name + MRN/ABHA in tabular mono, allergy flag, live status dots, encounter stage); (b) render vitals, lab results, and a medication order line using the §6 clinical components (`VitalChip`, `LabResultRow` on a reference-range track, `MedOrderLine` with the high-alert second-verify); (c) gate one mutation behind `DualConfirm`; (d) express every status through the §6 `StatusDot`/`StatusChip` color+glyph+text primitive; (e) handle empty, error, and offline states with the §6 feedback components; (f) obey §3 typography (IBM Plex Sans/Mono, instrument numerals in mono) and §5 motion (the one 300ms single pulse, reduced-motion honored). A fresh agent should complete this without opening a single file outside the docs and the design-system packages.*
+
+Running the re-derivation against the tree exposed the ten defects the rework fixes below.
+
+### 11.2 Defects → dispositions
+
+| # | Defect (from re-derivation) | Disposition this pass |
+|---|---|---|
+| 1 | No instrument numerals: no `--sq-font-mono` token, zero mono in clinical components, Inter shipped despite §3 naming IBM Plex Sans/Mono (the anti-default Devanagari choice) | `next/font/google` IBM Plex Sans 400/500/600 + Devanagari face (separate Google family) + IBM Plex Mono 400/500 in `layout.tsx`; `--font-sans`/`--font-mono` rewired; `--sq-font-mono` token added in `themes.css`; `typography.ts` states the Plex stacks. All new clinical numerals (MRN/ABHA, vitals, labs, doses, schedules) render mono + `tabular-nums` |
+| 2 | No Context Spine — `PatientBanner` is not the Spine (no mono IDs, no allergy glyph, no status dots, no stage) | `ContextSpine` built (domain) per §1 signature: name, MRN + optional ABHA in mono, §2 allergy flag, status dots, encounter-stage chip |
+| 3 | No `StatusDot`/`StatusChip` (color+glyph+text) | Both built (primitives); label required so color is never the sole carrier; chips use on-soft text tokens, never ink-on-tint |
+| 4 | No `VitalChip` | Built: value+unit mono, trend glyph (up/down/flat), out-of-range = glyph+color, aria-label announces trend/state |
+| 5 | No range-track — `LabResultViewer` is a text table | `RangeBar` built (scale, normal band, positioned marker, critical when out of band); `LabResultRow` renders value on the track with status word + glyph |
+| 6 | No `MedOrderLine` | Built: drug/dose/route/schedule in fixed mono columns; high-alert → "High alert" flag + Verify affordance; `verifiedBy` badge supersedes |
+| 7 | No `DualConfirm` (the §6 signature) | Built: two identifiers on sunken panel, verification checkbox, confirm disabled until affirmed |
+| 8 | No `EmptyState`/`ErrorState`/`OfflineBanner` | All three built (primitives): EmptyState invites the next action; ErrorState is `role=alert` with what-happened + retry; OfflineBanner is the honest `role=status` with retry. Fixed copy through i18n (en+hi) |
+| 9 | Motion violations: StatusIndicator 1.8s infinite + TokenDisplay 1.4s infinite; no `prefers-reduced-motion` guards | Both fixed to §5: 300ms, once (`animation: … 1`); `transform/opacity`-only retained; `@media (prefers-reduced-motion: reduce)` disables both. StatusIndicator API unchanged (widely consumed) |
+| 10 | Allergy color-alone in `PatientBanner` (§2) | Triangle glyph + word added (color+glyph+text); MRN span also moved to mono. One-line-class fix |
+
+**Kept out (still backlog, unchanged from §9):** `ScanField`, `MARTimeGrid`, `BedTile`, `QueueRow`, `PrintSheet`, `IntelligenceRail`, `ApprovalCard`, saved views — no chunk-0 consumer; the §9 documented deviation stands. `LabResultViewer`'s data-row type renamed `LabResultViewerRow` (zero consumers — freed the `LabResultRow` name the spec requires).
+
+### 11.3 Rework artifacts
+
+- **12 new components** (6 domain: ContextSpine, VitalChip, RangeBar, LabResultRow, MedOrderLine, DualConfirm; 5 primitives: StatusDot, StatusChip, EmptyState, ErrorState, OfflineBanner; +3 glyphs: Triangle, TrendUp, TrendDown) — all inline-style house pattern, logical properties, token-only colors, i18n en+hi catalogs (+19 keys).
+- **12 new vitest files** → packages/ui **48/48** (was 18). Stories 32 → **44** (StatusParts, ClinicalData, Feedback).
+- **Showcase** `/design-system` gains 7 sections (Context Spine, status parts, vitals, lab rows, range bars, med orders, dual confirm, feedback states).
+- **Exit demo** extended 17 → **29 checks, 29/29 PASS** (2026-11-16, production build on 3000 + 44-story Storybook).
+- **VRT**: only `design-system.png` re-baselined (new sections lengthen the page); the other 5 baselines byte-stable — `font-normalize.css` pins fonts, so the Plex adoption is correctly invisible to VRT, and Playwright's default `animations: 'disabled'` makes the pulse fix invisible.
+- **Font-budget note**: first CI attempt on the rework branch **failed gate 7** — font transfer 307.1 KB > 200 KB on `/login`. Root cause: `next/font` preloads **every declared subset** (7 files across the three faces) regardless of use; the original §11.3 assumption ("browser fetches only used subsets") only holds without preload. Fix: `preload: false` on all three font configs — unicode-range then fetches only what a page renders; local gate re-run **passes at 39.6 KB** (performance 0.91, a11y 1.0). Residual: no font preload → brief `display: swap` fallback on first paint, accepted. Budget stays at 200 KB (not raised — the waste was real, not the budget).
+- **Known limit**: the showcase/demo assertions verify the Plex faces are wired (built CSS + font-variable classes), not that each glyph renders Plex — visual verification is Storybook/eyeball, an accepted residual for a font-adoption change.
+
+### 11.4 Rework gates
+
+`npx turbo typecheck lint test` all green (packages/ui 48/48; 20/20 tasks). `next build` green. Storybook build green (44 stories). VRT 6/6 (one re-baseline). Demo 29/29. CI: see ledger row 55.

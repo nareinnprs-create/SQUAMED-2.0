@@ -22,7 +22,9 @@ function injectTokenStyles(): void {
   tokenStylesInjected = true;
   const styleEl = document.createElement('style');
   styleEl.textContent =
-    '@keyframes sq-token-call{0%{transform:scale(1);opacity:1}50%{transform:scale(1.06);opacity:0.85}100%{transform:scale(1);opacity:1}}';
+    '@keyframes sq-token-call{0%{transform:scale(1);opacity:1}50%{transform:scale(1.06);opacity:0.85}100%{transform:scale(1);opacity:1}}' +
+    // 02-DESIGN-SYSTEM §5: the called-token pulse fires once, then everything is instant.
+    '@media (prefers-reduced-motion:reduce){.sq-token-called{animation:none !important}}';
   document.head.appendChild(styleEl);
 }
 
@@ -85,12 +87,14 @@ export function TokenDisplay({
         </span>
       ) : null}
       <span
+        className={meta.pulse ? 'sq-token-called' : undefined}
         style={{
           fontSize: 72,
           lineHeight: 1,
           fontWeight: 700,
           color: meta.color,
-          animation: meta.pulse ? 'sq-token-call 1.4s ease-in-out infinite' : undefined,
+          // §5 the one orchestrated moment: 300ms, once — mirrors the voice call.
+          animation: meta.pulse ? 'sq-token-call 300ms ease-in-out 1' : undefined,
         }}
       >
         {tokenNumber}

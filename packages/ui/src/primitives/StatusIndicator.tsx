@@ -18,7 +18,9 @@ function injectStatusStyles(): void {
   statusStylesInjected = true;
   const styleEl = document.createElement('style');
   styleEl.textContent =
-    '@keyframes sq-status-pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb, currentColor 45%, transparent)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}';
+    '@keyframes sq-status-pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb, currentColor 45%, transparent)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}' +
+    // 02-DESIGN-SYSTEM §5: reduced motion disables all but opacity fades.
+    '@media (prefers-reduced-motion:reduce){.sq-status-dot{animation:none !important}}';
   document.head.appendChild(styleEl);
 }
 
@@ -54,6 +56,7 @@ export function StatusIndicator({
     >
       <span
         aria-hidden="true"
+        className="sq-status-dot"
         style={{
           width: 8,
           height: 8,
@@ -61,7 +64,8 @@ export function StatusIndicator({
           flexShrink: 0,
           backgroundColor: color,
           color,
-          animation: pulse ? 'sq-status-pulse 1.8s ease-out infinite' : undefined,
+          // §5 the one orchestrated moment: a single 300ms pulse, not a loop.
+          animation: pulse ? 'sq-status-pulse 300ms ease-out 1' : undefined,
         }}
       />
       {label ? (

@@ -8,9 +8,14 @@ import java.time.LocalDate
 import java.util.UUID
 
 interface QueueEntryRepository : JpaRepository<QueueEntry, UUID> {
+  // 00.04 tenant sweep: null-safe hospital scope — token sequences are per-hospital per-day.
+  @Query(
+    "select e from QueueEntry e where (:hid is null or e.hospitalId = :hid) and e.queueType = :queueType and e.queueDate = :queueDate order by e.tokenNumber desc limit 1",
+  )
   fun findTopByQueueTypeAndQueueDateOrderByTokenNumberDesc(
-    queueType: String,
-    queueDate: LocalDate,
+    @Param("hid") hospitalId: UUID?,
+    @Param("queueType") queueType: String,
+    @Param("queueDate") queueDate: LocalDate,
   ): QueueEntry?
 
   // 00.04 tenant sweep: null-safe hospital scope (U10) — admin callers pass null.

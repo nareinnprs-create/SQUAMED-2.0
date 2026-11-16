@@ -884,6 +884,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/queue/entries/{queueType}/{tokenNumber}/transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["transfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/entries/{queueType}/{tokenNumber}/bump": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bump"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/queue/entries/call-next": {
         parameters: {
             query?: never;
@@ -2685,7 +2717,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["transfer"];
+        post: operations["transfer_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3628,6 +3660,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getEntry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/entries/{queueType}/{tokenNumber}/reprint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["reprint"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6078,6 +6126,7 @@ export interface components {
             queueDate: string;
             /** Format: date-time */
             createdAt?: string;
+            qrPayload: string;
         };
         VisitCreateResult: {
             visit: components["schemas"]["VisitDto"];
@@ -6161,6 +6210,9 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        QueueTransferDto: {
+            queueType?: string;
         };
         QueueTypeDto: {
             queueType?: string;
@@ -11958,6 +12010,56 @@ export interface operations {
             };
         };
     };
+    transfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                queueType: string;
+                tokenNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueueTransferDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseQueueEntryView"];
+                };
+            };
+        };
+    };
+    bump: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                queueType: string;
+                tokenNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseQueueEntryView"];
+                };
+            };
+        };
+    };
     callNext: {
         parameters: {
             query?: never;
@@ -16279,7 +16381,7 @@ export interface operations {
             };
         };
     };
-    transfer: {
+    transfer_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -17806,6 +17908,29 @@ export interface operations {
             };
         };
     };
+    reprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                queueType: string;
+                tokenNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseQueueEntryView"];
+                };
+            };
+        };
+    };
     board: {
         parameters: {
             query: {
@@ -19263,4 +19388,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: aff1a71e69d3fc5c6c8465a1d0c5734a828e158e03f2c50186d398ad32efcbb7
+// openapi snapshot sha256: 9d2c355870c4948d4e382ef9b1a23291557864ef63adb313d50468dd716bbc2f

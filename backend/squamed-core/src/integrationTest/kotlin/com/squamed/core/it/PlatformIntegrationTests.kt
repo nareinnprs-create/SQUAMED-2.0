@@ -4995,10 +4995,11 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* additions (17 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* (20 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
-      assertEquals(17, catalog.size(), "event catalog lists the v1 set + 01.01 appointment events: $catalog")
+      assertEquals(20, catalog.size(), "event catalog lists the v1 set + 01.01 appointment + 01.02 queue events: $catalog")
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
+      assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "NotificationDispatched" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "AuditChainBroken" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "TaskEscalated" && it["status"].asText() == "EMITTED" })
@@ -5616,11 +5617,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the 17-type v1 set (13 chunk-00 + 4 appointment.* from 01.01).
+      // Catalog: consent.* EMITTED in the 20-type v1 set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
-      assertEquals(17, catalog.size(), "event catalog lists the v1 set: $catalog")
+      assertEquals(20, catalog.size(), "event catalog lists the v1 set: $catalog")
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")
+      assertTrue(catalog.any { it["name"].asText() == "QueueBumped" && it["status"].asText() == "EMITTED" }, "queue.bumped EMITTED")
     }
   }
 
@@ -7604,6 +7606,188 @@ class PlatformIntegrationTests {
   }
 
   /** 01.01: scheduling engine PIT — template → slot generation → booking lifecycle, policy, waitlist, cursor list. */
+  @Nested
+  inner class QueueEngineTests {
+    private fun registerRoleUser(
+      role: String,
+      hospitalId: String,
+      s: String,
+      tag: String = role,
+    ): String {
+      val email = "queue-${tag.lowercase()}-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Queue",
+            "lastName" to "$role$s",
+            "roles" to listOf(role),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register $role $email",
+      )
+      return email
+    }
+
+    private fun login(email: String): String {
+      val login = api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123"))
+      assert2xx(login, "login $email: ${login.body.take(200)}")
+      return `data`(login)["accessToken"].asText()
+    }
+
+    /** Admin creates the patient with an explicit hospitalId (admin is not hospital-bound). */
+    private fun patientIn(
+      admin: String,
+      hospitalId: String,
+      tag: String,
+      s: String,
+    ): String =
+      `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json(
+            "firstName" to "Queue",
+            "lastName" to "$tag$s",
+            "gender" to "female",
+            "dateOfBirth" to "1990-02-02",
+            "hospitalId" to hospitalId,
+          ),
+          admin,
+        ),
+      )["patient"]["id"].asText()
+
+    @Test
+    fun queueTokenEngineNamedContentsCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+      // Fresh hospital per run: daily token sequences (C-01…) would collide with leftovers in the shared seed hospital.
+      val h =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Queue L $s", "code" to "QUL-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val hForeign =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Queue F $s", "code" to "QUF-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val rec = login(registerRoleUser("RECEPTIONIST", h, s))
+      val recForeign = login(registerRoleUser("RECEPTIONIST", hForeign, s, tag = "foreign"))
+
+      // Config-driven priority (01.02): vip ranked ABOVE emergency proves the board order comes from
+      // the published doc, not the built-in fallback (emergency first). avg 10 min feeds estimated wait.
+      assert2xx(
+        api(
+          HttpMethod.PUT,
+          "/api/v1/hospital-config/hospitals/$h/config/queue",
+          json(
+            "queues" to listOf(
+              mapOf(
+                "code" to "consult",
+                "name" to "Consultation",
+                "strategy" to "priority",
+                "avgConsultMinutes" to 10,
+                "priorityClasses" to listOf("vip", "emergency", "routine"),
+              ),
+              mapOf("code" to "lab", "name" to "Laboratory", "strategy" to "fifo", "avgConsultMinutes" to 5),
+            ),
+          ),
+          admin,
+        ),
+        "publish queue config",
+      )
+
+      val pA = patientIn(admin, h, "A", s)
+      val pB = patientIn(admin, h, "B", s)
+      val pC = patientIn(admin, h, "C", s)
+      val pD = patientIn(admin, h, "D", s)
+
+      fun add(
+        queueType: String,
+        patientId: String,
+        priority: String,
+      ): ApiResp = api(HttpMethod.POST, "/api/v1/queue/entries", json("queueType" to queueType, "patientId" to patientId, "priority" to priority), rec)
+
+      // Estimated wait = waiting-ahead count × avg consult minutes (0/10/20 at avg 10).
+      val a = `data`(add("consult", pA, "routine"))
+      val b = `data`(add("consult", pB, "vip"))
+      val c = `data`(add("consult", pC, "emergency"))
+      assertEquals("C-01", a["tokenNumber"].asText(), "daily token sequence")
+      assertEquals(0, a["estimatedWaitMinutes"].asInt(), "first entry waits 0")
+      assertEquals(10, b["estimatedWaitMinutes"].asInt(), "one ahead × 10 min")
+      assertEquals(20, c["estimatedWaitMinutes"].asInt(), "two ahead × 10 min")
+
+      // Board order follows the config priorityClasses (vip before emergency), not the built-in default.
+      val board = `data`(api(HttpMethod.GET, "/api/v1/queue/board?queueType=consult", token = rec))
+      assertEquals(
+        listOf("C-02", "C-03", "C-01"),
+        board.map { it["tokenNumber"].asText() },
+        "config priorityClasses drives board order: $board",
+      )
+      // callNext pulls the highest-ranked waiting entry and emits queue.called to displays.
+      val next = `data`(api(HttpMethod.POST, "/api/v1/queue/entries/call-next", json("queueType" to "consult"), rec))
+      assertEquals("C-02", next["tokenNumber"].asText(), "callNext honors config order (vip first)")
+
+      // Transfer: waiting entry moves to lab with a fresh token from the target sequence (L-01).
+      val transferred = `data`(api(HttpMethod.POST, "/api/v1/queue/entries/consult/C-01/transfer", json("queueType" to "lab"), rec))
+      assertEquals("L-01", transferred["tokenNumber"].asText(), "transfer issues a fresh target-sequence token")
+      assertEquals("lab", transferred["queueType"].asText())
+      val labBoard = `data`(api(HttpMethod.GET, "/api/v1/queue/board?queueType=lab", token = rec))
+      assertEquals(listOf("L-01"), labBoard.map { it["tokenNumber"].asText() }, "transferred entry on the lab board")
+      assertEquals(
+        409,
+        api(HttpMethod.POST, "/api/v1/queue/entries/consult/C-02/transfer", json("queueType" to "lab"), rec).status,
+        "called entry cannot transfer (state conflict)",
+      )
+
+      // Re-print: stateless view fetch with the QR queue id.
+      val reprint = `data`(api(HttpMethod.GET, "/api/v1/queue/entries/lab/L-01/reprint", token = rec))
+      assertEquals("L-01", reprint["tokenNumber"].asText(), "re-print is stateless (same token)")
+      assertEquals("SQM:$h:lab:L-01:${LocalDate.now()}", reprint["qrPayload"].asText(), "QR queue id format")
+
+      // Emergency bump: priority raised to emergency and queue.bumped reaches the WS display <2 s.
+      `data`(add("consult", pD, "routine")) // C-04, waiting
+      val ws = connectRealtime(rec)
+      val t0 = System.currentTimeMillis()
+      val bumped = `data`(api(HttpMethod.POST, "/api/v1/queue/entries/consult/C-04/bump", null, rec))
+      assertEquals("emergency", bumped["priority"].asText(), "bump raises priority to emergency")
+      val frame = awaitEventFrame(ws, "queue.bumped", 5000)
+      assertNotNull(frame, "queue.bumped frame broadcast to the hospital WS session: ${ws.messages}")
+      val latencyMs = System.currentTimeMillis() - t0
+      assertTrue(latencyMs < 2000, "emergency bump to display <2 s (publish→WS receipt), took ${latencyMs}ms")
+
+      // Cross-tenant: another hospital's receptionist cannot read this hospital's token.
+      assertEquals(400, api(HttpMethod.GET, "/api/v1/queue/entries/lab/L-01", token = recForeign).status, "cross-tenant token read denied")
+    }
+
+    private fun connectRealtime(token: String): RealtimeCollector {
+      val collector = RealtimeCollector()
+      org.springframework.web.socket.client.standard
+        .StandardWebSocketClient()
+        .execute(collector, "ws://localhost:$port/realtime?token=$token")
+        .get(15, java.util.concurrent.TimeUnit.SECONDS)
+      return collector
+    }
+
+    private fun awaitEventFrame(
+      collector: RealtimeCollector,
+      eventType: String,
+      timeoutMs: Long,
+    ): String? {
+      val deadline = System.currentTimeMillis() + timeoutMs
+      while (System.currentTimeMillis() < deadline) {
+        collector.messages
+          .firstOrNull { it.contains("\"type\":\"event.received\"") && it.contains(eventType) }
+          ?.let { return it }
+        Thread.sleep(250)
+      }
+      return null
+    }
+  }
+
   @Nested
   inner class SchedulingEngineTests {
     private fun registerRoleUser(

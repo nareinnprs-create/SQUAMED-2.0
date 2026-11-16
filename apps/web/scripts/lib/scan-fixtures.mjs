@@ -9,6 +9,7 @@ export const SCAN_ROUTES = [
   { path: '/appointments', label: 'appointments' },
   { path: '/patients', label: 'patients' },
   { path: '/dashboard', label: 'dashboard' },
+  { path: '/queue', label: 'queue' },
 ];
 
 const SCAN_TOKENS = { access: 'scan-access-token', refresh: 'scan-refresh-token' };

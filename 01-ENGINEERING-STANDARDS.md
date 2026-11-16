@@ -65,11 +65,11 @@ Clinical (default) · Enterprise (dense) · Command (command centre only). Theme
 
 | Concern | Standard |
 |---|---|
-| API posture | OpenAPI-first (contract committed before code), REST `/v1`, envelope: `{data, error{code,message,details}, meta{page}}` — one error catalogue, no ad-hoc shapes |
-| Idempotency | All POSTs accept `Idempotency-Key`; keys stored with response for 24 h; required for offline-replayable writes |
-| Pagination | Cursor-based, standard params everywhere |
-| Events | Envelope v1 (chunk-00), outbox dispatcher, **consumers idempotent by event id**, DLQ + integration error queue with alert, replay CLI tool |
-| Auth flow | Keycloak OIDC → JWT → scope mapping → ABAC policy service (org-tree node scopes) → Postgres RLS (`tenant_id`); cross-tenant denial test runs in CI |
+| API posture | OpenAPI-first (contract committed before code), REST `/api/v1`, envelope: success `{data, success, meta?}` + separate error `{error{code,message,details}, timestamp}` — see `docs/api/openapi-style-guide.md` for both pagination modes and the error catalogue; CI enforces via `openApiSnapshotMatchesLiveContract` (byte-compare + api-client codegen in the same PR) |
+| Idempotency | `Idempotency-Key` on POST/PUT/PATCH/DELETE (optional, ≤255 chars); stored response replayed byte-for-byte on identical payload; different payload on same key → 409 `IDEMPOTENCY_CONFLICT`; 5xx never stored; nightly purge |
+| Pagination | Two modes: **offset** (`page/size` → `meta{page,size,total,pages}`) for catalogs/child lists, **cursor** (`limit/cursor` → `meta{limit,hasNext,nextCursor}`) for append-only streams (`/audit/logs`) |
+| Events | Envelope v1 (field list in 06 §3), transactional outbox, `DomainEventPublisher.publish` inside the caller's transaction, dispatcher → Kafka (`squamed.domain-events` + per-type topics) + Redis channel `squamed.events` → WS; **consumers idempotent by event id**, DLQ + integration-error queue with alert, replay = admin REST API (`/api/v1/admin/events/...`) |
+| Auth flow | Self-hosted JWT (HMAC, kid-pinned rotation — no Keycloak): `/auth/login` field `username` (email-or-phone), 15-min access + 7-day rotating refresh, claims `sid/hp/typ`; authorization = opaque `domain:action:resource` permission strings via `@RequiresPermission` (no scopes/ABAC); tenancy = app-level `hospital_id` + TenantGuards, **RLS deferred to stage 2 (ADR-13)**; cross-tenant denial suite runs in PIT |
 | Jobs | Quartz in-process for schedules (expiry scans, roster generation, recon runs, audit-chain verify nightly). Temporal only per chunk-6 evidence-based decision |
 | Files | S3-API abstraction (R2/MinIO/S3), presigned upload/download, AV-scan hook, DICOM only via Orthanc routes — app never parses DICOM |
 | Print | Server-side PDF (reports, receipts, prescriptions — legal documents render server-side for auditability); labels via browser print |
@@ -83,16 +83,18 @@ Clinical (default) · Enterprise (dense) · Command (command centre only). Theme
 
 | Concern | Standard |
 |---|---|
-| Architecture | Modular monolith, Kotlin/Spring; module-per-domain; ArchUnit enforced |
-| Dependency matrix | Domain modules **never import each other's internals** — only published `api` packages or domain events. Shared kernel: identity, patient context, money, audit. Matrix lives in `backend/squamed-core/architecture-test/` and is a named test |
+| Architecture | Modular monolith, Kotlin/Spring; module-per-domain; boundary = package-layout convention (`api`/`domain`/`repository`/`service` per module, cross-module access only via `api` packages or events). **No ArchUnit module exists** — the boundary is convention + PIT contract tests, not an enforced test suite |
+| Dependency matrix | Domain modules **never import each other's internals** — only published `api` packages or domain events. Shared kernel: identity, patient context, audit |
 | Transactions | One transaction per use-case boundary; event writes share the transaction (outbox); no cross-module entity joins — read models via events if needed |
-| Money | Integer paise everywhere, currency-aware type, rounding rules centralized (chunk 3 owns the rules) |
-| Tenancy | `tenant_id` on every table, RLS on, tenant resolved from token — never from request body |
-| Migrations | Flyway, forward-only, expand-contract; every chunk ships rollback notes (mostly flag-off + read-only freeze, per chunk files) |
-| Validation | Trust-boundary validation at API edge (zod-shared schemas compiled to Kotlin contracts / Bean Validation), re-validation at persistence for safety-critical fields |
-| Testing | JUnit5 + Testcontainers (Postgres/Redis/Keycloak), ArchUnit suite, JSON-schema contract tests for events in CI, load test at every chunk exit (NFR §6) |
+| Money | `NUMERIC(12,2)` with `_qar`-suffixed columns (shipped convention; supersedes the integer-paise plan — chunk 3 owns generalization) |
+| Tenancy | `hospital_id UUID NOT NULL` on tenant-scoped tables (nullable-by-design list in `V43`), resolved server-side from JWT `hp` (`TenantResolver.pin`/`pinOrDefault`), by-id rows guarded by `TenantGuards.requireSameHospital` → `TENANT_FORBIDDEN`; admins (`hp = null`) intentionally unbounded. **RLS deferred to stage 2 (ADR-13, before chunk 6)** |
+| Migrations | Flyway, forward-only, expand-contract. Files `V<n>__<snake_topic>.sql` in `db/migration`, **next number = current max + 1** (check before adding — collisions fail validate); every schema-changing migration carries a rollback note in its header comment; table-then-seed migration pairs where seeds follow DDL. **Never hand-apply a migration to the shared dev DB with a placeholder checksum** — Flyway validate then rejects every later PIT run (incident I-2) |
+| Validation | Trust-boundary validation at API edge (Bean Validation + Kotlin require), re-validation at persistence for safety-critical fields |
+| Testing | JUnit5 unit + PIT integration suite (`integrationTest` Gradle task — default runs against the compose dev stack via `SQUAMED_IT_EXTERNAL=true`, details in 08 §1); JSON-schema contract tests for events in CI; load test at every chunk exit (custom Node `.mjs` script — k6 not installed) |
 | Audit | One interceptor: all writes emit audit events with before/after; hash chain verified nightly; chain-breach = page, not log line |
-| Clinical safety hooks | Two-identifier verification service + allergy/interaction check service are platform services every clinical write path must call — enforced by ArchUnit (domain rules), tested in `tests/clinical-safety/` |
+| Lint/format | ktlint CLI 1.8.0 via `ktlintCheck`/`ktlintFormat` Gradle tasks + Kotlin `allWarningsAsErrors` |
+| Coverage | JaCoCo **instruction ≥ 0.80 module-wide** (broad excludes per `build.gradle.kts`: domain/api/config/DTOs), verified on merged unit+PIT exec in the integration-gates CI job |
+| Clinical safety hooks | Two-identifier verification + allergy/interaction checks live in the prescribing/dispensing service paths; CS cases automated in the PIT suite (no separate `tests/clinical-safety/` tree, no ArchUnit enforcement) |
 
 ---
 

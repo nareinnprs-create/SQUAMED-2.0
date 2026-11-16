@@ -96,6 +96,10 @@ data class QueueStartDto(
   val servedBy: UUID? = null,
 )
 
+data class QueueTransferDto(
+  val queueType: String? = null,
+)
+
 data class QueueEntryView(
   val id: UUID?,
   val queueType: String,
@@ -118,6 +122,7 @@ data class QueueEntryView(
   val estimatedWaitMinutes: Int?,
   val queueDate: LocalDate,
   val createdAt: Instant?,
+  val qrPayload: String,
 ) {
   companion object {
     fun from(entity: QueueEntry) =
@@ -143,6 +148,7 @@ data class QueueEntryView(
         estimatedWaitMinutes = entity.estimatedWaitMinutes,
         queueDate = entity.queueDate,
         createdAt = entity.createdAt,
+        qrPayload = "SQM:${entity.hospitalId?.toString().orEmpty()}:${entity.queueType}:${entity.tokenNumber}:${entity.queueDate}",
       )
   }
 }

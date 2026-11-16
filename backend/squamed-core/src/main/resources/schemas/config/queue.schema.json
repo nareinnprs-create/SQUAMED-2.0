@@ -18,7 +18,14 @@
           "name": { "type": "string", "minLength": 1 },
           "servicePoint": { "type": "string", "minLength": 1 },
           "strategy": { "enum": ["fifo", "priority"] },
-          "avgConsultMinutes": { "type": "integer", "minimum": 1 }
+          "avgConsultMinutes": { "type": "integer", "minimum": 1 },
+          "priorityClasses": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 },
+            "description": "Priority classes in rank order (first = highest); 01.02 queue engine."
+          }
         }
       }
     }

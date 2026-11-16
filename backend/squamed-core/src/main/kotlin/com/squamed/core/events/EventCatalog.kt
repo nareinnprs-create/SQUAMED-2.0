@@ -39,6 +39,9 @@ object EventCatalog {
         Status.EMITTED,
         "Appointment lifecycle status changed (pre-catalog ad-hoc emission, cataloged 01.01).",
       ),
+      Entry("QueueCalled", "queue.called", Status.EMITTED, "Token called to a counter; displays and announcements consume it (01.02)."),
+      Entry("QueueTransferred", "queue.transferred", Status.EMITTED, "Token moved to another queue with a fresh token number (01.02)."),
+      Entry("QueueBumped", "queue.bumped", Status.EMITTED, "Entry bumped to emergency priority; broadcast to displays over WS (01.02)."),
     )
 
   fun all(): List<Entry> = entries

@@ -1,7 +1,9 @@
 package com.squamed.core.receptionqueue.service
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
+import com.squamed.core.hospitalconfig.service.ConfigDocumentService
 import com.squamed.core.receptionqueue.api.BoardEntry
 import com.squamed.core.receptionqueue.api.QueueEntryView
 import com.squamed.core.receptionqueue.api.QueueStatsView
@@ -21,8 +23,53 @@ import java.util.UUID
 class QueueService(
   private val queueEntryRepository: QueueEntryRepository,
   private val servicePointRepository: ServicePointRepository,
+  private val configDocumentService: ConfigDocumentService,
   private val eventPublisher: DomainEventPublisher,
 ) {
+  companion object {
+    /** 01.02 built-in priority order; a hospital queue-config `priorityClasses` array overrides it (array order = rank). */
+    private val DEFAULT_PRIORITY_ORDER = listOf("emergency", "urgent", "vip", "assisted", "appointment-order", "routine")
+    private const val DEFAULT_AVG_CONSULT_MINUTES = 5
+  }
+
+  /** Queue config item for one queue type (00.05 doc); null = the hospital has not published a queue config. */
+  private fun queueConfig(
+    hospitalId: UUID?,
+    queueType: String,
+  ): JsonNode? {
+    val hid = hospitalId ?: return null
+    val content: JsonNode = configDocumentService.latest(hid, "queue")?.content ?: return null
+    return content.path("queues").firstOrNull { it.path("code").asText() == queueType }
+  }
+
+  /** Config-driven rank map (array order = priority); unknown classes rank last. */
+  private fun priorityRanks(
+    hospitalId: UUID?,
+    queueType: String,
+  ): Map<String, Int> {
+    val classes = queueConfig(hospitalId, queueType)?.path("priorityClasses")
+    val order = if (classes != null && classes.isArray && classes.size() > 0) classes.map { it.asText() } else DEFAULT_PRIORITY_ORDER
+    return order.withIndex().associate { (idx, cls) -> cls to idx }
+  }
+
+  private fun avgConsultMinutes(
+    hospitalId: UUID?,
+    queueType: String,
+  ): Int =
+    queueConfig(hospitalId, queueType)
+      ?.path("avgConsultMinutes")
+      ?.takeIf { it.isNumber }
+      ?.asInt() ?: DEFAULT_AVG_CONSULT_MINUTES
+
+  /** 01.02 estimated wait: waiting-ahead count × avg consult minutes (per-queue config, fallback 5). */
+  private fun estimateWaitMinutes(
+    hospitalId: UUID?,
+    queueType: String,
+    queueDate: LocalDate,
+  ): Int =
+    queueEntryRepository.findByQueueTypeAndStatusAndQueueDate(hospitalId, queueType, "waiting", queueDate).size *
+      avgConsultMinutes(hospitalId, queueType)
+
   @Transactional
   fun addToQueue(
     queueType: String,
@@ -45,8 +92,9 @@ class QueueService(
           visitId = visitId,
           patientId = patientId,
           patientName = patientName,
-          tokenNumber = nextToken(queueType, today),
+          tokenNumber = nextToken(hospitalId, queueType, today),
           priority = priority ?: "routine",
+          estimatedWaitMinutes = estimateWaitMinutes(hospitalId, queueType, today),
           queueDate = today,
         ),
       )
@@ -71,10 +119,79 @@ class QueueService(
         source = "queue-service",
         entityType = "queue-entry",
         entityId = entry.id,
+        hospitalId = entry.hospitalId,
         payload =
           mapOf(
             "tokenNumber" to entry.tokenNumber,
             "queueType" to entry.queueType,
+          ),
+      ),
+    )
+    return QueueEntryView.from(entry)
+  }
+
+  /** 01.02 transfer: move a waiting entry to another queue; it gets a fresh token from the target sequence. */
+  @Transactional
+  fun transfer(
+    queueType: String,
+    tokenNumber: String,
+    targetQueueType: String,
+    hospitalId: UUID?,
+  ): QueueEntryView {
+    val entry = findTodayEntry(queueType, tokenNumber, hospitalId)
+    if (entry.status != "waiting") throw IllegalStateException("QUEUE_ENTRY_NOT_WAITING")
+    // Compute the fresh token/estimate BEFORE mutating queueType: Hibernate auto-flush would
+    // otherwise make the entry itself match the target-queue token query (sequence off by one).
+    val freshToken = nextToken(hospitalId, targetQueueType, LocalDate.now())
+    val estimatedWait = estimateWaitMinutes(hospitalId, targetQueueType, LocalDate.now())
+    entry.queueType = targetQueueType
+    entry.tokenNumber = freshToken
+    entry.estimatedWaitMinutes = estimatedWait
+    queueEntryRepository.save(entry)
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "queue.transferred",
+        occurredAt = Instant.now(),
+        source = "queue-service",
+        entityType = "queue-entry",
+        entityId = entry.id,
+        hospitalId = entry.hospitalId,
+        payload =
+          mapOf(
+            "fromQueueType" to queueType,
+            "toQueueType" to targetQueueType,
+            "tokenNumber" to entry.tokenNumber,
+          ),
+      ),
+    )
+    return QueueEntryView.from(entry)
+  }
+
+  /** 01.02 emergency bump: raise the entry to emergency priority; displays get queue.bumped over WS (<2 s). */
+  @Transactional
+  fun bump(
+    queueType: String,
+    tokenNumber: String,
+    hospitalId: UUID?,
+  ): QueueEntryView {
+    val entry = findTodayEntry(queueType, tokenNumber, hospitalId)
+    entry.priority = "emergency"
+    queueEntryRepository.save(entry)
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "queue.bumped",
+        occurredAt = Instant.now(),
+        source = "queue-service",
+        entityType = "queue-entry",
+        entityId = entry.id,
+        hospitalId = entry.hospitalId,
+        payload =
+          mapOf(
+            "tokenNumber" to entry.tokenNumber,
+            "queueType" to entry.queueType,
+            "priority" to entry.priority,
           ),
       ),
     )
@@ -154,9 +271,10 @@ class QueueService(
   ): List<BoardEntry> {
     val today = LocalDate.now()
     val statuses = listOf("waiting", "called", "in-progress", "postponed")
+    val ranks = priorityRanks(hospitalId, queueType)
     return queueEntryRepository
       .findByQueueTypeAndStatusInAndQueueDate(hospitalId, queueType, statuses, today)
-      .sortedWith(compareBy({ statusRank(it.status) }, { priorityRank(it.priority) }, { it.createdAt ?: Instant.EPOCH }))
+      .sortedWith(compareBy({ statusRank(it.status) }, { ranks[it.priority] ?: ranks.size }, { it.createdAt ?: Instant.EPOCH }))
       .map { BoardEntry.from(it) }
   }
 
@@ -167,14 +285,31 @@ class QueueService(
   ): BoardEntry {
     val today = LocalDate.now()
     // 00.04 tenant sweep (U10): calling next must pull from the caller's own hospital queue.
+    val ranks = priorityRanks(hospitalId, queueType)
     val next =
       queueEntryRepository
         .findByQueueTypeAndStatusAndQueueDate(hospitalId, queueType, "waiting", today)
-        .sortedWith(compareBy({ priorityRank(it.priority) }, { it.createdAt ?: Instant.EPOCH }))
+        .sortedWith(compareBy({ ranks[it.priority] ?: ranks.size }, { it.createdAt ?: Instant.EPOCH }))
         .firstOrNull() ?: throw IllegalStateException("QUEUE_EMPTY")
     next.status = "called"
     next.calledAt = Instant.now()
     queueEntryRepository.save(next)
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "queue.called",
+        occurredAt = Instant.now(),
+        source = "queue-service",
+        entityType = "queue-entry",
+        entityId = next.id,
+        hospitalId = next.hospitalId,
+        payload =
+          mapOf(
+            "tokenNumber" to next.tokenNumber,
+            "queueType" to next.queueType,
+          ),
+      ),
+    )
     return BoardEntry.from(next)
   }
 
@@ -242,10 +377,11 @@ class QueueService(
   }
 
   private fun nextToken(
+    hospitalId: UUID?,
     queueType: String,
     queueDate: LocalDate,
   ): String {
-    val latest = queueEntryRepository.findTopByQueueTypeAndQueueDateOrderByTokenNumberDesc(queueType, queueDate)
+    val latest = queueEntryRepository.findTopByQueueTypeAndQueueDateOrderByTokenNumberDesc(hospitalId, queueType, queueDate)
     val sequence = latest?.tokenNumber?.substringAfter('-')?.toIntOrNull() ?: 0
     val prefix = queueType.take(1).uppercase()
     return String.format("%s-%02d", prefix, sequence + 1)
@@ -264,14 +400,6 @@ class QueueService(
       "waiting" -> 0
       "called" -> 1
       "in-progress" -> 2
-      else -> 3
-    }
-
-  private fun priorityRank(priority: String): Int =
-    when (priority) {
-      "emergency" -> 0
-      "urgent" -> 1
-      "routine" -> 2
       else -> 3
     }
 }

@@ -63,6 +63,45 @@ class QueueController(
   ): ApiResponse<BoardEntry> =
     ApiResponse.ok(queueService.callNext(dto.queueType ?: throw IllegalArgumentException("QUEUE_TYPE_REQUIRED"), principal.hospitalId))
 
+  // 01.02: transfer moves a waiting entry to another queue; it gets a fresh token from the target sequence.
+  @PostMapping("/entries/{queueType}/{tokenNumber}/transfer")
+  @RequiresPermission("queue:manage:queue")
+  @Transactional
+  fun transfer(
+    @PathVariable queueType: String,
+    @PathVariable tokenNumber: String,
+    @RequestBody dto: QueueTransferDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QueueEntryView> =
+    ApiResponse.ok(
+      queueService.transfer(
+        queueType,
+        tokenNumber,
+        dto.queueType ?: throw IllegalArgumentException("QUEUE_TYPE_REQUIRED"),
+        principal.hospitalId,
+      ),
+    )
+
+  // 01.02: emergency bump raises the entry to emergency priority and notifies displays over WS (<2 s).
+  @PostMapping("/entries/{queueType}/{tokenNumber}/bump")
+  @RequiresPermission("queue:manage:queue")
+  @Transactional
+  fun bump(
+    @PathVariable queueType: String,
+    @PathVariable tokenNumber: String,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.bump(queueType, tokenNumber, principal.hospitalId))
+
+  // 01.02 re-print: stateless view fetch for kiosk/thermal printers (GET → no audit write).
+  @GetMapping("/entries/{queueType}/{tokenNumber}/reprint")
+  @RequiresPermission("queue:read:queue")
+  @Transactional(readOnly = true)
+  fun reprint(
+    @PathVariable queueType: String,
+    @PathVariable tokenNumber: String,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.getEntry(queueType, tokenNumber, principal.hospitalId))
+
   @PatchMapping("/entries/{queueType}/{tokenNumber}/call")
   @RequiresPermission("queue:manage:queue")
   @Transactional

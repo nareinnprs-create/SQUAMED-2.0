@@ -7574,11 +7574,22 @@ class PlatformIntegrationTests {
           .first { it.startsWith("squamed_audit_chain_breaches") }
           .substringAfterLast(" ")
           .toDouble()
-      val target =
-        obsJdbc.queryForMap(
-          "SELECT id, response_payload FROM audit.audit_log WHERE hospital_id = ?::uuid AND chain_seq IS NOT NULL AND response_payload IS NOT NULL LIMIT 1",
-          h2,
-        )
+      // chain_seq is stamped async (ADR-15 batcher, 250ms schedule) — poll for linkage, never race it.
+      val target: Map<String, Any> =
+        run {
+          val deadline = System.currentTimeMillis() + 10_000
+          var row: Map<String, Any>? = null
+          while (System.currentTimeMillis() < deadline && row == null) {
+            row =
+              obsJdbc
+                .queryForList(
+                  "SELECT id, response_payload FROM audit.audit_log WHERE hospital_id = ?::uuid AND chain_seq IS NOT NULL AND response_payload IS NOT NULL LIMIT 1",
+                  h2,
+                ).firstOrNull()
+            if (row == null) Thread.sleep(250)
+          }
+          row ?: throw AssertionError("no chain-linked audit row for the fresh tenant within 10s (ADR-15 linkage lag)")
+        }
       val id = target["id"].toString()
       val original = target["response_payload"].toString()
       obsJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", "TAMPERED-OBS-$s2", id)

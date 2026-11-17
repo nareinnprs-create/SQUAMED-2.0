@@ -85,4 +85,60 @@ class ReceptionController(
     @RequestBody dto: VisitCancelDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<VisitDto> = ApiResponse.ok(visitRegistrar.cancelVisit(id, dto.reason, principal.hospitalId))
+
+  // -- 01.03 reception workspace: visitor/attendant passes -------------------------------
+
+  @PostMapping("/visits/{id}/passes")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("reception:write:visit")
+  @Transactional
+  fun issuePass(
+    @PathVariable id: UUID,
+    @RequestBody dto: VisitPassIssueDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<VisitPassDto> = ApiResponse.ok(visitRegistrar.issuePass(id, dto, principal.hospitalId))
+
+  @GetMapping("/visits/{id}/passes")
+  @RequiresPermission("reception:read:visit")
+  @Transactional(readOnly = true)
+  fun listPasses(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<VisitPassDto>> = ApiResponse.ok(visitRegistrar.listPasses(id, principal.hospitalId))
+
+  @PatchMapping("/passes/{id}/return")
+  @RequiresPermission("reception:write:visit")
+  @Transactional
+  fun returnPass(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<VisitPassDto> = ApiResponse.ok(visitRegistrar.returnPass(id, principal.hospitalId))
+
+  // -- 01.03 reception workspace: consult-fee receipts -----------------------------------
+
+  @PostMapping("/visits/{id}/receipts")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("reception:write:visit")
+  @Transactional
+  fun issueReceipt(
+    @PathVariable id: UUID,
+    @RequestBody dto: ConsultReceiptIssueDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<ConsultReceiptDto> = ApiResponse.ok(visitRegistrar.issueReceipt(id, dto, principal.hospitalId))
+
+  @GetMapping("/visits/{id}/receipts")
+  @RequiresPermission("reception:read:visit")
+  @Transactional(readOnly = true)
+  fun listReceipts(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ConsultReceiptDto>> = ApiResponse.ok(visitRegistrar.listReceipts(id, principal.hospitalId))
+
+  @PatchMapping("/receipts/{id}/void")
+  @RequiresPermission("reception:write:visit")
+  @Transactional
+  fun voidReceipt(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<ConsultReceiptDto> = ApiResponse.ok(visitRegistrar.voidReceipt(id, principal.hospitalId))
 }

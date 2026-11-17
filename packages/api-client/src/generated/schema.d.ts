@@ -852,6 +852,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reception/visits/{id}/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listReceipts"];
+        put?: never;
+        post: operations["issueReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reception/visits/{id}/passes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPasses"];
+        put?: never;
+        post: operations["issuePass"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/queue/service-points": {
         parameters: {
             query?: never;
@@ -2914,6 +2946,38 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["cancelVisit"];
+        trace?: never;
+    };
+    "/api/v1/reception/receipts/{id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["voidReceipt"];
+        trace?: never;
+    };
+    "/api/v1/reception/passes/{id}/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["returnPass"];
         trace?: never;
     };
     "/api/v1/queue/entries/{queueType}/{tokenNumber}/start": {
@@ -6163,6 +6227,68 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
+        ConsultReceiptIssueDto: {
+            amountQar?: number;
+            mode?: string;
+        };
+        ApiResponseConsultReceiptDto: {
+            data?: components["schemas"]["ConsultReceiptDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ConsultReceiptDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
+            visitId: string;
+            /** Format: uuid */
+            patientId: string;
+            receiptNumber: string;
+            amountQar: number;
+            mode: string;
+            status: string;
+            /** Format: date-time */
+            issuedAt: string;
+            /** Format: date-time */
+            voidedAt?: string;
+        };
+        VisitPassIssueDto: {
+            visitorName?: string;
+            relation?: string;
+            phone?: string;
+            idReference?: string;
+        };
+        ApiResponseVisitPassDto: {
+            data?: components["schemas"]["VisitPassDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        VisitPassDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
+            visitId: string;
+            /** Format: uuid */
+            patientId: string;
+            passNumber: string;
+            visitorName: string;
+            relation: string;
+            phone?: string;
+            idReference?: string;
+            status: string;
+            /** Format: date-time */
+            issuedAt: string;
+            /** Format: date-time */
+            returnedAt?: string;
+        };
         ServicePointCreateDto: {
             /** Format: uuid */
             hospitalId?: string;
@@ -9079,6 +9205,20 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListConsultReceiptDto: {
+            data?: components["schemas"]["ConsultReceiptDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListVisitPassDto: {
+            data?: components["schemas"]["VisitPassDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseQueueStatsView: {
             data?: components["schemas"]["QueueStatsView"];
             success: boolean;
@@ -11936,6 +12076,102 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseVisitCreateResult"];
+                };
+            };
+        };
+    };
+    listReceipts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListConsultReceiptDto"];
+                };
+            };
+        };
+    };
+    issueReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsultReceiptIssueDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConsultReceiptDto"];
+                };
+            };
+        };
+    };
+    listPasses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListVisitPassDto"];
+                };
+            };
+        };
+    };
+    issuePass: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VisitPassIssueDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVisitPassDto"];
                 };
             };
         };
@@ -16747,6 +16983,50 @@ export interface operations {
             };
         };
     };
+    voidReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConsultReceiptDto"];
+                };
+            };
+        };
+    };
+    returnPass: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVisitPassDto"];
+                };
+            };
+        };
+    };
     start: {
         parameters: {
             query?: never;
@@ -19388,4 +19668,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 9d2c355870c4948d4e382ef9b1a23291557864ef63adb313d50468dd716bbc2f
+// openapi snapshot sha256: aba59fd06565268f74003a04819e9e22dff180e64a70795652c8557b90ca9fe2

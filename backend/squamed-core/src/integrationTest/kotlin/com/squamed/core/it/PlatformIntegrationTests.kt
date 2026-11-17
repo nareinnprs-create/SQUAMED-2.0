@@ -7789,6 +7789,172 @@ class PlatformIntegrationTests {
     }
   }
 
+  /** 01.03: reception workspace PIT — passes, consult-fee receipts, cancel, calling, tenancy. */
+  @Nested
+  inner class ReceptionWorkspaceTests {
+    private fun registerRoleUser(
+      role: String,
+      hospitalId: String,
+      s: String,
+      tag: String = role,
+    ): String {
+      val email = "recep-${tag.lowercase()}-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Recep",
+            "lastName" to "$role$s",
+            "roles" to listOf(role),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register $role $email",
+      )
+      return email
+    }
+
+    private fun login(email: String): String {
+      val login = api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123"))
+      assert2xx(login, "login $email: ${login.body.take(200)}")
+      return `data`(login)["accessToken"].asText()
+    }
+
+    /** Admin creates the patient with an explicit hospitalId (admin is not hospital-bound). */
+    private fun patientIn(
+      admin: String,
+      hospitalId: String,
+      tag: String,
+      s: String,
+    ): String =
+      `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json(
+            "firstName" to "Recep",
+            "lastName" to "$tag$s",
+            "gender" to "female",
+            "dateOfBirth" to "1990-02-02",
+            "hospitalId" to hospitalId,
+          ),
+          admin,
+        ),
+      )["patient"]["id"].asText()
+
+    @Test
+    fun receptionWorkspaceNamedContentsCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+      // Fresh hospital per run: pass/receipt sequences (VPS-/RCP-) would collide with leftovers
+      // in the shared seed hospital (same lesson as 01.02's token sequences).
+      val h =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Recep L $s", "code" to "RCL-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val hForeign =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Recep F $s", "code" to "RCF-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val rec = login(registerRoleUser("RECEPTIONIST", h, s))
+      val recForeign = login(registerRoleUser("RECEPTIONIST", hForeign, s, tag = "foreign"))
+
+      val patient = patientIn(admin, h, "Life", s)
+      // Registration fast-path: walk-in visit with EMPI lookup riding the patient module.
+      val visit =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/reception/visits",
+            json("patientId" to patient, "visitType" to "outpatient", "reason" to "reception workspace"),
+            rec,
+          ),
+        )["visit"]
+      val visitId = visit["id"].asText()
+      assertEquals("VN-", visit["visitNumber"].asText().take(3), "visit number format")
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/reception/visits/$visitId/check-in", null, rec), "check-in")
+
+      // Visitor/attendant passes: per-hospital sequence, return + state guard.
+      val pass1 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/reception/visits/$visitId/passes",
+            json(
+              "visitorName" to "Ali Attendant",
+              "relation" to "attendant",
+              "phone" to "+9745000001",
+            ),
+            rec,
+          ),
+        )
+      assertEquals("VPS-0001", pass1["passNumber"].asText(), "first pass number")
+      assertEquals("active", pass1["status"].asText())
+      `data`(api(HttpMethod.POST, "/api/v1/reception/visits/$visitId/passes", json("visitorName" to "Sara Visitor", "relation" to "visitor"), rec))
+      val passes = `data`(api(HttpMethod.GET, "/api/v1/reception/visits/$visitId/passes", null, rec))
+      assertEquals(2, passes.size(), "two passes listed")
+      val returned = `data`(api(HttpMethod.PATCH, "/api/v1/reception/passes/${pass1["id"].asText()}/return", null, rec))
+      assertEquals("returned", returned["status"].asText(), "pass return closes it")
+      assertNotNull(returned["returnedAt"].asText(), "returnedAt stamped")
+      assertEquals(
+        409,
+        api(HttpMethod.PATCH, "/api/v1/reception/passes/${pass1["id"].asText()}/return", null, rec).status,
+        "re-returning a closed pass is a conflict",
+      )
+
+      // Consult-fee receipts: issue → void (audit kept) → sequence continues.
+      val rcp1 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/reception/visits/$visitId/receipts", json("amountQar" to 500, "mode" to "cash"), rec),
+        )
+      assertEquals("RCP-0001", rcp1["receiptNumber"].asText(), "first receipt number")
+      assertEquals(0, java.math.BigDecimal("500").compareTo(rcp1["amountQar"].decimalValue()), "amount carried")
+      val voided = `data`(api(HttpMethod.PATCH, "/api/v1/reception/receipts/${rcp1["id"].asText()}/void", null, rec))
+      assertEquals("voided", voided["status"].asText(), "void keeps the row (audit trail)")
+      assertNotNull(voided["voidedAt"].asText(), "voidedAt stamped")
+      assertEquals(
+        409,
+        api(HttpMethod.PATCH, "/api/v1/reception/receipts/${rcp1["id"].asText()}/void", null, rec).status,
+        "re-voiding a voided receipt is a conflict",
+      )
+      val rcp2 = `data`(api(HttpMethod.POST, "/api/v1/reception/visits/$visitId/receipts", json("amountQar" to 300, "mode" to "card"), rec))
+      assertEquals("RCP-0002", rcp2["receiptNumber"].asText(), "receipt sequence continues after void")
+      val receipts = `data`(api(HttpMethod.GET, "/api/v1/reception/visits/$visitId/receipts", null, rec))
+      assertEquals(2, receipts.size(), "both receipts listed (1 voided + 1 issued)")
+
+      // Patient calling from the workspace: queue call + call-next with reception perms (queue:manage:queue).
+      val entry = `data`(api(HttpMethod.POST, "/api/v1/queue/entries", json("queueType" to "consult", "patientId" to patient), rec))
+      assertEquals("C-01", entry["tokenNumber"].asText(), "fresh hospital token sequence")
+      val called = `data`(api(HttpMethod.PATCH, "/api/v1/queue/entries/consult/C-01/call", null, rec))
+      assertEquals("called", called["status"].asText(), "workspace calls a specific token")
+
+      // Cancel with reason; closed visits refuse new passes/receipts (409).
+      val cancelled = `data`(api(HttpMethod.PATCH, "/api/v1/reception/visits/$visitId/cancel", json("reason" to "no show"), rec))
+      assertEquals("cancelled", cancelled["status"].asText())
+      assertTrue(
+        api(HttpMethod.POST, "/api/v1/reception/visits/$visitId/passes", json("visitorName" to "Late"), rec).body.contains("VISIT_CANCELLED"),
+        "cancelled visit refuses pass issue",
+      )
+
+      // Cross-tenant: foreign receptionist denied on this hospital's visit + passes + receipts
+      // (requireSameHospital -> 403 ACCESS_DENIED, the reception module's existing convention);
+      // their own-hospital workspace works with its own sequence (VPS-0001).
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/reception/visits/$visitId", token = recForeign).status, "cross-tenant visit read denied")
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/reception/visits/$visitId/passes", null, recForeign).status, "cross-tenant pass list denied")
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/reception/visits/$visitId/receipts", null, recForeign).status, "cross-tenant receipt list denied")
+      val fPatient = patientIn(admin, hForeign, "F", s)
+      val fVisit = `data`(api(HttpMethod.POST, "/api/v1/reception/visits", json("patientId" to fPatient), recForeign))["visit"]
+      val fPass =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/reception/visits/${fVisit["id"].asText()}/passes", json("visitorName" to "Foreign Attendant"), recForeign),
+        )
+      assertEquals("VPS-0001", fPass["passNumber"].asText(), "foreign hospital pass sequence starts at 0001 (hospital-scoped)")
+    }
+  }
+
   @Nested
   inner class SchedulingEngineTests {
     private fun registerRoleUser(

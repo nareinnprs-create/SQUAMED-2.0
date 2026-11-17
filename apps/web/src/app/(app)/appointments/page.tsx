@@ -227,6 +227,14 @@ export default function AppointmentsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<AppointmentForm>(initialForm);
 
+  // 01.03: reschedule an existing appointment onto another session slot.
+  const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null);
+  const [rescheduleForm, setRescheduleForm] = useState({ doctorId: '', date: '' });
+  const [rescheduleSlots, setRescheduleSlots] = useState<SlotOption[]>([]);
+  const [rescheduleSlotId, setRescheduleSlotId] = useState('');
+  const [rescheduleSlotsLoading, setRescheduleSlotsLoading] = useState(false);
+  const [rescheduleSubmitting, setRescheduleSubmitting] = useState(false);
+
   const loadAppointments = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -277,6 +285,41 @@ export default function AppointmentsPage() {
       cancelled = true;
     };
   }, [apiFetch, isReady, form.doctorId, form.date]);
+
+  // 01.03: reschedule picker — same slot machinery, its own state.
+  useEffect(() => {
+    const doctorId = rescheduleForm.doctorId.trim();
+    if (!isReady || rescheduleTarget === null || !doctorId || !rescheduleForm.date) {
+      setRescheduleSlots([]);
+      setRescheduleSlotId('');
+      return;
+    }
+    let cancelled = false;
+    setRescheduleSlotsLoading(true);
+    apiFetch<SlotOption[]>(`/schedules/${encodeURIComponent(doctorId)}/slots?from=${rescheduleForm.date}&to=${rescheduleForm.date}`)
+      .then((data) => {
+        if (!cancelled) {
+          setRescheduleSlots(data ?? []);
+          setRescheduleSlotId('');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRescheduleSlots([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRescheduleSlotsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiFetch, isReady, rescheduleTarget, rescheduleForm.doctorId, rescheduleForm.date]);
+
+  function openReschedule(appointment: Appointment) {
+    setRescheduleForm({ doctorId: '', date: '' });
+    setRescheduleSlots([]);
+    setRescheduleSlotId('');
+    setRescheduleTarget(appointment);
+  }
 
   function openModal() {
     setForm(initialForm);
@@ -360,6 +403,28 @@ export default function AppointmentsPage() {
       await loadAppointments();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update appointment status');
+    }
+  }
+
+  async function rescheduleAppointment() {
+    if (!rescheduleTarget?.id) return;
+    if (!rescheduleSlotId) {
+      setError('Select a new slot');
+      return;
+    }
+    setRescheduleSubmitting(true);
+    setError(null);
+    try {
+      await apiFetch<Appointment>(`/appointments/${rescheduleTarget.id}/reschedule`, {
+        method: 'POST',
+        body: JSON.stringify({ slotId: rescheduleSlotId }),
+      });
+      setRescheduleTarget(null);
+      await loadAppointments();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to reschedule appointment');
+    } finally {
+      setRescheduleSubmitting(false);
     }
   }
 
@@ -447,9 +512,14 @@ export default function AppointmentsPage() {
                           </Button>
                         ) : null}
                         {appointment.status === 'scheduled' || appointment.status === 'confirmed' ? (
-                          <Button size="sm" variant="ghost" onClick={() => void updateStatus(appointment, 'cancelled')}>
-                            Cancel
-                          </Button>
+                          <>
+                            <Button size="sm" variant="outline" onClick={() => openReschedule(appointment)}>
+                              Reschedule
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => void updateStatus(appointment, 'cancelled')}>
+                              Cancel
+                            </Button>
+                          </>
                         ) : null}
                       </div>
                     </TableCell>
@@ -567,6 +637,78 @@ export default function AppointmentsPage() {
               value={form.reason}
               onChange={(e) => setForm({ ...form, reason: e.target.value })}
             />
+          </Stack>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={rescheduleTarget !== null}
+        onClose={() => setRescheduleTarget(null)}
+        title="Reschedule appointment"
+        description={
+          rescheduleTarget
+            ? `Pick a new session slot for ${formatDateTime(rescheduleTarget.scheduledStart)}. The old slot is released.`
+            : ''
+        }
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setRescheduleTarget(null)}>
+              Close
+            </Button>
+            <Button
+              loading={rescheduleSubmitting}
+              disabled={rescheduleSlotId === ''}
+              onClick={() => void rescheduleAppointment()}
+            >
+              Reschedule
+            </Button>
+          </>
+        }
+      >
+        {rescheduleTarget ? (
+          <Stack gap={12}>
+            <Input
+              label="Doctor ID"
+              placeholder="UUID of the doctor"
+              value={rescheduleForm.doctorId}
+              onChange={(e) => setRescheduleForm({ ...rescheduleForm, doctorId: e.target.value })}
+            />
+            <Input
+              type="date"
+              label="New date"
+              value={rescheduleForm.date}
+              onChange={(e) => setRescheduleForm({ ...rescheduleForm, date: e.target.value })}
+            />
+            {rescheduleForm.doctorId.trim() !== '' && rescheduleForm.date !== '' ? (
+              rescheduleSlotsLoading ? (
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--sq-fg-muted)' }}>{t('appointments.slot.loading')}</p>
+              ) : rescheduleSlots.length > 0 ? (
+                <RadioGroup
+                  aria-label={t('appointments.slot.label')}
+                  orientation="horizontal"
+                  value={rescheduleSlotId}
+                  onValueChange={setRescheduleSlotId}
+                  style={{ flexWrap: 'wrap' }}
+                >
+                  {rescheduleSlots.map((slot) => (
+                    <Radio
+                      key={slot.id ?? slot.startTime}
+                      value={slot.id ?? slot.startTime}
+                      disabled={slot.status !== 'open' || slot.bookedCount >= slot.capacity}
+                      label={
+                        <>
+                          {slot.startTime}–{slot.endTime}
+                          {slot.sessionType === 'teleconsult' ? ' · Tele' : null}
+                          {slot.bookedCount >= slot.capacity ? ` · ${t('appointments.slot.full')}` : null}
+                        </>
+                      }
+                    />
+                  ))}
+                </RadioGroup>
+              ) : (
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--sq-fg-muted)' }}>{t('appointments.slot.empty')}</p>
+              )
+            ) : null}
           </Stack>
         ) : null}
       </Modal>

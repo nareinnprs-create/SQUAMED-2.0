@@ -1,8 +1,11 @@
 package com.squamed.core.receptionqueue.api
 
+import com.squamed.core.receptionqueue.domain.ConsultReceipt
 import com.squamed.core.receptionqueue.domain.QueueEntry
 import com.squamed.core.receptionqueue.domain.ServicePoint
+import com.squamed.core.receptionqueue.domain.VisitPass
 import com.squamed.core.receptionqueue.domain.VisitRegistration
+import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -212,6 +215,82 @@ data class ServicePointDto(
         queueType = entity.queueType,
         counterNumber = entity.counterNumber,
         status = entity.status,
+      )
+  }
+}
+
+/** 01.03 visitor/attendant pass issue request. */
+data class VisitPassIssueDto(
+  val visitorName: String? = null,
+  val relation: String? = null,
+  val phone: String? = null,
+  val idReference: String? = null,
+)
+
+data class VisitPassDto(
+  val id: UUID?,
+  val hospitalId: UUID?,
+  val visitId: UUID,
+  val patientId: UUID,
+  val passNumber: String,
+  val visitorName: String,
+  val relation: String,
+  val phone: String?,
+  val idReference: String?,
+  val status: String,
+  val issuedAt: Instant,
+  val returnedAt: Instant?,
+) {
+  companion object {
+    fun from(entity: VisitPass) =
+      VisitPassDto(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        visitId = entity.visitId,
+        patientId = entity.patientId,
+        passNumber = entity.passNumber,
+        visitorName = entity.visitorName,
+        relation = entity.relation,
+        phone = entity.phone,
+        idReference = entity.idReference,
+        status = entity.status,
+        issuedAt = entity.issuedAt,
+        returnedAt = entity.returnedAt,
+      )
+  }
+}
+
+/** 01.03 consult-fee receipt issue request. */
+data class ConsultReceiptIssueDto(
+  val amountQar: BigDecimal? = null,
+  val mode: String? = null,
+)
+
+data class ConsultReceiptDto(
+  val id: UUID?,
+  val hospitalId: UUID?,
+  val visitId: UUID,
+  val patientId: UUID,
+  val receiptNumber: String,
+  val amountQar: BigDecimal,
+  val mode: String,
+  val status: String,
+  val issuedAt: Instant,
+  val voidedAt: Instant?,
+) {
+  companion object {
+    fun from(entity: ConsultReceipt) =
+      ConsultReceiptDto(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        visitId = entity.visitId,
+        patientId = entity.patientId,
+        receiptNumber = entity.receiptNumber,
+        amountQar = entity.amountQar,
+        mode = entity.mode,
+        status = entity.status,
+        issuedAt = entity.issuedAt,
+        voidedAt = entity.voidedAt,
       )
   }
 }

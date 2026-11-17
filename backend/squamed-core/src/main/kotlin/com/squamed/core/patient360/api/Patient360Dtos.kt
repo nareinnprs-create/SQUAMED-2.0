@@ -2,6 +2,7 @@ package com.squamed.core.patient360.api
 
 import com.squamed.core.billing.api.ChargeView
 import com.squamed.core.billing.api.InvoiceView
+import com.squamed.core.consent.api.ConsentView
 import com.squamed.core.encounter.api.DiagnosisView
 import com.squamed.core.encounter.api.OrderView
 import com.squamed.core.encounter.api.PrescriptionView
@@ -12,6 +13,7 @@ import com.squamed.core.patient.api.AllergyDto
 import com.squamed.core.patient.api.MedicalHistoryDto
 import com.squamed.core.patient.api.NoteDto
 import com.squamed.core.patient.api.PatientDetailDto
+import com.squamed.core.patient.api.PatientDocumentDto
 import com.squamed.core.pharmacy.api.DispensationView
 import com.squamed.core.receptionqueue.api.VisitDto
 import com.squamed.core.scheduling.api.AppointmentView
@@ -75,4 +77,6 @@ data class Patient360View(
   val totalInvoices: Int = 0,
   val tasks: List<TaskView> = emptyList(),
   val taskSummary: TaskSummaryView = TaskSummaryView(open = 0, completed = 0),
+  val consents: List<ConsentView> = emptyList(),
+  val documents: List<PatientDocumentDto> = emptyList(),
 )

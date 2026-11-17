@@ -5,6 +5,9 @@ import com.squamed.core.billing.api.InvoiceView
 import com.squamed.core.billing.repository.ChargeRepository
 import com.squamed.core.billing.repository.InvoiceRepository
 import com.squamed.core.common.tenant.requireSameHospital
+import com.squamed.core.consent.api.ConsentView
+import com.squamed.core.consent.repository.ConsentChannelOptInRepository
+import com.squamed.core.consent.repository.ConsentRepository
 import com.squamed.core.encounter.api.DiagnosisView
 import com.squamed.core.encounter.api.OrderView
 import com.squamed.core.encounter.api.PrescriptionView
@@ -17,6 +20,8 @@ import com.squamed.core.encounter.repository.PrescriptionRepository
 import com.squamed.core.encounter.repository.VitalSignRepository
 import com.squamed.core.laboratory.api.LabOrderView
 import com.squamed.core.laboratory.repository.LabOrderRepository
+import com.squamed.core.patient.api.PatientDocumentDto
+import com.squamed.core.patient.repository.PatientDocumentRepository
 import com.squamed.core.patient.service.PatientService
 import com.squamed.core.patient360.api.Encounter360View
 import com.squamed.core.patient360.api.Patient360View
@@ -50,6 +55,9 @@ class Patient360Service(
   private val appointmentRepository: AppointmentRepository,
   private val visitRegistrationRepository: VisitRegistrationRepository,
   private val taskRepository: TaskRepository,
+  private val consentRepository: ConsentRepository,
+  private val consentOptInRepository: ConsentChannelOptInRepository,
+  private val documentRepository: PatientDocumentRepository,
 ) {
   @Transactional(readOnly = true)
   fun getPatient360(
@@ -94,6 +102,15 @@ class Patient360Service(
       ).distinctBy { it.id }
         .sortedByDescending { it.createdAt ?: Instant.EPOCH }
 
+    val consents =
+      consentRepository.findByPatientId(patientId).map { consent ->
+        ConsentView.from(
+          consent,
+          consentOptInRepository.findByConsentId(consent.id ?: throw IllegalStateException("CONSENT_ID_MISSING")),
+          Instant.now(),
+        )
+      }
+
     return Patient360View(
       demographics = demographics,
       latestVitals = vitalSignRepository.findTopByPatientIdOrderByRecordedAtDesc(patientId)?.let { VitalSignView.from(it) },
@@ -136,6 +153,8 @@ class Patient360Service(
           open = tasks.count { it.status != "completed" && it.status != "cancelled" },
           completed = tasks.count { it.status == "completed" },
         ),
+      consents = consents,
+      documents = documentRepository.findByPatientIdOrderByCreatedAtDesc(patientId).map { PatientDocumentDto.from(it) },
     )
   }
 }

@@ -281,8 +281,9 @@ class PlatformIntegrationTests {
         registry.add("spring.kafka.bootstrap-servers") { "localhost:9092" }
         registry.add("squamed.search.opensearch-uris") { "http://localhost:9200" }
         registry.add("squamed.search.reindex-on-startup") { "false" }
-        // Photos point at the compose MinIO (defaults in application.yml); explicit for clarity.
+        // Photos + documents point at the compose MinIO (defaults in application.yml); explicit for clarity.
         registry.add("squamed.photos.endpoint") { "http://localhost:9000" }
+        registry.add("squamed.documents.endpoint") { "http://localhost:9000" }
       } else {
         registry.add("spring.datasource.url") { postgres!!.jdbcUrl }
         registry.add("spring.datasource.username") { postgres!!.username }
@@ -295,6 +296,9 @@ class PlatformIntegrationTests {
         registry.add("squamed.photos.endpoint") { "http://localhost:${minio!!.getMappedPort(9000)}" }
         registry.add("squamed.photos.access-key") { "squamed" }
         registry.add("squamed.photos.secret-key") { "squamed_dev_password" }
+        registry.add("squamed.documents.endpoint") { "http://localhost:${minio!!.getMappedPort(9000)}" }
+        registry.add("squamed.documents.access-key") { "squamed" }
+        registry.add("squamed.documents.secret-key") { "squamed_dev_password" }
       }
     }
   }
@@ -1166,6 +1170,194 @@ class PlatformIntegrationTests {
       assertNotNull(agg["encounters"])
       assertNotNull(agg["labOrders"])
       assertNotNull(agg["tasks"])
+    }
+
+    // 01.05 Patient 360 v1: documents (S3/MinIO metadata rows + bytes round-trip) and
+    // consents surface in the aggregate with effective status; cross-tenant denials.
+    @Test
+    fun patient360DocumentsAndConsentsJourney() {
+      val admin = adminToken()
+      val s = suffix()
+      val h1 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "P360 H1 $s", "code" to "P3A-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val h2 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "P360 H2 $s", "code" to "P3B-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+
+      fun doctor(
+        hospitalId: String,
+        tag: String,
+      ): String {
+        val email = "p360-$tag-$s@test.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to "Doc",
+              "lastName" to "P360$s",
+              "roles" to listOf("DOCTOR"),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $tag doctor",
+        )
+        val login = api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123"))
+        assert2xx(login, "login $tag")
+        return `data`(login)["accessToken"].asText()
+      }
+
+      val doc1 = doctor(h1, "one")
+      val doc2 = doctor(h2, "two")
+
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json("firstName" to "P360", "lastName" to "Patient$s", "gender" to "male", "dateOfBirth" to "1990-04-04"),
+            doc1,
+          ),
+        )["patient"]["id"].asText()
+
+      // Documents: multipart upload -> metadata row + object-storage key; list + aggregate + download round-trip.
+      val pdfBytes = "%PDF-1.4\n%scan-test\n".toByteArray()
+      val parts = org.springframework.util.LinkedMultiValueMap<String, Any>()
+      parts.add(
+        "file",
+        object : org.springframework.core.io.ByteArrayResource(pdfBytes) {
+          override fun getFilename(): String = "discharge-summary.pdf"
+        },
+      )
+      parts.add("name", "Discharge summary $s")
+      parts.add("category", "discharge")
+      val uploadHeaders =
+        HttpHeaders().apply {
+          contentType = MediaType.MULTIPART_FORM_DATA
+          setBearerAuth(doc1)
+        }
+      val upload = rest.exchange("/api/v1/patients/$patientId/documents", HttpMethod.POST, HttpEntity(parts, uploadHeaders), String::class.java)
+      assertTrue(upload.statusCode.is2xxSuccessful, "document upload -> ${upload.body?.take(300)}")
+      val document = om.readTree(upload.body ?: "{}")["data"]
+      val documentId = document["id"].asText()
+      assertEquals("Discharge summary $s", document["name"].asText(), "document name stored")
+      assertEquals("discharge", document["category"].asText(), "document category stored")
+      assertEquals("application/pdf", document["contentType"].asText(), "document content type stored")
+      assertEquals(pdfBytes.size.toLong(), document["sizeBytes"].asLong(), "document size stored")
+
+      val list = `data`(api(HttpMethod.GET, "/api/v1/patients/$patientId/documents", token = doc1))
+      assertEquals(1, list.size(), "document list must contain the upload")
+      assertEquals(documentId, list[0]["id"].asText(), "document list id matches")
+
+      val badParts = org.springframework.util.LinkedMultiValueMap<String, Any>()
+      badParts.add(
+        "file",
+        object : org.springframework.core.io.ByteArrayResource(ByteArray(8)) {
+          override fun getFilename(): String = "notes.txt"
+        },
+      )
+      badParts.add("name", "Notes")
+      val badUploadStatus =
+        try {
+          rest.exchange("/api/v1/patients/$patientId/documents", HttpMethod.POST, HttpEntity(badParts, uploadHeaders), String::class.java).statusCode.value()
+        } catch (e: RestClientResponseException) {
+          e.statusCode.value()
+        }
+      assertEquals(400, badUploadStatus, "unsupported content type must be rejected")
+
+      // Consents with effective status: granted (no expiry), expired (past expiresAt), then withdrawn wins.
+      val granted =
+        `data`(api(HttpMethod.POST, "/api/v1/consents", json("patientId" to patientId, "purpose" to "treatment", "signedByName" to "P360 Patient$s"), doc1))
+      assertEquals("granted", granted["status"].asText(), "treatment consent granted")
+      val expired =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/consents",
+            json("patientId" to patientId, "purpose" to "data_sharing", "expiresAt" to "2020-01-01T00:00:00Z"),
+            doc1,
+          ),
+        )
+      assertEquals("expired", expired["status"].asText(), "past-expiresAt consent surfaces as expired")
+
+      val withdraw = `data`(api(HttpMethod.POST, "/api/v1/consents/${granted["id"].asText()}/withdraw", json("reason" to "opt out"), doc1))
+      assertEquals("withdrawn", withdraw["status"].asText(), "withdrawn consent surfaces as withdrawn")
+
+      // The aggregate exposes documents + consents alongside the existing panels.
+      val agg = `data`(api(HttpMethod.GET, "/api/v1/patient360/$patientId", token = doc1))
+      assertEquals(1, agg["documents"].size(), "360 aggregate carries documents")
+      assertEquals("Discharge summary $s", agg["documents"][0]["name"].asText(), "360 document name")
+      val aggConsents = agg["consents"].asSequence().map { it["purpose"].asText() to it["status"].asText() }.toMap()
+      assertEquals(
+        mapOf("treatment" to "withdrawn", "data_sharing" to "expired"),
+        aggConsents,
+        "360 consent effective statuses (withdrawn wins, expiry applied)",
+      )
+
+      val download =
+        try {
+          val resp =
+            rest.exchange(
+              "/api/v1/patients/$patientId/documents/$documentId/download",
+              HttpMethod.GET,
+              HttpEntity<Void?>(
+                HttpHeaders().apply {
+                  setBearerAuth(doc1)
+                },
+              ),
+              ByteArray::class.java,
+            )
+          Pair(resp.statusCode.value(), resp.body ?: ByteArray(0))
+        } catch (e: RestClientResponseException) {
+          Pair(e.statusCode.value(), ByteArray(0))
+        }
+      assertEquals(200, download.first, "document download must succeed")
+      assertTrue(pdfBytes.contentEquals(download.second), "downloaded document bytes must match the upload")
+
+      // Cross-tenant: H2 doctor cannot read/write foreign documents or the foreign 360.
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/patients/$patientId/documents", token = doc2).status, "foreign document list denied")
+      assertEquals(
+        403,
+        api(HttpMethod.GET, "/api/v1/patients/$patientId/documents/$documentId/download", token = doc2).status,
+        "foreign document download denied",
+      )
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/patient360/$patientId", token = doc2).status, "foreign patient360 denied")
+      val foreignParts = org.springframework.util.LinkedMultiValueMap<String, Any>()
+      foreignParts.add(
+        "file",
+        object : org.springframework.core.io.ByteArrayResource(pdfBytes) {
+          override fun getFilename(): String = "intruder.pdf"
+        },
+      )
+      foreignParts.add("name", "Foreign upload")
+      val foreignUploadHeaders =
+        HttpHeaders().apply {
+          contentType = MediaType.MULTIPART_FORM_DATA
+          setBearerAuth(doc2)
+        }
+      val foreignUploadStatus =
+        try {
+          rest
+            .exchange(
+              "/api/v1/patients/$patientId/documents",
+              HttpMethod.POST,
+              HttpEntity(foreignParts, foreignUploadHeaders),
+              String::class.java,
+            ).statusCode
+            .value()
+        } catch (e: RestClientResponseException) {
+          e.statusCode.value()
+        }
+      assertEquals(403, foreignUploadStatus, "foreign document write denied")
+
+      // Own-tenant reads still work after the guard.
+      assert2xx(api(HttpMethod.GET, "/api/v1/patients/$patientId/documents", token = doc1), "own tenant document list allowed")
+      assert2xx(api(HttpMethod.GET, "/api/v1/patient360/$patientId", token = doc1), "own tenant patient360 allowed")
     }
   }
 

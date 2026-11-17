@@ -8,6 +8,7 @@ export const SCAN_ROUTES = [
   { path: '/design-system', label: 'design-system', public: true },
   { path: '/appointments', label: 'appointments' },
   { path: '/patients', label: 'patients' },
+  { path: '/patients/11111111-1111-1111-1111-111111111111/overview', label: 'patient-360' },
   { path: '/dashboard', label: 'dashboard' },
   { path: '/queue', label: 'queue' },
   { path: '/reception', label: 'reception' },
@@ -15,6 +16,62 @@ export const SCAN_ROUTES = [
 ];
 
 const SCAN_TOKENS = { access: 'scan-access-token', refresh: 'scan-refresh-token' };
+
+// Shape-correct 360 payload for the patient-360 scan route: one consent + one
+// document so the Documents/Consents tables render with real rows under axe/VRT.
+const PATIENT_360 = {
+  demographics: {
+    id: '11111111-1111-1111-1111-111111111111',
+    mrn: 'MRN-SCAN-001',
+    firstName: 'Scan',
+    lastName: 'Patient',
+    dateOfBirth: '1990-05-10',
+    gender: 'female',
+    allergies: [],
+    notes: [],
+    medicalHistory: [],
+  },
+  latestVitals: null,
+  recentVitals: [],
+  encounters: [],
+  totalEncounters: 0,
+  allergies: [],
+  notes: [],
+  medicalHistory: [],
+  appointments: [],
+  visits: [],
+  labOrders: [],
+  totalLabOrders: 0,
+  medications: [],
+  charges: [],
+  invoices: [],
+  totalInvoices: 0,
+  tasks: [],
+  taskSummary: { open: 0, completed: 0 },
+  consents: [
+    {
+      id: '22222222-2222-2222-2222-222222222222',
+      purpose: 'treatment',
+      status: 'granted',
+      scope: 'general care',
+      signaturePresent: true,
+      signedByName: 'Scan Patient',
+      signedAt: '2026-01-05T09:00:00Z',
+      expiresAt: '2027-01-05T09:00:00Z',
+      withdrawnAt: null,
+    },
+  ],
+  documents: [
+    {
+      id: '33333333-3333-3333-3333-333333333333',
+      name: 'lab-report.pdf',
+      category: 'report',
+      contentType: 'application/pdf',
+      sizeBytes: 240_000,
+      createdAt: '2026-01-06T10:00:00Z',
+    },
+  ],
+};
 
 const SCAN_USER = {
   userId: 'scan-user-0001',
@@ -97,6 +154,7 @@ function jsonOk(data) {
 // so the catch-all is registered first and specific payloads after it.
 export async function installApiFixtures(page) {
   await page.route('**/api/v1/**', (route) => route.fulfill(jsonOk([])));
+  await page.route('**/api/v1/patient360/**', (route) => route.fulfill(jsonOk(PATIENT_360)));
   await page.route('**/api/v1/analytics/**', (route) => {
     const key = route.request().url().split('/analytics/')[1]?.split('?')[0];
     return route.fulfill(jsonOk(ANALYTICS[key] ?? ANALYTICS.overview));

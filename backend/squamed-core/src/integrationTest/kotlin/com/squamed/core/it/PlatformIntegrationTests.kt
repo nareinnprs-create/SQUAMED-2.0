@@ -1179,17 +1179,31 @@ class PlatformIntegrationTests {
       val admin = adminToken()
       val s = suffix()
       val h1 =
-        `data`(api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "P360 H1 $s", "code" to "P3A-$s", "country" to "Qatar"), admin))["id"].asText()
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "P360 H1 $s", "code" to "P3A-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
       val h2 =
-        `data`(api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "P360 H2 $s", "code" to "P3B-$s", "country" to "Qatar"), admin))["id"].asText()
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "P360 H2 $s", "code" to "P3B-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
 
-      fun doctor(hospitalId: String, tag: String): String {
+      fun doctor(
+        hospitalId: String,
+        tag: String,
+      ): String {
         val email = "p360-$tag-$s@test.local"
         assert2xx(
           api(
             HttpMethod.POST,
             "/api/v1/auth/register",
-            json("email" to email, "password" to "Passw0rd!123", "firstName" to "Doc", "lastName" to "P360$s", "roles" to listOf("DOCTOR"), "hospitalId" to hospitalId),
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to "Doc",
+              "lastName" to "P360$s",
+              "roles" to listOf("DOCTOR"),
+              "hospitalId" to hospitalId,
+            ),
           ),
           "register $tag doctor",
         )
@@ -1287,7 +1301,17 @@ class PlatformIntegrationTests {
 
       val download =
         try {
-          val resp = rest.exchange("/api/v1/patients/$patientId/documents/$documentId/download", HttpMethod.GET, HttpEntity<Void?>(HttpHeaders().apply { setBearerAuth(doc1) }), ByteArray::class.java)
+          val resp =
+            rest.exchange(
+              "/api/v1/patients/$patientId/documents/$documentId/download",
+              HttpMethod.GET,
+              HttpEntity<Void?>(
+                HttpHeaders().apply {
+                  setBearerAuth(doc1)
+                },
+              ),
+              ByteArray::class.java,
+            )
           Pair(resp.statusCode.value(), resp.body ?: ByteArray(0))
         } catch (e: RestClientResponseException) {
           Pair(e.statusCode.value(), ByteArray(0))
@@ -1318,7 +1342,14 @@ class PlatformIntegrationTests {
         }
       val foreignUploadStatus =
         try {
-          rest.exchange("/api/v1/patients/$patientId/documents", HttpMethod.POST, HttpEntity(foreignParts, foreignUploadHeaders), String::class.java).statusCode.value()
+          rest
+            .exchange(
+              "/api/v1/patients/$patientId/documents",
+              HttpMethod.POST,
+              HttpEntity(foreignParts, foreignUploadHeaders),
+              String::class.java,
+            ).statusCode
+            .value()
         } catch (e: RestClientResponseException) {
           e.statusCode.value()
         }

@@ -11,6 +11,7 @@ export const SCAN_ROUTES = [
   { path: '/patients/11111111-1111-1111-1111-111111111111/overview', label: 'patient-360' },
   { path: '/dashboard', label: 'dashboard' },
   { path: '/queue', label: 'queue' },
+  { path: '/announcements', label: 'announcements' },
   { path: '/reception', label: 'reception' },
   { path: '/consult', label: 'consult' },
 ];
@@ -72,6 +73,13 @@ const PATIENT_360 = {
     },
   ],
 };
+
+// Shape-correct zones payload for the announcements scan route: two enabled zones so the
+// zone select renders real options under axe/VRT (mirrors the PATIENT_360 fixture style).
+const ANNOUNCEMENT_ZONES = [
+  { id: 'aaaa1111-0000-0000-0000-000000000001', name: 'Main Display', servicePointId: 'SP1', volume: 90, enabled: true },
+  { id: 'aaaa1111-0000-0000-0000-000000000002', name: 'Pharmacy Window', servicePointId: 'SP2', volume: 75, enabled: true },
+];
 
 const SCAN_USER = {
   userId: 'scan-user-0001',
@@ -154,6 +162,7 @@ function jsonOk(data) {
 // so the catch-all is registered first and specific payloads after it.
 export async function installApiFixtures(page) {
   await page.route('**/api/v1/**', (route) => route.fulfill(jsonOk([])));
+  await page.route('**/api/v1/queue/zones', (route) => route.fulfill(jsonOk(ANNOUNCEMENT_ZONES)));
   await page.route('**/api/v1/patient360/**', (route) => route.fulfill(jsonOk(PATIENT_360)));
   await page.route('**/api/v1/analytics/**', (route) => {
     const key = route.request().url().split('/analytics/')[1]?.split('?')[0];

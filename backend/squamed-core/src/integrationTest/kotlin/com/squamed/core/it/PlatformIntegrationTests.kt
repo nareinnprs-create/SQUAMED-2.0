@@ -5193,11 +5193,12 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order (21 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement (22 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
-      assertEquals(21, catalog.size(), "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order events: $catalog")
+      assertEquals(22, catalog.size(), "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement events: $catalog")
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
+      assertTrue(catalog.any { it["name"].asText() == "AnnouncementEnqueued" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "NotificationDispatched" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "AuditChainBroken" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "TaskEscalated" && it["status"].asText() == "EMITTED" })
@@ -5816,9 +5817,9 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the 20-type v1 set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02).
+      // Catalog: consent.* EMITTED in the 21-type set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
-      assertEquals(21, catalog.size(), "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order: $catalog")
+      assertEquals(22, catalog.size(), "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement: $catalog")
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "QueueBumped" && it["status"].asText() == "EMITTED" }, "queue.bumped EMITTED")
@@ -7974,6 +7975,173 @@ class PlatformIntegrationTests {
       assertEquals(400, api(HttpMethod.GET, "/api/v1/queue/entries/lab/L-01", token = recForeign).status, "cross-tenant token read denied")
     }
 
+    // 01.07 voice announcements: rule + zone resolution on call, repeat doubling for emergency,
+    // manual enqueue, no-rule defaults, tenant-scoped zones and cross-tenant denials; the event
+    // reaches the WS display session (SpeechSynthesis speaking is browser-side by design).
+    @Test
+    fun voiceAnnouncementsJourney() {
+      val admin = adminToken()
+      val s = suffix()
+      val h1 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Voice H1 $s", "code" to "VA1-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val hF =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Voice F $s", "code" to "VAF-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val rec = login(registerRoleUser("RECEPTIONIST", h1, s))
+      val recForeign = login(registerRoleUser("RECEPTIONIST", hF, s, tag = "foreign"))
+
+      // Counter + audio zone bound to it + rule (repeat 3, en→hi order, scoped to the zone).
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/queue/service-points",
+          json("name" to "Counter 1", "code" to "SP1", "queueType" to "consult", "counterNumber" to "1"),
+          rec,
+        ),
+        "create service point",
+      )
+      val zone =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/queue/zones", json("name" to "Main Display", "servicePointId" to "SP1", "volume" to 90), rec),
+        )
+      val zoneId = zone["id"].asText()
+      assertEquals("Main Display", zone["name"].asText(), "zone created")
+      assertEquals(90, zone["volume"].asInt(), "zone volume stored")
+      val rule =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/queue/announcement-rules",
+            json("queueType" to "consult", "repeatCount" to 3, "languages" to "en,hi", "zoneId" to zoneId),
+            rec,
+          ),
+        )
+      assertEquals(3, rule["repeatCount"].asInt(), "rule repeat stored")
+      assertEquals("en,hi", rule["languages"].asText(), "rule language order stored")
+
+      fun announcementRow(
+        hid: String,
+        needle: String,
+        eventType: String,
+      ): JsonNode? =
+        `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = admin))
+          .firstOrNull { it["eventType"].asText() == eventType && it["envelope"].asText().contains(hid) && it["envelope"].asText().contains(needle) }
+          ?.let { om.readTree(it["envelope"].asText()) }
+
+      // Call token C-01 (service point SP1): announcement carries the resolved rule + zone.
+      val patient1 = patientIn(admin, h1, "A", s)
+      val entry1 =
+        `data`(api(HttpMethod.POST, "/api/v1/queue/entries", json("queueType" to "consult", "patientId" to patient1, "servicePointId" to "SP1"), rec))
+      val token1 = entry1["tokenNumber"].asText()
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/queue/entries/consult/$token1/call", null, rec), "call $token1")
+      val ann1 = announcementRow(h1, token1, "announcement.enqueued")
+      assertNotNull(ann1, "announcement.enqueued in the outbox for $token1")
+      assertEquals("announcement-service", ann1!!["source"].asText(), "announcement source stamped")
+      assertEquals("queue-entry", ann1["entityType"].asText())
+      assertEquals(3, ann1["payload"]["repeatCount"].asInt(), "rule repeat 3 applied")
+      assertEquals(zoneId, ann1["payload"]["zoneId"].asText(), "rule zone scoped the announcement")
+      assertEquals("Main Display", ann1["payload"]["zoneName"].asText())
+      assertEquals("Counter 1", ann1["payload"]["counter"].asText(), "counter resolved from the service point name")
+      assertEquals(90, ann1["payload"]["volume"].asInt(), "zone volume 90 applied")
+      assertEquals(listOf("en", "hi"), ann1["payload"]["languages"].map { it.asText() }, "rule language order drives texts")
+      assertEquals("Token $token1, counter Counter 1", ann1["payload"]["texts"]["en"].asText(), "en TTS template")
+      assertEquals("टोकन $token1, काउंटर Counter 1", ann1["payload"]["texts"]["hi"].asText(), "hi TTS template")
+
+      // queue.called is enriched with counter/priority so displays can rank and label.
+      val called1 = announcementRow(h1, token1, "queue.called")
+      assertNotNull(called1, "queue.called in the outbox")
+      assertEquals("Counter 1", called1!!["payload"]["servicePointName"].asText(), "queue.called carries servicePointName")
+      assertEquals("SP1", called1["payload"]["servicePointId"].asText())
+      assertEquals("routine", called1["payload"]["priority"].asText())
+
+      // Emergency call: rule repeat doubled (3 → 6); announcement.enqueued reaches the WS display session.
+      val ws = connectRealtime(rec)
+      val patient2 = patientIn(admin, h1, "B", s)
+      val entry2 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/queue/entries",
+            json(
+              "queueType" to "consult",
+              "patientId" to patient2,
+              "priority" to "emergency",
+              "servicePointId" to "SP1",
+            ),
+            rec,
+          ),
+        )
+      val token2 = entry2["tokenNumber"].asText()
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/queue/entries/consult/$token2/call", null, rec), "call emergency $token2")
+      val ann2 = announcementRow(h1, token2, "announcement.enqueued")
+      assertNotNull(ann2, "announcement.enqueued for the emergency token")
+      assertEquals(6, ann2!!["payload"]["repeatCount"].asInt(), "emergency doubles the rule repeat (3 → 6)")
+      assertEquals("emergency", ann2["payload"]["priority"].asText())
+      // Wait for a frame carrying THIS token: consumer lag can replay the first
+      // call's announcement.enqueued (published pre-connect) after the WS opens.
+      val frame = awaitEventFrame(ws, "announcement.enqueued", 5000, mustContain = token2)
+      assertNotNull(frame, "announcement.enqueued carrying $token2 broadcast to the hospital WS session: ${ws.messages.toList().takeLast(4)}")
+
+      // Manual enqueue (contract /announcements:enqueue): texts echoed, zone volume applied, default repeat 2.
+      val manual =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/queue/announcements",
+            json("texts" to mapOf("en" to "Please proceed to the pharmacy", "hi" to "कृपया फार्मेसी की ओर बढ़ें"), "zoneId" to zoneId),
+            rec,
+          ),
+        )
+      assertEquals(2, manual["repeatCount"].asInt(), "manual enqueue default repeat 2")
+      assertEquals("Main Display", manual["zoneName"].asText(), "manual enqueue zone applied")
+      assertEquals(90, manual["volume"].asInt(), "zone volume applied")
+      assertEquals("Please proceed to the pharmacy", manual["texts"]["en"].asText(), "manual texts echoed")
+
+      // No-rule hospital: defaults (repeat 2, en+hi, every zone, default volume, counter = queue type).
+      val patientF = patientIn(admin, hF, "F", s)
+      val entryF = `data`(api(HttpMethod.POST, "/api/v1/queue/entries", json("queueType" to "consult", "patientId" to patientF), recForeign))
+      val tokenF = entryF["tokenNumber"].asText()
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/queue/entries/consult/$tokenF/call", null, recForeign), "call foreign token")
+      val annF = announcementRow(hF, tokenF, "announcement.enqueued")
+      assertNotNull(annF, "announcement even without a rule (defaults)")
+      assertEquals(2, annF!!["payload"]["repeatCount"].asInt(), "no-rule default repeat 2")
+      assertEquals(listOf("en", "hi"), annF["payload"]["languages"].map { it.asText() }, "default languages en,hi")
+      assertTrue(!annF["payload"].has("zoneId"), "no zone bound → announced in every zone (zoneId omitted)")
+      assertEquals(80, annF["payload"]["volume"].asInt(), "default volume 80")
+      assertEquals("consult", annF["payload"]["counter"].asText(), "counter falls back to queue type")
+
+      // Tenant scoping: zones/rules/enqueue are hospital-scoped; foreign zone references denied.
+      assertTrue(`data`(api(HttpMethod.GET, "/api/v1/queue/zones", token = recForeign)).isEmpty(), "foreign doctor sees no zones")
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/queue/announcement-rules", json("queueType" to "consult", "zoneId" to zoneId), recForeign).status,
+        "rule referencing another hospital's zone denied",
+      )
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/queue/announcements", json("texts" to mapOf("en" to "x"), "zoneId" to zoneId), recForeign).status,
+        "enqueue into another hospital's zone denied",
+      )
+
+      // Validation guards.
+      assertEquals(400, api(HttpMethod.POST, "/api/v1/queue/zones", json("servicePointId" to "SP1"), rec).status, "zone name required")
+      assertEquals(400, api(HttpMethod.POST, "/api/v1/queue/zones", json("name" to "Loud", "volume" to 150), rec).status, "zone volume 0-100")
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/queue/announcement-rules", json("queueType" to "consult", "repeatCount" to 11), rec).status,
+        "rule repeat 1-10",
+      )
+      assertEquals(400, api(HttpMethod.POST, "/api/v1/queue/announcements", json("texts" to mapOf("en" to " ")), rec).status, "announcement text required")
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/queue/announcements", json("texts" to mapOf("en" to "x"), "repeatCount" to 0), rec).status,
+        "enqueue repeat 1-10",
+      )
+    }
+
     private fun connectRealtime(token: String): RealtimeCollector {
       val collector = RealtimeCollector()
       org.springframework.web.socket.client.standard
@@ -7983,15 +8151,18 @@ class PlatformIntegrationTests {
       return collector
     }
 
+    // Consumer lag can replay pre-connect frames of the same event type; scope
+    // the wait to a frame actually carrying this content when events repeat.
     private fun awaitEventFrame(
       collector: RealtimeCollector,
       eventType: String,
       timeoutMs: Long,
+      mustContain: String? = null,
     ): String? {
       val deadline = System.currentTimeMillis() + timeoutMs
       while (System.currentTimeMillis() < deadline) {
         collector.messages
-          .firstOrNull { it.contains("\"type\":\"event.received\"") && it.contains(eventType) }
+          .firstOrNull { it.contains("\"type\":\"event.received\"") && it.contains(eventType) && (mustContain == null || it.contains(mustContain)) }
           ?.let { return it }
         Thread.sleep(250)
       }

@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useAuth } from '@squamed/auth';
 
-const REALTIME_EVENT = 'squamed:realtime';
+export const REALTIME_EVENT = 'squamed:realtime';
 
 function resolveWsBase(): string {
   const explicit = process.env.NEXT_PUBLIC_WS_URL;

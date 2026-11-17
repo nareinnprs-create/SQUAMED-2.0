@@ -20,4 +20,9 @@ interface ServicePointRepository : JpaRepository<ServicePoint, UUID> {
   ): List<ServicePoint>
 
   fun findByStatus(status: String): List<ServicePoint>
+
+  fun findFirstByHospitalIdAndCode(
+    hid: UUID,
+    code: String,
+  ): ServicePoint?
 }

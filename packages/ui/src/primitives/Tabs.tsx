@@ -139,7 +139,7 @@ export function TabsTrigger({ value, children, className, style, onClick, ...res
         fontSize: 13,
         fontWeight: 600,
         whiteSpace: 'nowrap',
-        color: selected ? 'var(--sq-primary)' : 'var(--sq-fg-muted)',
+        color: selected ? 'var(--sq-primary-on-soft)' : 'var(--sq-fg-muted)',
         backgroundColor: selected ? 'var(--sq-primary-soft)' : 'transparent',
         cursor: 'pointer',
         transition: reduced ? 'none' : 'background-color 150ms ease, color 150ms ease',

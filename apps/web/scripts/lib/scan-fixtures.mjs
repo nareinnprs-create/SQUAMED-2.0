@@ -13,6 +13,7 @@ export const SCAN_ROUTES = [
   { path: '/queue', label: 'queue' },
   { path: '/announcements', label: 'announcements' },
   { path: '/display', label: 'display' },
+  { path: '/kiosk', label: 'kiosk' },
   { path: '/reception', label: 'reception' },
   { path: '/consult', label: 'consult' },
 ];
@@ -77,6 +78,12 @@ const PATIENT_360 = {
 
 // Shape-correct zones payload for the announcements scan route: two enabled zones so the
 // zone select renders real options under axe/VRT (mirrors the PATIENT_360 fixture style).
+// Shape-correct department payload for the /kiosk scan route's wayfinding tab.
+const KIOSK_DEPARTMENTS = [
+  { id: 'aaaa1111-0000-0000-0000-000000000003', name: 'Cardiology', description: 'First floor, past the pharmacy' },
+  { id: 'aaaa1111-0000-0000-0000-000000000004', name: 'Radiology', description: 'Ground floor, block B' },
+];
+
 const ANNOUNCEMENT_ZONES = [
   { id: 'aaaa1111-0000-0000-0000-000000000001', name: 'Main Display', servicePointId: 'SP1', volume: 90, enabled: true },
   { id: 'aaaa1111-0000-0000-0000-000000000002', name: 'Pharmacy Window', servicePointId: 'SP2', volume: 75, enabled: true },
@@ -192,6 +199,9 @@ export async function installApiFixtures(page) {
   await page.route('**/api/v1/**', (route) => route.fulfill(jsonOk([])));
   await page.route('**/api/v1/queue/display-board', (route) => route.fulfill(jsonOk(DISPLAY_BOARD)));
   await page.route('**/api/v1/queue/zones', (route) => route.fulfill(jsonOk(ANNOUNCEMENT_ZONES)));
+  await page.route('**/api/v1/hospital-config/hospitals/*/departments', (route) =>
+    route.fulfill(jsonOk(KIOSK_DEPARTMENTS)),
+  );
   await page.route('**/api/v1/patient360/**', (route) => route.fulfill(jsonOk(PATIENT_360)));
   await page.route('**/api/v1/analytics/**', (route) => {
     const key = route.request().url().split('/analytics/')[1]?.split('?')[0];

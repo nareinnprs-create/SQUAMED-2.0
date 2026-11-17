@@ -20,7 +20,7 @@ interface HospitalDto {
  * admins (hp null) may pick one, which the patients list/search endpoints
  * honor via TenantResolver.pin.
  */
-function hospitalIdFromToken(accessToken: string | null): string | null {
+export function hospitalIdFromToken(accessToken: string | null): string | null {
   if (!accessToken) return null;
   try {
     const payload = accessToken.split('.')[1];

@@ -4,6 +4,7 @@ import com.squamed.core.common.api.ApiResponse
 import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
+import com.squamed.core.receptionqueue.service.AnnouncementService
 import com.squamed.core.receptionqueue.service.QueueService
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/v1/queue")
 class QueueController(
   private val queueService: QueueService,
+  private val announcementService: AnnouncementService,
   private val tenantResolver: TenantResolver,
 ) {
   // ADR-13: hospital users are pinned to their tenant; admins may choose via dto.hospitalId.
@@ -200,4 +202,71 @@ class QueueController(
     @RequestParam(name = "queueType") queueType: String,
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<QueueStatsView> = ApiResponse.ok(queueService.statistics(queueType, principal.hospitalId))
+
+  // 01.07 voice announcements: zones map audio output to displays/counters; rules carry repeat + languages.
+  @GetMapping("/zones")
+  @RequiresPermission("queue:read:queue")
+  @Transactional(readOnly = true)
+  fun listZones(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<DisplayZoneDto>> = ApiResponse.ok(announcementService.listZones(principal.hospitalId))
+
+  @PostMapping("/zones")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("queue:manage:queue")
+  @Transactional
+  fun createZone(
+    @RequestBody dto: DisplayZoneCreateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DisplayZoneDto> =
+    ApiResponse.ok(
+      announcementService.createZone(
+        name = dto.name ?: throw IllegalArgumentException("ZONE_NAME_REQUIRED"),
+        servicePointId = dto.servicePointId,
+        volume = dto.volume,
+        hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId),
+      ),
+    )
+
+  @GetMapping("/announcement-rules")
+  @RequiresPermission("queue:read:queue")
+  @Transactional(readOnly = true)
+  fun listRules(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<AnnouncementRuleDto>> = ApiResponse.ok(announcementService.listRules(principal.hospitalId))
+
+  @PostMapping("/announcement-rules")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("queue:manage:queue")
+  @Transactional
+  fun createRule(
+    @RequestBody dto: AnnouncementRuleCreateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AnnouncementRuleDto> =
+    ApiResponse.ok(
+      announcementService.createRule(
+        queueType = dto.queueType,
+        repeatCount = dto.repeatCount,
+        languages = dto.languages,
+        zoneId = dto.zoneId,
+        hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId),
+      ),
+    )
+
+  // 01.07 contract /announcements:enqueue — manual TTS enqueue for chimes/staff-call use cases.
+  @PostMapping("/announcements")
+  @RequiresPermission("queue:manage:queue")
+  @Transactional
+  fun enqueue(
+    @RequestBody dto: AnnouncementEnqueueDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AnnouncementView> =
+    ApiResponse.ok(
+      announcementService.enqueue(
+        hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId),
+        texts = dto.texts ?: throw IllegalArgumentException("ANNOUNCEMENT_TEXT_REQUIRED"),
+        zoneId = dto.zoneId,
+        repeatCount = dto.repeatCount,
+      ),
+    )
 }

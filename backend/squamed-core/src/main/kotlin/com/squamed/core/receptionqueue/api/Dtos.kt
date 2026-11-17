@@ -1,6 +1,8 @@
 package com.squamed.core.receptionqueue.api
 
+import com.squamed.core.receptionqueue.domain.AnnouncementRule
 import com.squamed.core.receptionqueue.domain.ConsultReceipt
+import com.squamed.core.receptionqueue.domain.DisplayZone
 import com.squamed.core.receptionqueue.domain.QueueEntry
 import com.squamed.core.receptionqueue.domain.ServicePoint
 import com.squamed.core.receptionqueue.domain.VisitPass
@@ -294,3 +296,84 @@ data class ConsultReceiptDto(
       )
   }
 }
+
+/** 01.07 voice announcements: zones, rules and manual enqueue DTOs. */
+data class DisplayZoneCreateDto(
+  val hospitalId: UUID? = null,
+  val name: String? = null,
+  val servicePointId: String? = null,
+  val volume: Int? = null,
+)
+
+data class DisplayZoneDto(
+  val id: UUID?,
+  val hospitalId: UUID?,
+  val name: String,
+  val servicePointId: String?,
+  val volume: Int,
+  val enabled: Boolean,
+) {
+  companion object {
+    fun from(entity: DisplayZone) =
+      DisplayZoneDto(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        name = entity.name,
+        servicePointId = entity.servicePointId,
+        volume = entity.volume,
+        enabled = entity.enabled,
+      )
+  }
+}
+
+data class AnnouncementRuleCreateDto(
+  val hospitalId: UUID? = null,
+  val queueType: String? = null,
+  val repeatCount: Int? = null,
+  val languages: String? = null,
+  val zoneId: UUID? = null,
+)
+
+data class AnnouncementRuleDto(
+  val id: UUID?,
+  val hospitalId: UUID?,
+  val queueType: String,
+  val repeatCount: Int,
+  val languages: String,
+  val zoneId: UUID?,
+  val enabled: Boolean,
+) {
+  companion object {
+    fun from(entity: AnnouncementRule) =
+      AnnouncementRuleDto(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        queueType = entity.queueType,
+        repeatCount = entity.repeatCount,
+        languages = entity.languages,
+        zoneId = entity.zoneId,
+        enabled = entity.enabled,
+      )
+  }
+}
+
+data class AnnouncementEnqueueDto(
+  val hospitalId: UUID? = null,
+  val texts: Map<String, String>? = null,
+  val zoneId: UUID? = null,
+  val repeatCount: Int? = null,
+)
+
+/** 01.07: what was just enqueued for the display page to speak. */
+data class AnnouncementView(
+  val tokenNumber: String?,
+  val queueType: String?,
+  val counter: String?,
+  val priority: String?,
+  val repeatCount: Int,
+  val languages: List<String>,
+  val zoneId: UUID?,
+  val zoneName: String?,
+  val volume: Int,
+  val texts: Map<String, String>,
+)

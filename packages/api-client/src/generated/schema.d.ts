@@ -884,6 +884,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/queue/zones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listZones"];
+        put?: never;
+        post: operations["createZone"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/queue/service-points": {
         parameters: {
             query?: never;
@@ -958,6 +974,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["callNext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/announcements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enqueue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/queue/announcement-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRules"];
+        put?: never;
+        post: operations["createRule"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6401,6 +6449,32 @@ export interface components {
             /** Format: date-time */
             returnedAt?: string;
         };
+        DisplayZoneCreateDto: {
+            /** Format: uuid */
+            hospitalId?: string;
+            name?: string;
+            servicePointId?: string;
+            /** Format: int32 */
+            volume?: number;
+        };
+        ApiResponseDisplayZoneDto: {
+            data?: components["schemas"]["DisplayZoneDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        DisplayZoneDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            name: string;
+            servicePointId?: string;
+            /** Format: int32 */
+            volume: number;
+            enabled: boolean;
+        };
         ServicePointCreateDto: {
             /** Format: uuid */
             hospitalId?: string;
@@ -6472,6 +6546,71 @@ export interface components {
             estimatedWaitMinutes?: number;
             /** Format: date-time */
             calledAt?: string;
+        };
+        AnnouncementEnqueueDto: {
+            /** Format: uuid */
+            hospitalId?: string;
+            texts?: {
+                [key: string]: string;
+            };
+            /** Format: uuid */
+            zoneId?: string;
+            /** Format: int32 */
+            repeatCount?: number;
+        };
+        AnnouncementView: {
+            tokenNumber?: string;
+            queueType?: string;
+            counter?: string;
+            priority?: string;
+            /** Format: int32 */
+            repeatCount: number;
+            languages: string[];
+            /** Format: uuid */
+            zoneId?: string;
+            zoneName?: string;
+            /** Format: int32 */
+            volume: number;
+            texts: {
+                [key: string]: string;
+            };
+        };
+        ApiResponseAnnouncementView: {
+            data?: components["schemas"]["AnnouncementView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        AnnouncementRuleCreateDto: {
+            /** Format: uuid */
+            hospitalId?: string;
+            queueType?: string;
+            /** Format: int32 */
+            repeatCount?: number;
+            languages?: string;
+            /** Format: uuid */
+            zoneId?: string;
+        };
+        AnnouncementRuleDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            queueType: string;
+            /** Format: int32 */
+            repeatCount: number;
+            languages: string;
+            /** Format: uuid */
+            zoneId?: string;
+            enabled: boolean;
+        };
+        ApiResponseAnnouncementRuleDto: {
+            data?: components["schemas"]["AnnouncementRuleDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
         };
         StockRequestDto: {
             /** Format: uuid */
@@ -9442,6 +9581,13 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListDisplayZoneDto: {
+            data?: components["schemas"]["DisplayZoneDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseQueueStatsView: {
             data?: components["schemas"]["QueueStatsView"];
             success: boolean;
@@ -9469,6 +9615,13 @@ export interface components {
         };
         ApiResponseListBoardEntry: {
             data?: components["schemas"]["BoardEntry"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListAnnouncementRuleDto: {
+            data?: components["schemas"]["AnnouncementRuleDto"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -12454,6 +12607,50 @@ export interface operations {
             };
         };
     };
+    listZones: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListDisplayZoneDto"];
+                };
+            };
+        };
+    };
+    createZone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisplayZoneCreateDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDisplayZoneDto"];
+                };
+            };
+        };
+    };
     listServicePoints: {
         parameters: {
             query?: {
@@ -12594,6 +12791,74 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseBoardEntry"];
+                };
+            };
+        };
+    };
+    enqueue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnouncementEnqueueDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAnnouncementView"];
+                };
+            };
+        };
+    };
+    listRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListAnnouncementRuleDto"];
+                };
+            };
+        };
+    };
+    createRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnouncementRuleCreateDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAnnouncementRuleDto"];
                 };
             };
         };
@@ -20185,4 +20450,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: ffcaa5249c8638e6306ca33873ae538c2547ce7387fb2c028fe80552e8f7f0b4
+// openapi snapshot sha256: 80bdd2c526ebcf684b0641e7ac93384cb90e546899449e4615dccacf7752fbbd

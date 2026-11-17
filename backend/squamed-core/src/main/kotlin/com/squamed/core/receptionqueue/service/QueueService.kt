@@ -25,6 +25,7 @@ class QueueService(
   private val servicePointRepository: ServicePointRepository,
   private val configDocumentService: ConfigDocumentService,
   private val eventPublisher: DomainEventPublisher,
+  private val announcementService: AnnouncementService,
 ) {
   companion object {
     /** 01.02 built-in priority order; a hospital queue-config `priorityClasses` array overrides it (array order = rank). */
@@ -82,6 +83,8 @@ class QueueService(
     hospitalId: UUID,
   ): QueueEntryView {
     val today = LocalDate.now()
+    // 01.07: stamp the human-readable counter name so queue.called/announcements show "Counter 1", not the raw id.
+    val servicePointName = servicePointId?.let { servicePointRepository.findFirstByHospitalIdAndCode(hospitalId, it)?.name }
     val entry =
       queueEntryRepository.save(
         QueueEntry(
@@ -89,6 +92,7 @@ class QueueService(
           queueType = queueType,
           departmentId = departmentId,
           servicePointId = servicePointId,
+          servicePointName = servicePointName,
           visitId = visitId,
           patientId = patientId,
           patientName = patientName,
@@ -124,9 +128,14 @@ class QueueService(
           mapOf(
             "tokenNumber" to entry.tokenNumber,
             "queueType" to entry.queueType,
+            "servicePointName" to entry.servicePointName,
+            "servicePointId" to entry.servicePointId,
+            "priority" to entry.priority,
           ),
       ),
     )
+    // 01.07: announcement fans out after queue.called so WS ordering is display event → speech.
+    announcementService.onQueueCalled(entry)
     return QueueEntryView.from(entry)
   }
 
@@ -307,9 +316,14 @@ class QueueService(
           mapOf(
             "tokenNumber" to next.tokenNumber,
             "queueType" to next.queueType,
+            "servicePointName" to next.servicePointName,
+            "servicePointId" to next.servicePointId,
+            "priority" to next.priority,
           ),
       ),
     )
+    // 01.07: announcement fans out after queue.called so WS ordering is display event → speech.
+    announcementService.onQueueCalled(next)
     return BoardEntry.from(next)
   }
 

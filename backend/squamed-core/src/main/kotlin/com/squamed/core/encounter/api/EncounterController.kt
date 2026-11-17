@@ -104,7 +104,66 @@ class EncounterController(
     @PathVariable noteId: UUID,
     @RequestBody body: SignNoteRequest,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<ClinicalNoteView> = ApiResponse.ok(encounterService.signNote(noteId, principal.userId, principal.hospitalId))
+  ): ApiResponse<ClinicalNoteView> = ApiResponse.ok(encounterService.signNote(noteId, body, principal.userId, principal.hospitalId))
+
+  // 01.04: template picker + coded-diagnosis catalog (global reads ride clinical:read:note).
+  @GetMapping("/note-templates")
+  @RequiresPermission("clinical:read:note")
+  @Transactional(readOnly = true)
+  fun noteTemplates(): ApiResponse<List<NoteTemplateView>> = ApiResponse.ok(encounterService.noteTemplates())
+
+  @GetMapping("/diagnosis-catalog")
+  @RequiresPermission("clinical:read:note")
+  @Transactional(readOnly = true)
+  fun diagnosisCatalog(): ApiResponse<List<DiagnosisCatalogEntryView>> = ApiResponse.ok(encounterService.diagnosisCatalog())
+
+  // 01.04 procedures: chart documentation rides the note permissions (no new permission codes).
+  @PostMapping("/{id}/procedures")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("clinical:write:note")
+  @Transactional
+  fun addProcedure(
+    @PathVariable id: UUID,
+    @RequestBody dto: ProcedureRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<ProcedureView> = ApiResponse.ok(encounterService.addProcedure(id, dto, principal.hospitalId))
+
+  @GetMapping("/{id}/procedures")
+  @RequiresPermission("clinical:read:note")
+  @Transactional(readOnly = true)
+  fun listProcedures(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ProcedureView>> = ApiResponse.ok(encounterService.listProcedures(id, principal.hospitalId))
+
+  // 01.04 referrals: activates the existing clinical:manage:referral (V13).
+  @PostMapping("/{id}/referrals")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("clinical:manage:referral")
+  @Transactional
+  fun addReferral(
+    @PathVariable id: UUID,
+    @RequestBody dto: ReferralRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<ReferralView> = ApiResponse.ok(encounterService.addReferral(id, dto, principal.userId, principal.hospitalId))
+
+  @GetMapping("/{id}/referrals")
+  @RequiresPermission("clinical:read:note")
+  @Transactional(readOnly = true)
+  fun listReferrals(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ReferralView>> = ApiResponse.ok(encounterService.listReferrals(id, principal.hospitalId))
+
+  // 01.04 follow-up: booking rights stay with reception/admin (V54 contract); doctors deep-link.
+  @PostMapping("/{id}/follow-up")
+  @RequiresPermission("scheduling:write:appointment")
+  @Transactional
+  fun bookFollowUp(
+    @PathVariable id: UUID,
+    @RequestBody dto: FollowUpRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<EncounterView> = ApiResponse.ok(encounterService.bookFollowUp(id, dto, principal))
 
   @PostMapping("/{id}/diagnoses")
   @ResponseStatus(HttpStatus.CREATED)

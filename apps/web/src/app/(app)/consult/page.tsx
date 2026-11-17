@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Badge,
   Button,
@@ -22,7 +23,7 @@ import {
 import type { BadgeVariant, StatusTone } from '@squamed/ui';
 import { useApi } from '../../../lib/use-api';
 
-const TABS = ['Overview', 'Vitals', 'Note', 'Orders', 'Rx'];
+const TABS = ['Overview', 'Vitals', 'Note', 'Orders', 'Rx', 'Procedures', 'Referrals'];
 
 const orderStatusVariants: Record<string, BadgeVariant> = {
   pending: 'warning',
@@ -75,6 +76,7 @@ interface ClinicalNote {
   plan: string | null;
   isSigned: boolean;
   signedAt: string | null;
+  signatureMethod: string | null;
   createdAt: string | null;
 }
 
@@ -103,6 +105,36 @@ interface Prescription {
   duration: string | null;
   quantity: number | null;
   status: string;
+  overrideReason: string | null;
+  allergyStatus: string | null;
+}
+
+interface ProcedureEntry {
+  id: string | null;
+  procedureCode: string | null;
+  procedureName: string;
+  status: string;
+  performedAt: string | null;
+  notes: string | null;
+}
+
+interface Referral {
+  id: string | null;
+  toSpecialty: string | null;
+  targetFacility: string | null;
+  reason: string;
+  urgency: string;
+  status: string;
+}
+
+interface NoteTemplate {
+  id: string | null;
+  specialty: string;
+  name: string;
+  subjectiveTemplate: string | null;
+  objectiveTemplate: string | null;
+  assessmentTemplate: string | null;
+  planTemplate: string | null;
 }
 
 interface EncounterDetail {
@@ -112,6 +144,8 @@ interface EncounterDetail {
   diagnoses: Diagnosis[];
   orders: OrderEntry[];
   prescriptions: Prescription[];
+  procedures: ProcedureEntry[];
+  referrals: Referral[];
 }
 
 interface Notice {
@@ -135,6 +169,7 @@ function formatDateTime(value: string | null | undefined): string {
 
 export default function ConsultBoardPage() {
   const { apiFetch, isReady } = useApi();
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PatientSummary[]>([]);
   const [searching, setSearching] = useState(false);
@@ -167,6 +202,7 @@ export default function ConsultBoardPage() {
 
   const [rxOpen, setRxOpen] = useState(false);
   const [savingRx, setSavingRx] = useState(false);
+  const [rxWarnRequired, setRxWarnRequired] = useState(false);
   const [rxForm, setRxForm] = useState({
     drugName: '',
     dose: '',
@@ -174,9 +210,33 @@ export default function ConsultBoardPage() {
     route: 'oral',
     duration: '',
     quantity: '',
+    overrideReason: '',
   });
 
+  const [procedureOpen, setProcedureOpen] = useState(false);
+  const [savingProcedure, setSavingProcedure] = useState(false);
+  const [procedureForm, setProcedureForm] = useState({ procedureCode: '', procedureName: '', status: 'completed', notes: '' });
+
+  const [referralOpen, setReferralOpen] = useState(false);
+  const [savingReferral, setSavingReferral] = useState(false);
+  const [referralForm, setReferralForm] = useState({ toSpecialty: '', targetFacility: '', reason: '', urgency: 'routine' });
+
+  const [templates, setTemplates] = useState<NoteTemplate[]>([]);
+  const [signOpen, setSignOpen] = useState(false);
+  const [signing, setSigning] = useState(false);
+  const [pendingNoteId, setPendingNoteId] = useState<string | null>(null);
+  const [signPin, setSignPin] = useState('');
+
   const [completing, setCompleting] = useState(false);
+
+  const loadTemplates = useCallback(async () => {
+    try {
+      const data = await apiFetch<NoteTemplate[]>('/encounters/note-templates');
+      setTemplates(data ?? []);
+    } catch {
+      setTemplates([]);
+    }
+  }, [apiFetch]);
 
   const loadVitals = useCallback(
     async (patientId: string) => {
@@ -233,6 +293,7 @@ export default function ConsultBoardPage() {
       setEncounterId(encounter.id ?? null);
       setTab('Overview');
       if (encounter.id) await loadDetail(encounter.id);
+      await loadTemplates();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start encounter');
     }
@@ -281,6 +342,17 @@ export default function ConsultBoardPage() {
     }
   }
 
+  function applyTemplate(templateId: string) {
+    const template = templates.find((t) => t.id === templateId);
+    if (!template) return;
+    setSoap({
+      subjective: template.subjectiveTemplate ?? '',
+      objective: template.objectiveTemplate ?? '',
+      assessment: template.assessmentTemplate ?? '',
+      plan: template.planTemplate ?? '',
+    });
+  }
+
   async function saveAndSignNote() {
     if (!encounterId) return;
     setSavingNote(true);
@@ -290,16 +362,39 @@ export default function ConsultBoardPage() {
         method: 'POST',
         body: JSON.stringify({ noteType: 'consultation', ...soap }),
       });
-      if (note?.id) {
-        await apiFetch(`/encounters/notes/${note.id}/sign`, { method: 'POST', body: '{}' });
-      }
       setSoap({ subjective: '', objective: '', assessment: '', plan: '' });
-      setNotice({ tone: 'success', label: 'Note saved and signed' });
       await loadDetail(encounterId);
+      if (note?.id) {
+        setPendingNoteId(note.id);
+        setSignPin('');
+        setSignOpen(true);
+      } else {
+        setNotice({ tone: 'success', label: 'Note saved' });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save note');
     } finally {
       setSavingNote(false);
+    }
+  }
+
+  async function confirmSign() {
+    if (!pendingNoteId || !encounterId) return;
+    setSigning(true);
+    setError(null);
+    try {
+      await apiFetch(`/encounters/notes/${pendingNoteId}/sign`, {
+        method: 'POST',
+        body: JSON.stringify({ method: 'PIN', pin: signPin }),
+      });
+      setSignOpen(false);
+      setPendingNoteId(null);
+      setNotice({ tone: 'success', label: 'Note saved and signed' });
+      await loadDetail(encounterId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to sign note');
+    } finally {
+      setSigning(false);
     }
   }
 
@@ -314,6 +409,7 @@ export default function ConsultBoardPage() {
           orderType: orderForm.orderType,
           orderCode: orderForm.orderCode !== '' ? orderForm.orderCode : undefined,
           orderName: orderForm.orderName,
+          patientMrn: selectedPatient?.mrn ?? undefined,
         }),
       });
       setOrderOpen(false);
@@ -341,20 +437,86 @@ export default function ConsultBoardPage() {
           route: rxForm.route,
           duration: rxForm.duration !== '' ? rxForm.duration : undefined,
           quantity: rxForm.quantity !== '' ? Number(rxForm.quantity) : undefined,
+          patientMrn: selectedPatient?.mrn ?? undefined,
+          overrideReason: rxForm.overrideReason !== '' ? rxForm.overrideReason : undefined,
         }),
       });
       setRxOpen(false);
-      setRxForm({ drugName: '', dose: '', frequency: '', route: 'oral', duration: '', quantity: '' });
+      setRxWarnRequired(false);
+      setRxForm({ drugName: '', dose: '', frequency: '', route: 'oral', duration: '', quantity: '', overrideReason: '' });
       setNotice({ tone: 'success', label: 'Prescription saved' });
       await loadDetail(encounterId);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save prescription');
+      if (e instanceof Error && e.message.includes('ALLERGY_WARN_REASON_REQUIRED')) {
+        // CS-03: allergy warn — keep the modal open and require a typed override reason.
+        setRxWarnRequired(true);
+        setNotice(null);
+        setError('Allergy interaction detected — enter an override reason to proceed.');
+      } else if (e instanceof Error && e.message.includes('ALLERGY_BLOCK')) {
+        setNotice(null);
+        setError('Blocked: the patient has a documented allergy to this drug.');
+      } else if (e instanceof Error && e.message.includes('PATIENT_MISMATCH')) {
+        setNotice(null);
+        setError('Patient identity confirm failed — check the MRN.');
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to save prescription');
+      }
     } finally {
       setSavingRx(false);
     }
   }
 
   const encounterActive = Boolean(encounterId) && detail?.encounter.status !== 'completed';
+
+  async function saveProcedure() {
+    if (!encounterId) return;
+    setSavingProcedure(true);
+    setError(null);
+    try {
+      await apiFetch(`/encounters/${encounterId}/procedures`, {
+        method: 'POST',
+        body: JSON.stringify({
+          procedureCode: procedureForm.procedureCode !== '' ? procedureForm.procedureCode : undefined,
+          procedureName: procedureForm.procedureName,
+          status: procedureForm.status,
+          notes: procedureForm.notes !== '' ? procedureForm.notes : undefined,
+        }),
+      });
+      setProcedureOpen(false);
+      setProcedureForm({ procedureCode: '', procedureName: '', status: 'completed', notes: '' });
+      setNotice({ tone: 'success', label: 'Procedure recorded' });
+      await loadDetail(encounterId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to record procedure');
+    } finally {
+      setSavingProcedure(false);
+    }
+  }
+
+  async function saveReferral() {
+    if (!encounterId) return;
+    setSavingReferral(true);
+    setError(null);
+    try {
+      await apiFetch(`/encounters/${encounterId}/referrals`, {
+        method: 'POST',
+        body: JSON.stringify({
+          toSpecialty: referralForm.toSpecialty !== '' ? referralForm.toSpecialty : undefined,
+          targetFacility: referralForm.targetFacility !== '' ? referralForm.targetFacility : undefined,
+          reason: referralForm.reason,
+          urgency: referralForm.urgency,
+        }),
+      });
+      setReferralOpen(false);
+      setReferralForm({ toSpecialty: '', targetFacility: '', reason: '', urgency: 'routine' });
+      setNotice({ tone: 'success', label: 'Referral created' });
+      await loadDetail(encounterId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create referral');
+    } finally {
+      setSavingReferral(false);
+    }
+  }
 
   return (
     <div style={{ padding: 24 }}>
@@ -363,9 +525,14 @@ export default function ConsultBoardPage() {
         description="Find a patient and run an outpatient consultation."
         actions={
           encounterActive ? (
-            <Button variant="outline" loading={completing} onClick={() => void completeEncounter()}>
-              Complete encounter
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => router.push('/appointments')}>
+                Book follow-up
+              </Button>
+              <Button variant="outline" loading={completing} onClick={() => void completeEncounter()}>
+                Complete encounter
+              </Button>
+            </>
           ) : null
         }
       />
@@ -603,6 +770,20 @@ export default function ConsultBoardPage() {
             <Stack gap={12}>
               <ContentPanel>
                 <Stack gap={12}>
+                  <Select
+                    label="Specialty template"
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) applyTemplate(e.target.value);
+                    }}
+                  >
+                    <option value="">Blank note</option>
+                    {templates.map((template) => (
+                      <option key={template.id ?? template.name} value={template.id ?? ''}>
+                        {template.specialty} — {template.name}
+                      </option>
+                    ))}
+                  </Select>
                   <Textarea
                     label="Subjective"
                     placeholder="Symptoms and history"
@@ -645,7 +826,7 @@ export default function ConsultBoardPage() {
                     {detail.notes.map((note) => (
                       <div key={note.id ?? formatDateTime(note.createdAt)}>
                         <Badge variant={note.isSigned ? 'success' : 'neutral'} size="sm">
-                          {note.isSigned ? 'Signed' : 'Draft'}
+                          {note.isSigned ? `Signed${note.signatureMethod ? ` · ${note.signatureMethod}` : ''}` : 'Draft'}
                         </Badge>
                         <div style={{ marginTop: 4 }}>
                           {[note.subjective, note.objective, note.assessment, note.plan].filter(Boolean).join(' ')}
@@ -733,9 +914,92 @@ export default function ConsultBoardPage() {
                             {rx.quantity !== null && rx.quantity !== undefined ? ` · Qty ${rx.quantity}` : ''}
                           </span>
                         </div>
-                        <Badge variant="success" size="sm">
-                          {rx.status}
+                        <Badge variant={rx.allergyStatus === 'warn_override' ? 'warning' : 'success'} size="sm">
+                          {rx.allergyStatus === 'warn_override' ? 'allergy override' : rx.status}
                         </Badge>
+                      </div>
+                    ))}
+                  </Stack>
+                )}
+              </ContentPanel>
+            </Stack>
+          ) : null}
+
+          {tab === 'Procedures' ? (
+            <Stack gap={12}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong>Procedures</strong>
+                <Button size="sm" onClick={() => setProcedureOpen(true)}>
+                  Record procedure
+                </Button>
+              </div>
+              <ContentPanel>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Performed</TableHead>
+                      <TableHead>Notes</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {detail.procedures.length === 0 ? (
+                      <TableRow>
+                        <TableCell>No procedures recorded.</TableCell>
+                      </TableRow>
+                    ) : (
+                      detail.procedures.map((procedure) => (
+                        <TableRow key={procedure.id ?? `${procedure.procedureName}-${procedure.performedAt ?? ''}`}>
+                          <TableCell>{procedure.procedureName}</TableCell>
+                          <TableCell>{procedure.procedureCode ?? '—'}</TableCell>
+                          <TableCell>
+                            <Badge variant={procedure.status === 'completed' ? 'success' : 'warning'} size="sm">
+                              {procedure.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{formatDateTime(procedure.performedAt)}</TableCell>
+                          <TableCell>{procedure.notes ?? '—'}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ContentPanel>
+            </Stack>
+          ) : null}
+
+          {tab === 'Referrals' ? (
+            <Stack gap={12}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong>Referrals</strong>
+                <Button size="sm" onClick={() => setReferralOpen(true)}>
+                  New referral
+                </Button>
+              </div>
+              <ContentPanel>
+                {detail.referrals.length === 0 ? (
+                  <span style={{ color: 'var(--sq-fg-muted)' }}>No referrals yet.</span>
+                ) : (
+                  <Stack gap={10}>
+                    {detail.referrals.map((referral) => (
+                      <div
+                        key={referral.id ?? `${referral.toSpecialty ?? ''}-${referral.reason}`}
+                        style={{ padding: '8px 0', borderBottom: '1px solid var(--sq-border)' }}
+                      >
+                        <div>
+                          <strong>{referral.toSpecialty ?? referral.targetFacility ?? 'Referral'}</strong>
+                          <span style={{ color: 'var(--sq-fg-muted)' }}> — {referral.reason}</span>
+                        </div>
+                        <div style={{ marginTop: 4 }}>
+                          <Badge variant={referral.urgency === 'urgent' ? 'warning' : 'neutral'} size="sm">
+                            {referral.urgency}
+                          </Badge>{' '}
+                          <Badge variant="information" size="sm">
+                            {referral.status}
+                          </Badge>
+                        </div>
                       </div>
                     ))}
                   </Stack>
@@ -921,7 +1185,138 @@ export default function ConsultBoardPage() {
             value={rxForm.quantity}
             onChange={(e) => setRxForm({ ...rxForm, quantity: e.target.value })}
           />
+          {rxWarnRequired ? (
+            <Input
+              label="Allergy override reason (required)"
+              placeholder="Why is this drug safe despite the allergy?"
+              value={rxForm.overrideReason}
+              onChange={(e) => setRxForm({ ...rxForm, overrideReason: e.target.value })}
+            />
+          ) : null}
         </Stack>
+      </Modal>
+
+      <Modal
+        open={procedureOpen}
+        onClose={() => setProcedureOpen(false)}
+        title="Record procedure"
+        description={selectedPatient ? `${fullName(selectedPatient)} — MRN ${selectedPatient.mrn ?? '—'}` : undefined}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setProcedureOpen(false)}>
+              Cancel
+            </Button>
+            <Button loading={savingProcedure} onClick={() => void saveProcedure()}>
+              Record
+            </Button>
+          </>
+        }
+      >
+        <Stack gap={12}>
+          <Input
+            label="Procedure name"
+            value={procedureForm.procedureName}
+            onChange={(e) => setProcedureForm({ ...procedureForm, procedureName: e.target.value })}
+          />
+          <Stack direction="row" gap={12}>
+            <Input
+              label="Code"
+              placeholder="Optional code"
+              value={procedureForm.procedureCode}
+              onChange={(e) => setProcedureForm({ ...procedureForm, procedureCode: e.target.value })}
+            />
+            <Select
+              label="Status"
+              value={procedureForm.status}
+              onChange={(e) => setProcedureForm({ ...procedureForm, status: e.target.value })}
+            >
+              {['planned', 'completed', 'cancelled'].map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </Select>
+          </Stack>
+          <Textarea
+            label="Notes"
+            value={procedureForm.notes}
+            onChange={(e) => setProcedureForm({ ...procedureForm, notes: e.target.value })}
+          />
+        </Stack>
+      </Modal>
+
+      <Modal
+        open={referralOpen}
+        onClose={() => setReferralOpen(false)}
+        title="New referral"
+        description={selectedPatient ? `${fullName(selectedPatient)} — MRN ${selectedPatient.mrn ?? '—'}` : undefined}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setReferralOpen(false)}>
+              Cancel
+            </Button>
+            <Button loading={savingReferral} onClick={() => void saveReferral()}>
+              Create referral
+            </Button>
+          </>
+        }
+      >
+        <Stack gap={12}>
+          <Stack direction="row" gap={12}>
+            <Input
+              label="To specialty"
+              placeholder="e.g. Cardiology"
+              value={referralForm.toSpecialty}
+              onChange={(e) => setReferralForm({ ...referralForm, toSpecialty: e.target.value })}
+            />
+            <Select
+              label="Urgency"
+              value={referralForm.urgency}
+              onChange={(e) => setReferralForm({ ...referralForm, urgency: e.target.value })}
+            >
+              {['routine', 'urgent', 'emergency'].map((urgency) => (
+                <option key={urgency} value={urgency}>
+                  {urgency}
+                </option>
+              ))}
+            </Select>
+          </Stack>
+          <Input
+            label="Target facility"
+            placeholder="Optional external facility"
+            value={referralForm.targetFacility}
+            onChange={(e) => setReferralForm({ ...referralForm, targetFacility: e.target.value })}
+          />
+          <Textarea
+            label="Reason"
+            value={referralForm.reason}
+            onChange={(e) => setReferralForm({ ...referralForm, reason: e.target.value })}
+          />
+        </Stack>
+      </Modal>
+
+      <Modal
+        open={signOpen}
+        onClose={() => setSignOpen(false)}
+        title="Sign note"
+        description="Enter your signing PIN. The note becomes immutable once signed."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setSignOpen(false)}>
+              Sign later
+            </Button>
+            <Button loading={signing} onClick={() => void confirmSign()}>
+              Sign note
+            </Button>
+          </>
+        }
+      >
+        <Input
+          label="Signing PIN"
+          type="password"
+          value={signPin}
+          onChange={(e) => setSignPin(e.target.value)}
+        />
       </Modal>
     </div>
   );

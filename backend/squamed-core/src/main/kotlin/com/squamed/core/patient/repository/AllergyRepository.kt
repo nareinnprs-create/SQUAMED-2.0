@@ -6,4 +6,6 @@ import java.util.UUID
 
 interface AllergyRepository : JpaRepository<Allergy, UUID> {
   fun findByPatientId(patientId: UUID): List<Allergy>
+
+  fun findByPatientIdAndIsActiveTrue(patientId: UUID): List<Allergy>
 }

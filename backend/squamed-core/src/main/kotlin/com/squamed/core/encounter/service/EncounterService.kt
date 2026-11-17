@@ -3,36 +3,57 @@ package com.squamed.core.encounter.service
 import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.encounter.api.ClinicalNoteRequestDto
 import com.squamed.core.encounter.api.ClinicalNoteView
+import com.squamed.core.encounter.api.DiagnosisCatalogEntryView
 import com.squamed.core.encounter.api.DiagnosisRequestDto
 import com.squamed.core.encounter.api.DiagnosisView
 import com.squamed.core.encounter.api.EncounterDetailView
 import com.squamed.core.encounter.api.EncounterView
+import com.squamed.core.encounter.api.FollowUpRequestDto
+import com.squamed.core.encounter.api.NoteTemplateView
 import com.squamed.core.encounter.api.OrderRequestDto
 import com.squamed.core.encounter.api.OrderView
 import com.squamed.core.encounter.api.PrescriptionRequestDto
 import com.squamed.core.encounter.api.PrescriptionView
+import com.squamed.core.encounter.api.ProcedureRequestDto
+import com.squamed.core.encounter.api.ProcedureView
+import com.squamed.core.encounter.api.ReferralRequestDto
+import com.squamed.core.encounter.api.ReferralView
+import com.squamed.core.encounter.api.SignNoteRequest
 import com.squamed.core.encounter.api.VitalSignRequestDto
 import com.squamed.core.encounter.api.VitalSignView
 import com.squamed.core.encounter.domain.ClinicalNote
 import com.squamed.core.encounter.domain.Diagnosis
+import com.squamed.core.encounter.domain.DiagnosisCatalogEntry
 import com.squamed.core.encounter.domain.Encounter
+import com.squamed.core.encounter.domain.NoteTemplate
 import com.squamed.core.encounter.domain.OrderEntry
 import com.squamed.core.encounter.domain.Prescription
+import com.squamed.core.encounter.domain.ProcedureEntry
+import com.squamed.core.encounter.domain.Referral
 import com.squamed.core.encounter.domain.VitalSign
 import com.squamed.core.encounter.repository.ClinicalNoteRepository
+import com.squamed.core.encounter.repository.DiagnosisCatalogRepository
 import com.squamed.core.encounter.repository.DiagnosisRepository
 import com.squamed.core.encounter.repository.EncounterRepository
+import com.squamed.core.encounter.repository.NoteTemplateRepository
 import com.squamed.core.encounter.repository.OrderEntryRepository
 import com.squamed.core.encounter.repository.PrescriptionRepository
+import com.squamed.core.encounter.repository.ProcedureRepository
+import com.squamed.core.encounter.repository.ReferralRepository
 import com.squamed.core.encounter.repository.VitalSignRepository
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
+import com.squamed.core.identity.security.SquamedPrincipal
+import com.squamed.core.patient.repository.AllergyRepository
 import com.squamed.core.patient.repository.PatientRecordRepository
+import com.squamed.core.scheduling.service.SchedulingService
 import com.squamed.core.search.SearchIndexer
+import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
 
@@ -47,6 +68,13 @@ class EncounterService(
   private val eventPublisher: DomainEventPublisher,
   private val searchIndexer: SearchIndexer,
   private val patientRecordRepository: PatientRecordRepository,
+  private val allergyRepository: AllergyRepository,
+  private val noteTemplateRepository: NoteTemplateRepository,
+  private val diagnosisCatalogRepository: DiagnosisCatalogRepository,
+  private val procedureRepository: ProcedureRepository,
+  private val referralRepository: ReferralRepository,
+  private val schedulingService: SchedulingService,
+  private val meterRegistry: MeterRegistry,
 ) {
   @Transactional
   fun startEncounter(
@@ -180,12 +208,35 @@ class EncounterService(
   @Transactional
   fun signNote(
     noteId: UUID,
+    dto: SignNoteRequest,
     signerId: UUID,
     hospitalId: UUID?,
   ): ClinicalNoteView {
     val note = clinicalNoteRepository.findById(noteId).orElseThrow { IllegalArgumentException("NOTE_NOT_FOUND") }
     // 00.04 tenant sweep (D7): notes carry no hospital_id — verify via the parent encounter.
     findEncounter(note.encounterId, hospitalId)
+    if (note.isSigned) throw IllegalStateException("NOTE_ALREADY_SIGNED")
+    when (dto.method?.uppercase()) {
+      "ESIGN" -> {
+        val tx = dto.eSignTransactionId?.trim()
+        if (tx.isNullOrBlank()) throw IllegalArgumentException("ESIGN_TRANSACTION_REQUIRED")
+        note.signatureMethod = "ESIGN"
+        note.esignTransactionId = tx
+      }
+
+      else -> {
+        // E5 aging fallback: PIN is the live signing path while the external eSign contract is pending.
+        val pin = dto.pin?.trim()
+        if (pin.isNullOrBlank()) throw IllegalArgumentException("SIGNATURE_PIN_REQUIRED")
+        note.signatureMethod = "PIN"
+        // shortcut: unsalted SHA-256 — the PIN is a signing marker, not a login credential; salt only if E5 makes it auth-grade.
+        note.signatureData =
+          MessageDigest
+            .getInstance("SHA-256")
+            .digest(pin.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+      }
+    }
     note.isSigned = true
     note.signedAt = Instant.now()
     note.signedBy = signerId
@@ -212,14 +263,21 @@ class EncounterService(
     hospitalId: UUID?,
   ): DiagnosisView {
     val encounter = findEncounter(encounterId, hospitalId)
+    val system = dto.system ?: "ICD-10"
+    val catalogEntry =
+      diagnosisCatalogRepository.findBySystemIgnoreCaseAndCodeIgnoreCaseAndHospitalIdIsNullAndIsActiveTrue(
+        system,
+        dto.code.trim(),
+      ) ?: throw IllegalArgumentException("DIAGNOSIS_CODE_UNKNOWN")
+    val name = dto.name?.trim()?.takeUnless { it.isEmpty() } ?: catalogEntry.display
     val diagnosis =
       diagnosisRepository.save(
         Diagnosis(
           encounterId = encounterId,
           patientId = encounter.patientId,
-          code = dto.code,
-          system = dto.system ?: "ICD-10",
-          name = dto.name,
+          code = dto.code.trim(),
+          system = catalogEntry.system,
+          name = name,
           type = dto.type ?: "working",
           notes = dto.notes,
         ),
@@ -260,6 +318,7 @@ class EncounterService(
     hospitalId: UUID?,
   ): OrderView {
     val encounter = findEncounter(encounterId, hospitalId)
+    requireMrn(encounter.patientId, dto.patientMrn)
     val order =
       orderEntryRepository.save(
         OrderEntry(
@@ -276,6 +335,25 @@ class EncounterService(
           orderedAt = dto.orderedAt ?: Instant.now(),
         ),
       )
+    // 01.04 orders→tasks contract: the chunk-2 task engine consumes this outbox event.
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "encounter.order.placed",
+        occurredAt = Instant.now(),
+        source = "encounter-service",
+        entityType = "order",
+        entityId = order.id,
+        hospitalId = order.hospitalId,
+        payload =
+          mapOf(
+            "orderType" to order.orderType,
+            "orderName" to order.orderName,
+            "priority" to order.priority,
+            "patientId" to order.patientId.toString(),
+          ),
+      ),
+    )
     return OrderView.from(order)
   }
 
@@ -308,6 +386,26 @@ class EncounterService(
     hospitalId: UUID?,
   ): PrescriptionView {
     val encounter = findEncounter(encounterId, hospitalId)
+    requireMrn(encounter.patientId, dto.patientMrn)
+    val drug = dto.drugName.trim().lowercase()
+    val allergens =
+      allergyRepository
+        .findByPatientIdAndIsActiveTrue(encounter.patientId)
+        .map { it.allergen.trim().lowercase() }
+        .filter { it.isNotEmpty() }
+    // CS-02: exact token match blocks outright — no override path exists for BLOCK.
+    if (allergens.any { it == drug }) throw IllegalStateException("ALLERGY_BLOCK")
+    // CS-03: partial (substring) match of at least 4 chars warns; override requires a typed reason.
+    val warned = allergens.firstOrNull { it.length >= 4 && drug.length >= 4 && (drug.contains(it) || it.contains(drug)) }
+    var overrideReason: String? = null
+    var allergyStatus = "checked"
+    if (warned != null) {
+      val reason = dto.overrideReason?.trim()
+      if (reason.isNullOrEmpty()) throw IllegalStateException("ALLERGY_WARN_REASON_REQUIRED")
+      meterRegistry.counter("squamed.rx.allergy.warn.overrides").increment()
+      overrideReason = reason
+      allergyStatus = "warn_override"
+    }
     val prescription =
       prescriptionRepository.save(
         Prescription(
@@ -327,6 +425,8 @@ class EncounterService(
           status = "prescribed",
           prescribedBy = dto.prescribedBy,
           prescribedAt = dto.prescribedAt ?: Instant.now(),
+          overrideReason = overrideReason,
+          allergyStatus = allergyStatus,
         ),
       )
     return PrescriptionView.from(prescription)
@@ -356,6 +456,8 @@ class EncounterService(
     val diagnoses = diagnosisRepository.findByEncounterId(encounterId).map { DiagnosisView.from(it) }
     val orders = orderEntryRepository.findByEncounterId(encounterId).map { OrderView.from(it) }
     val prescriptions = prescriptionRepository.findByEncounterId(encounterId).map { PrescriptionView.from(it) }
+    val procedures = procedureRepository.findByEncounterIdOrderByCreatedAtDesc(encounterId).map { ProcedureView.from(it) }
+    val referrals = referralRepository.findByEncounterIdOrderByCreatedAtDesc(encounterId).map { ReferralView.from(it) }
     return EncounterDetailView(
       encounter = EncounterView.from(encounter),
       latestVitals = latestVital?.let { VitalSignView.from(it) },
@@ -363,7 +465,129 @@ class EncounterService(
       diagnoses = diagnoses,
       orders = orders,
       prescriptions = prescriptions,
+      procedures = procedures,
+      referrals = referrals,
     )
+  }
+
+  /** 01.04 catalog-backed templates (global) for the /consult SOAP picker. */
+  @Transactional(readOnly = true)
+  fun noteTemplates(): List<NoteTemplateView> = noteTemplateRepository.findByIsActiveTrueOrderBySpecialtyAsc().map { NoteTemplateView.from(it) }
+
+  @Transactional(readOnly = true)
+  fun diagnosisCatalog(): List<DiagnosisCatalogEntryView> =
+    diagnosisCatalogRepository.findByHospitalIdIsNullAndIsActiveTrueOrderBySystemAscCodeAsc().map { DiagnosisCatalogEntryView.from(it) }
+
+  @Transactional
+  fun addProcedure(
+    encounterId: UUID,
+    dto: ProcedureRequestDto,
+    hospitalId: UUID?,
+  ): ProcedureView {
+    val encounter = findEncounter(encounterId, hospitalId)
+    val procedure =
+      procedureRepository.save(
+        ProcedureEntry(
+          hospitalId =
+            encounter.hospitalId
+              ?: throw IllegalStateException("ENCOUNTER_HOSPITAL_MISSING"),
+          encounterId = encounterId,
+          patientId = encounter.patientId,
+          procedureCode = dto.procedureCode,
+          procedureName = dto.procedureName,
+          status = dto.status ?: "planned",
+          performedAt = dto.performedAt,
+          performedBy = dto.performedBy,
+          outcome = dto.outcome,
+          notes = dto.notes,
+        ),
+      )
+    return ProcedureView.from(procedure)
+  }
+
+  @Transactional(readOnly = true)
+  fun listProcedures(
+    encounterId: UUID,
+    hospitalId: UUID?,
+  ): List<ProcedureView> {
+    findEncounter(encounterId, hospitalId)
+    return procedureRepository.findByEncounterIdOrderByCreatedAtDesc(encounterId).map { ProcedureView.from(it) }
+  }
+
+  @Transactional(readOnly = true)
+  fun listReferrals(
+    encounterId: UUID,
+    hospitalId: UUID?,
+  ): List<ReferralView> {
+    findEncounter(encounterId, hospitalId)
+    return referralRepository.findByEncounterIdOrderByCreatedAtDesc(encounterId).map { ReferralView.from(it) }
+  }
+
+  @Transactional
+  fun addReferral(
+    encounterId: UUID,
+    dto: ReferralRequestDto,
+    fromDoctorId: UUID?,
+    hospitalId: UUID?,
+  ): ReferralView {
+    val encounter = findEncounter(encounterId, hospitalId)
+    if (dto.toDepartmentId == null && dto.toSpecialty.isNullOrBlank() && dto.targetFacility.isNullOrBlank()) {
+      throw IllegalArgumentException("REFERRAL_TARGET_REQUIRED")
+    }
+    val referral =
+      referralRepository.save(
+        Referral(
+          hospitalId =
+            encounter.hospitalId
+              ?: throw IllegalStateException("ENCOUNTER_HOSPITAL_MISSING"),
+          encounterId = encounterId,
+          patientId = encounter.patientId,
+          fromDoctorId = fromDoctorId,
+          toDepartmentId = dto.toDepartmentId,
+          toSpecialty = dto.toSpecialty,
+          targetFacility = dto.targetFacility,
+          reason = dto.reason,
+          urgency = dto.urgency ?: "routine",
+          notes = dto.notes,
+        ),
+      )
+    return ReferralView.from(referral)
+  }
+
+  /** 01.04 follow-up booking: delegates to the scheduling engine and stamps the encounter. */
+  @Transactional
+  fun bookFollowUp(
+    encounterId: UUID,
+    dto: FollowUpRequestDto,
+    principal: SquamedPrincipal,
+  ): EncounterView {
+    val encounter = findEncounter(encounterId, principal.hospitalId)
+    val appointment =
+      schedulingService.book(
+        principal,
+        dto.slotId,
+        SchedulingService.BookingRequest(
+          patientId = encounter.patientId,
+          appointmentType = "follow-up",
+          reason = encounter.reason ?: "OPD follow-up",
+          source = "encounter",
+        ),
+        dto.overrideNoShowLimit ?: false,
+      )
+    encounter.followUpAppointmentId = appointment.id
+    encounterRepository.save(encounter)
+    return EncounterView.from(encounter)
+  }
+
+  /** CS-01 two-identifier confirm: the request MRN must name the encounter's patient. */
+  private fun requireMrn(
+    patientId: UUID,
+    patientMrn: String?,
+  ) {
+    val patient = patientRecordRepository.findById(patientId).orElseThrow { IllegalArgumentException("PATIENT_NOT_FOUND") }
+    if (patientMrn.isNullOrBlank() || !patientMrn.trim().equals(patient.mrn.trim(), ignoreCase = true)) {
+      throw IllegalArgumentException("PATIENT_MISMATCH")
+    }
   }
 
   private fun findEncounter(

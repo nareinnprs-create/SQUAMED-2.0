@@ -32,4 +32,11 @@ class ClinicalNote(
   var signedAt: Instant? = null,
   @Column(name = "signed_by")
   var signedBy: UUID? = null,
+  // 01.04 note signature (E5 aging fallback): PIN hash now, external eSign tx id later.
+  @Column(name = "signature_method", length = 20)
+  var signatureMethod: String? = null,
+  @Column(name = "signature_data", columnDefinition = "text")
+  var signatureData: String? = null,
+  @Column(name = "esign_transaction_id", length = 100)
+  var esignTransactionId: String? = null,
 ) : BaseEntity()

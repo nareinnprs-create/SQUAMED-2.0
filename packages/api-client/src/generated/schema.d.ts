@@ -1940,6 +1940,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/encounters/{id}/referrals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listReferrals"];
+        put?: never;
+        post: operations["addReferral"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/encounters/{id}/procedures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listProcedures"];
+        put?: never;
+        post: operations["addProcedure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/encounters/{id}/prescriptions": {
         parameters: {
             query?: never;
@@ -1982,6 +2014,22 @@ export interface paths {
         get: operations["listNotes_2"];
         put?: never;
         post: operations["addNote_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/encounters/{id}/follow-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bookFollowUp"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4332,6 +4380,38 @@ export interface paths {
             cookie?: never;
         };
         get: operations["recentVitals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/encounters/note-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["noteTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/encounters/diagnosis-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["diagnosisCatalog"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7488,6 +7568,8 @@ export interface components {
             startedAt?: string;
             /** Format: date-time */
             endedAt?: string;
+            /** Format: uuid */
+            followUpAppointmentId?: string;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -7553,6 +7635,77 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
+        ReferralRequestDto: {
+            /** Format: uuid */
+            toDepartmentId?: string;
+            toSpecialty?: string;
+            targetFacility?: string;
+            reason: string;
+            urgency?: string;
+            notes?: string;
+        };
+        ApiResponseReferralView: {
+            data?: components["schemas"]["ReferralView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ReferralView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            encounterId: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            toDepartmentId?: string;
+            toSpecialty?: string;
+            targetFacility?: string;
+            reason: string;
+            urgency: string;
+            status: string;
+            notes?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ProcedureRequestDto: {
+            procedureCode?: string;
+            procedureName: string;
+            status?: string;
+            /** Format: date-time */
+            performedAt?: string;
+            /** Format: uuid */
+            performedBy?: string;
+            outcome?: string;
+            notes?: string;
+        };
+        ApiResponseProcedureView: {
+            data?: components["schemas"]["ProcedureView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ProcedureView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            encounterId: string;
+            /** Format: uuid */
+            patientId: string;
+            procedureCode?: string;
+            procedureName: string;
+            status: string;
+            /** Format: date-time */
+            performedAt?: string;
+            /** Format: uuid */
+            performedBy?: string;
+            outcome?: string;
+            notes?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
         PrescriptionRequestDto: {
             /** Format: uuid */
             drugId?: string;
@@ -7571,6 +7724,8 @@ export interface components {
             prescribedBy?: string;
             /** Format: date-time */
             prescribedAt?: string;
+            patientMrn?: string;
+            overrideReason?: string;
         };
         ApiResponsePrescriptionView: {
             data?: components["schemas"]["PrescriptionView"];
@@ -7604,6 +7759,8 @@ export interface components {
             prescribedBy?: string;
             /** Format: date-time */
             prescribedAt?: string;
+            overrideReason?: string;
+            allergyStatus?: string;
             /** Format: date-time */
             createdAt?: string;
         };
@@ -7617,6 +7774,7 @@ export interface components {
             orderedBy?: string;
             /** Format: date-time */
             orderedAt?: string;
+            patientMrn?: string;
         };
         ApiResponseOrderView: {
             data?: components["schemas"]["OrderView"];
@@ -7680,15 +7838,21 @@ export interface components {
             signedAt?: string;
             /** Format: uuid */
             signedBy?: string;
+            signatureMethod?: string;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
         };
+        FollowUpRequestDto: {
+            /** Format: uuid */
+            slotId: string;
+            overrideNoShowLimit?: boolean;
+        };
         DiagnosisRequestDto: {
             code: string;
             system?: string;
-            name: string;
+            name?: string;
             type?: string;
             notes?: string;
         };
@@ -7714,7 +7878,12 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
-        SignNoteRequest: unknown;
+        SignNoteRequest: {
+            method?: string;
+            pin?: string;
+            eSignTransactionId?: string;
+            esignTransactionId?: string;
+        };
         EmergencyRegisterDto: {
             /** Format: uuid */
             hospitalId?: string;
@@ -9727,6 +9896,22 @@ export interface components {
             diagnoses: components["schemas"]["DiagnosisView"][];
             orders: components["schemas"]["OrderView"][];
             prescriptions: components["schemas"]["PrescriptionView"][];
+            procedures: components["schemas"]["ProcedureView"][];
+            referrals: components["schemas"]["ReferralView"][];
+        };
+        ApiResponseListReferralView: {
+            data?: components["schemas"]["ReferralView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListProcedureView: {
+            data?: components["schemas"]["ProcedureView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
         };
         ApiResponseListPrescriptionView: {
             data?: components["schemas"]["PrescriptionView"][];
@@ -9762,6 +9947,36 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseListNoteTemplateView: {
+            data?: components["schemas"]["NoteTemplateView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        NoteTemplateView: {
+            /** Format: uuid */
+            id?: string;
+            specialty: string;
+            name: string;
+            noteType: string;
+            subjectiveTemplate?: string;
+            objectiveTemplate?: string;
+            assessmentTemplate?: string;
+            planTemplate?: string;
+        };
+        ApiResponseListDiagnosisCatalogEntryView: {
+            data?: components["schemas"]["DiagnosisCatalogEntryView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        DiagnosisCatalogEntryView: {
+            code: string;
+            system: string;
+            display: string;
         };
         ApiResponseListEmergencyRegistrationView: {
             data?: components["schemas"]["EmergencyRegistrationView"][];
@@ -14747,6 +14962,102 @@ export interface operations {
             };
         };
     };
+    listReferrals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListReferralView"];
+                };
+            };
+        };
+    };
+    addReferral: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReferralRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReferralView"];
+                };
+            };
+        };
+    };
+    listProcedures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListProcedureView"];
+                };
+            };
+        };
+    };
+    addProcedure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProcedureRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseProcedureView"];
+                };
+            };
+        };
+    };
     listPrescriptions: {
         parameters: {
             query?: never;
@@ -14887,6 +15198,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseClinicalNoteView"];
+                };
+            };
+        };
+    };
+    bookFollowUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FollowUpRequestDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEncounterView"];
                 };
             };
         };
@@ -18999,6 +19336,46 @@ export interface operations {
             };
         };
     };
+    noteTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListNoteTemplateView"];
+                };
+            };
+        };
+    };
+    diagnosisCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListDiagnosisCatalogEntryView"];
+                };
+            };
+        };
+    };
     getRegistration: {
         parameters: {
             query?: never;
@@ -19668,4 +20045,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: aba59fd06565268f74003a04819e9e22dff180e64a70795652c8557b90ca9fe2
+// openapi snapshot sha256: 7caf48d329f4287b531a1350797a46ce0b5b46123b63a9f0beb68a1945dd4463

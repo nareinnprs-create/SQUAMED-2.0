@@ -2,9 +2,13 @@ package com.squamed.core.encounter.api
 
 import com.squamed.core.encounter.domain.ClinicalNote
 import com.squamed.core.encounter.domain.Diagnosis
+import com.squamed.core.encounter.domain.DiagnosisCatalogEntry
 import com.squamed.core.encounter.domain.Encounter
+import com.squamed.core.encounter.domain.NoteTemplate
 import com.squamed.core.encounter.domain.OrderEntry
 import com.squamed.core.encounter.domain.Prescription
+import com.squamed.core.encounter.domain.ProcedureEntry
+import com.squamed.core.encounter.domain.Referral
 import com.squamed.core.encounter.domain.VitalSign
 import java.math.BigDecimal
 import java.time.Instant
@@ -47,7 +51,7 @@ data class ClinicalNoteRequestDto(
 data class DiagnosisRequestDto(
   val code: String,
   val system: String? = null,
-  val name: String,
+  val name: String? = null,
   val type: String? = null,
   val notes: String? = null,
 )
@@ -60,6 +64,8 @@ data class OrderRequestDto(
   val instructions: String? = null,
   val orderedBy: UUID? = null,
   val orderedAt: Instant? = null,
+  // CS-01 two-identifier confirm: the encounter's patient MRN must match this.
+  val patientMrn: String? = null,
 )
 
 data class PrescriptionRequestDto(
@@ -76,9 +82,41 @@ data class PrescriptionRequestDto(
   val isPrn: Boolean? = null,
   val prescribedBy: UUID? = null,
   val prescribedAt: Instant? = null,
+  // CS-01 two-identifier confirm; CS-03 warn override requires a typed reason.
+  val patientMrn: String? = null,
+  val overrideReason: String? = null,
 )
 
-class SignNoteRequest
+data class ProcedureRequestDto(
+  val procedureCode: String? = null,
+  val procedureName: String,
+  val status: String? = null,
+  val performedAt: Instant? = null,
+  val performedBy: UUID? = null,
+  val outcome: String? = null,
+  val notes: String? = null,
+)
+
+data class ReferralRequestDto(
+  val toDepartmentId: UUID? = null,
+  val toSpecialty: String? = null,
+  val targetFacility: String? = null,
+  val reason: String,
+  val urgency: String? = null,
+  val notes: String? = null,
+)
+
+data class FollowUpRequestDto(
+  val slotId: UUID,
+  val overrideNoShowLimit: Boolean? = null,
+)
+
+/** E5 aging fallback: PIN is the live path; the external eSign contract lands later (23-checklist E5). */
+data class SignNoteRequest(
+  val method: String? = "PIN",
+  val pin: String? = null,
+  val eSignTransactionId: String? = null,
+)
 
 data class EncounterView(
   val id: UUID?,
@@ -93,6 +131,7 @@ data class EncounterView(
   val chiefComplaint: String?,
   val startedAt: Instant?,
   val endedAt: Instant?,
+  val followUpAppointmentId: UUID?,
   val createdAt: Instant?,
   val updatedAt: Instant?,
 ) {
@@ -111,6 +150,7 @@ data class EncounterView(
         chiefComplaint = entity.chiefComplaint,
         startedAt = entity.startedAt,
         endedAt = entity.endedAt,
+        followUpAppointmentId = entity.followUpAppointmentId,
         createdAt = entity.createdAt,
         updatedAt = entity.updatedAt,
       )
@@ -173,6 +213,7 @@ data class ClinicalNoteView(
   val isSigned: Boolean,
   val signedAt: Instant?,
   val signedBy: UUID?,
+  val signatureMethod: String?,
   val createdAt: Instant?,
   val updatedAt: Instant?,
 ) {
@@ -191,6 +232,7 @@ data class ClinicalNoteView(
         isSigned = entity.isSigned,
         signedAt = entity.signedAt,
         signedBy = entity.signedBy,
+        signatureMethod = entity.signatureMethod,
         createdAt = entity.createdAt,
         updatedAt = entity.updatedAt,
       )
@@ -277,6 +319,8 @@ data class PrescriptionView(
   val status: String,
   val prescribedBy: UUID?,
   val prescribedAt: Instant?,
+  val overrideReason: String?,
+  val allergyStatus: String?,
   val createdAt: Instant?,
 ) {
   companion object {
@@ -299,6 +343,8 @@ data class PrescriptionView(
         status = entity.status,
         prescribedBy = entity.prescribedBy,
         prescribedAt = entity.prescribedAt,
+        overrideReason = entity.overrideReason,
+        allergyStatus = entity.allergyStatus,
         createdAt = entity.createdAt,
       )
   }
@@ -311,4 +357,108 @@ data class EncounterDetailView(
   val diagnoses: List<DiagnosisView> = emptyList(),
   val orders: List<OrderView> = emptyList(),
   val prescriptions: List<PrescriptionView> = emptyList(),
+  val procedures: List<ProcedureView> = emptyList(),
+  val referrals: List<ReferralView> = emptyList(),
 )
+
+data class ProcedureView(
+  val id: UUID?,
+  val encounterId: UUID,
+  val patientId: UUID,
+  val procedureCode: String?,
+  val procedureName: String,
+  val status: String,
+  val performedAt: Instant?,
+  val performedBy: UUID?,
+  val outcome: String?,
+  val notes: String?,
+  val createdAt: Instant?,
+) {
+  companion object {
+    fun from(entity: ProcedureEntry) =
+      ProcedureView(
+        id = entity.id,
+        encounterId = entity.encounterId,
+        patientId = entity.patientId,
+        procedureCode = entity.procedureCode,
+        procedureName = entity.procedureName,
+        status = entity.status,
+        performedAt = entity.performedAt,
+        performedBy = entity.performedBy,
+        outcome = entity.outcome,
+        notes = entity.notes,
+        createdAt = entity.createdAt,
+      )
+  }
+}
+
+data class ReferralView(
+  val id: UUID?,
+  val encounterId: UUID,
+  val patientId: UUID,
+  val toDepartmentId: UUID?,
+  val toSpecialty: String?,
+  val targetFacility: String?,
+  val reason: String,
+  val urgency: String,
+  val status: String,
+  val notes: String?,
+  val createdAt: Instant?,
+) {
+  companion object {
+    fun from(entity: Referral) =
+      ReferralView(
+        id = entity.id,
+        encounterId = entity.encounterId,
+        patientId = entity.patientId,
+        toDepartmentId = entity.toDepartmentId,
+        toSpecialty = entity.toSpecialty,
+        targetFacility = entity.targetFacility,
+        reason = entity.reason,
+        urgency = entity.urgency,
+        status = entity.status,
+        notes = entity.notes,
+        createdAt = entity.createdAt,
+      )
+  }
+}
+
+data class NoteTemplateView(
+  val id: UUID?,
+  val specialty: String,
+  val name: String,
+  val noteType: String,
+  val subjectiveTemplate: String?,
+  val objectiveTemplate: String?,
+  val assessmentTemplate: String?,
+  val planTemplate: String?,
+) {
+  companion object {
+    fun from(entity: NoteTemplate) =
+      NoteTemplateView(
+        id = entity.id,
+        specialty = entity.specialty,
+        name = entity.name,
+        noteType = entity.noteType,
+        subjectiveTemplate = entity.subjectiveTemplate,
+        objectiveTemplate = entity.objectiveTemplate,
+        assessmentTemplate = entity.assessmentTemplate,
+        planTemplate = entity.planTemplate,
+      )
+  }
+}
+
+data class DiagnosisCatalogEntryView(
+  val code: String,
+  val system: String,
+  val display: String,
+) {
+  companion object {
+    fun from(entity: DiagnosisCatalogEntry) =
+      DiagnosisCatalogEntryView(
+        code = entity.code,
+        system = entity.system,
+        display = entity.display,
+      )
+  }
+}

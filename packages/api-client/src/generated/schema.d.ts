@@ -1748,6 +1748,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kiosk/check-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["checkIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/interop/connections": {
         parameters: {
             query?: never;
@@ -3041,7 +3057,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["checkIn"];
+        patch: operations["checkIn_1"];
         trace?: never;
     };
     "/api/v1/reception/visits/{id}/cancel": {
@@ -7395,6 +7411,32 @@ export interface components {
         CollectRequestDto: {
             /** Format: uuid */
             collectedBy?: string;
+        };
+        KioskCheckInRequest: {
+            identifierType: string;
+            identifier: string;
+            queueType?: string;
+        };
+        ApiResponseKioskSlipDto: {
+            data?: components["schemas"]["KioskSlipDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        KioskSlipDto: {
+            /** Format: uuid */
+            patientId: string;
+            patientMrn?: string;
+            patientName?: string;
+            /** Format: uuid */
+            appointmentId?: string;
+            /** Format: date-time */
+            appointmentStart?: string;
+            departmentName?: string;
+            token: components["schemas"]["QueueEntryView"];
+            /** Format: date-time */
+            printedAt: string;
         };
         ConnectionCreateRequest: {
             name: string;
@@ -14699,6 +14741,30 @@ export interface operations {
             };
         };
     };
+    checkIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KioskCheckInRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseKioskSlipDto"];
+                };
+            };
+        };
+    };
     list_1: {
         parameters: {
             query?: never;
@@ -17698,7 +17764,7 @@ export interface operations {
             };
         };
     };
-    checkIn: {
+    checkIn_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -20514,4 +20580,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 298bf787736f79a320d7e4808c091780b1613b53ccb814966a69e8509165f6df
+// openapi snapshot sha256: bc144ab0b2e06ff77d8c5ee16972ef56f319a428360955b1b2ef3a1782978285

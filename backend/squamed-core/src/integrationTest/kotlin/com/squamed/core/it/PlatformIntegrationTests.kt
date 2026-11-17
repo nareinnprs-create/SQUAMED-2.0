@@ -8304,6 +8304,394 @@ class PlatformIntegrationTests {
     }
   }
 
+  /** 01.08 kiosk-lite PIT — ABHA/address/mobile/QR check-in, idempotency, tenancy and KIOSK role bounds. */
+  @Nested
+  inner class KioskTests {
+    private fun registerRoleUser(
+      role: String,
+      hospitalId: String,
+      s: String,
+      tag: String = role,
+    ): String {
+      val email = "kiosk-${tag.lowercase()}-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Kiosk",
+            "lastName" to "$role$s",
+            "roles" to listOf(role),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register $role $email",
+      )
+      return email
+    }
+
+    private fun login(email: String): String {
+      val login = api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123"))
+      assert2xx(login, "login $email: ${login.body.take(200)}")
+      return `data`(login)["accessToken"].asText()
+    }
+
+    private fun errCode(resp: ApiResp): String = om.readTree(resp.body)["error"]["code"].asText()
+
+    private fun adminUserId(): String {
+      val login =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/login",
+            json("username" to "admin@squamed.local", "password" to "Admin@12345"),
+          ),
+        )
+      return login.get("userId")?.asText() ?: login.get("user").get("id").asText()
+    }
+
+    @Test
+    fun kioskCheckInJourney() {
+      val admin = adminToken()
+      val adminId = adminUserId()
+      val s = suffix()
+      val h1 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Kiosk L $s", "code" to "KSL-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val hF =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Kiosk F $s", "code" to "KSF-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val kiosk = login(registerRoleUser("KIOSK", h1, s))
+      val kioskForeign = login(registerRoleUser("KIOSK", hF, s, tag = "foreign"))
+      val rec = login(registerRoleUser("RECEPTIONIST", h1, s, tag = "rec"))
+
+      // Department with wayfinding description; KIOSK may read it, RECEPTIONIST (no hospital-config
+      // grants in V54) may not — the kiosk role must carry exactly the kiosk's needs.
+      val dept =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$h1/departments",
+            json("name" to "Kiosk Dept $s", "code" to "KD-$s", "type" to "outpatient", "description" to "First floor, past the pharmacy"),
+            admin,
+          ),
+        )
+      val departmentId = dept["id"].asText()
+      val deptName = dept["name"].asText()
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/hospital-config/hospitals/$h1/departments", token = rec).status, "RECEPTIONIST must not list departments")
+      val depts = `data`(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals/$h1/departments", token = kiosk))
+      assertTrue(depts.any { it["id"].asText() == departmentId }, "KIOSK reads the department catalog: $depts")
+
+      // Patients: one with ABHA number + address, one mobile-only, two sharing a phone (ambiguity),
+      // one with no appointment today.
+      val abhaNumber = "90%012d".format(System.currentTimeMillis() % 1_000_000_000_000L)
+      val abhaAddress = "kiosk.rao.%010d@abdm".format(System.currentTimeMillis() % 10_000_000_000L)
+      val unknownAbha = "91%012d".format(System.currentTimeMillis() % 1_000_000_000_000L)
+      val pAbha =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Kiran",
+              "lastName" to "Rao$s",
+              "gender" to "male",
+              "dateOfBirth" to "1988-03-03",
+              "phone" to "55${System.currentTimeMillis()}".take(12),
+              "hospitalId" to h1,
+            ),
+            admin,
+          ),
+        )["patient"]["id"].asText()
+      assert2xx(api(HttpMethod.POST, "/api/v1/patients/$pAbha/identifiers", json("idType" to "ABHA", "idValue" to abhaNumber), admin), "add ABHA number")
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/patients/$pAbha/identifiers", json("idType" to "ABHA_ADDRESS", "idValue" to abhaAddress), admin),
+        "add ABHA address",
+      )
+
+      val pPhone =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Mira",
+              "lastName" to "Nair$s",
+              "gender" to "female",
+              "dateOfBirth" to "1992-07-07",
+              "phone" to "55${System.currentTimeMillis()}".take(12),
+              "hospitalId" to h1,
+            ),
+            admin,
+          ),
+        )["patient"]["id"].asText()
+      val sharedPhone = "77${System.currentTimeMillis()}".take(12)
+      val pAmb1 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Am",
+              "lastName" to "Big$s",
+              "gender" to "male",
+              "dateOfBirth" to "1970-01-01",
+              "phone" to sharedPhone,
+              "hospitalId" to h1,
+            ),
+            admin,
+          ),
+        )["patient"]["id"].asText()
+      val pAmb2 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Am2",
+              "lastName" to "Big$s",
+              "gender" to "male",
+              "dateOfBirth" to "1971-01-01",
+              "phone" to sharedPhone,
+              "hospitalId" to h1,
+            ),
+            admin,
+          ),
+        )["patient"]["id"].asText()
+      val pLate =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Late",
+              "lastName" to "Comer$s",
+              "gender" to "female",
+              "dateOfBirth" to "1980-02-02",
+              "phone" to "55${System.currentTimeMillis()}".take(12),
+              "hospitalId" to h1,
+            ),
+            admin,
+          ),
+        )["patient"]["id"].asText()
+
+      fun appointment(patientId: String): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/appointments",
+            json(
+              "hospitalId" to h1,
+              "patientId" to patientId,
+              "departmentId" to departmentId,
+              "doctorId" to adminId,
+              "appointmentType" to "OPD",
+              "scheduledStart" to
+                java.time.Instant
+                  .now()
+                  .plusSeconds(3600)
+                  .toString(),
+              "scheduledEnd" to
+                java.time.Instant
+                  .now()
+                  .plusSeconds(7200)
+                  .toString(),
+              "durationMinutes" to 30,
+              "reason" to "kiosk journey",
+              "priority" to "normal",
+            ),
+            admin,
+          ),
+        )["id"].asText()
+      val apptAbha = appointment(pAbha)
+      appointment(pPhone)
+
+      // ABHA check-in: slip carries the token, the appointment context and the wayfinding department.
+      val slipAbha =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "abha", "identifier" to abhaNumber), kiosk),
+        )
+      assertEquals("C-01", slipAbha["token"]["tokenNumber"].asText(), "fresh hospital daily token sequence: $slipAbha")
+      assertEquals(apptAbha, slipAbha["appointmentId"].asText(), "slip references today's appointment")
+      assertEquals(deptName, slipAbha["departmentName"].asText(), "slip wayfinding department name")
+      assertEquals("SQM:$h1:consult:C-01:${LocalDate.now()}", slipAbha["token"]["qrPayload"].asText(), "QR queue id on the slip")
+      assertTrue(slipAbha["patientName"].asText().contains("Rao$s"), "patient's own name on the slip")
+      assert2xx(api(HttpMethod.GET, "/api/v1/queue/board?queueType=consult", token = kiosk), "kiosk reads the board (queue:read)")
+
+      // Idempotent re-check-in: appointment already arrived and entry live → same token, no duplicate.
+      val again =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "abha", "identifier" to abhaNumber), kiosk),
+        )
+      assertEquals("C-01", again["token"]["tokenNumber"].asText(), "re-check-in reuses the live entry")
+      val boardAfterRecheck = `data`(api(HttpMethod.GET, "/api/v1/queue/board?queueType=consult", token = kiosk))
+      assertEquals(1, boardAfterRecheck.size(), "no duplicate entry after re-check-in: $boardAfterRecheck")
+
+      // Mobile path.
+      val pPhonePhone = `data`(api(HttpMethod.GET, "/api/v1/patients/$pPhone", token = admin))["phone"].asText()
+      val slipPhone =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "mobile", "identifier" to pPhonePhone), kiosk),
+        )
+      assertEquals("C-02", slipPhone["token"]["tokenNumber"].asText(), "mobile check-in gets the next token")
+
+      // QR re-entry / re-print: same token, no state change (entry stays waiting, board unchanged).
+      val boardBeforeQr = `data`(api(HttpMethod.GET, "/api/v1/queue/board?queueType=consult", token = kiosk))
+      val qrReentry =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "qr", "identifier" to slipAbha["token"]["qrPayload"].asText()), kiosk),
+        )
+      assertEquals("C-01", qrReentry["token"]["tokenNumber"].asText(), "QR re-entry re-prints the same token")
+      val boardAfterQr = `data`(api(HttpMethod.GET, "/api/v1/queue/board?queueType=consult", token = kiosk))
+      assertEquals(boardBeforeQr.size(), boardAfterQr.size(), "QR re-entry must not touch the queue")
+
+      // Tenancy: another hospital's QR, garbage QR, foreign kiosk resolving this hospital's patient.
+      assertEquals(
+        "KIOSK_QR_INVALID",
+        errCode(
+          api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "qr", "identifier" to "SQM:$hF:consult:C-01:${LocalDate.now()}"), kiosk),
+        ),
+        "foreign QR must be rejected without leaking existence",
+      )
+      assertEquals(
+        "KIOSK_QR_INVALID",
+        errCode(api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "qr", "identifier" to "junk"), kiosk)),
+        "garbage QR",
+      )
+      assertEquals(
+        "KIOSK_PATIENT_NOT_FOUND",
+        errCode(api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "abha", "identifier" to abhaNumber), kioskForeign)),
+        "foreign kiosk cannot resolve another hospital's patient",
+      )
+
+      // Identifier validation and resolution failures.
+      assertEquals(
+        "KIOSK_PATIENT_NOT_FOUND",
+        errCode(
+          api(
+            HttpMethod.POST,
+            "/api/v1/kiosk/check-in",
+            json(
+              "identifierType" to "abha",
+              "identifier" to unknownAbha,
+            ),
+            kiosk,
+          ),
+        ),
+        "unknown ABHA",
+      )
+      assertEquals(
+        "KIOSK_NO_APPOINTMENT",
+        errCode(
+          api(
+            HttpMethod.POST,
+            "/api/v1/kiosk/check-in",
+            json(
+              "identifierType" to "mobile",
+              "identifier" to `data`(api(HttpMethod.GET, "/api/v1/patients/$pLate", token = admin))["phone"].asText(),
+            ),
+            kiosk,
+          ),
+        ),
+        "no appointment today",
+      )
+      assertEquals(
+        "KIOSK_IDENTIFIER_TYPE_INVALID",
+        errCode(
+          api(
+            HttpMethod.POST,
+            "/api/v1/kiosk/check-in",
+            json(
+              "identifierType" to "passport",
+              "identifier" to "X",
+            ),
+            kiosk,
+          ),
+        ),
+        "unsupported identifier type",
+      )
+      assertEquals(
+        "ABHA_NUMBER_INVALID",
+        errCode(api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "abha", "identifier" to "1234"), kiosk)),
+        "ABHA below 14 digits",
+      )
+      assertEquals(
+        "ABHA_ADDRESS_INVALID",
+        errCode(
+          api(
+            HttpMethod.POST,
+            "/api/v1/kiosk/check-in",
+            json(
+              "identifierType" to "abha_address",
+              "identifier" to "bad address",
+            ),
+            kiosk,
+          ),
+        ),
+        "malformed ABHA address",
+      )
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "abha_address", "identifier" to abhaAddress), kiosk),
+        "ABHA address check-in works",
+      )
+      assertEquals(
+        "KIOSK_IDENTIFIER_AMBIGUOUS",
+        errCode(api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "mobile", "identifier" to sharedPhone), kiosk)),
+        "two patients on one phone are ambiguous at a kiosk",
+      )
+
+      // KIOSK is read/patient-scoped: patient writes must be denied (403).
+      assertEquals(
+        403,
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json("firstName" to "No", "lastName" to "Write$s", "gender" to "male", "dateOfBirth" to "1990-01-01"),
+          kiosk,
+        ).status,
+        "KIOSK must not write patients",
+      )
+
+      // Soak seed: 10 check-ins in a row, all accepted, all distinct tokens (demo loop mirrors this x5).
+      val burstTokens = mutableListOf<String>()
+      for (i in 0 until 10) {
+        val p =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/patients",
+              json(
+                "firstName" to "Burst$i",
+                "lastName" to "Kiosk$s",
+                "gender" to "male",
+                "dateOfBirth" to "1985-05-05",
+                "phone" to ("55$s$i".replace("-", "")).takeLast(12),
+                "hospitalId" to h1,
+              ),
+              admin,
+            ),
+          )["patient"]["id"].asText()
+        val phone = `data`(api(HttpMethod.GET, "/api/v1/patients/$p", token = admin))["phone"].asText()
+        appointment(p)
+        val slip =
+          `data`(
+            api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "mobile", "identifier" to phone), kiosk),
+          )
+        assertEquals(
+          200,
+          api(HttpMethod.GET, "/api/v1/queue/entries/consult/${slip["token"]["tokenNumber"].asText()}/reprint", token = kiosk).status,
+          "burst token ${i + 1} resolvable",
+        )
+        burstTokens.add(slip["token"]["tokenNumber"].asText())
+      }
+      assertEquals(10, burstTokens.distinct().size, "burst check-ins must each get a distinct token: $burstTokens")
+    }
+  }
+
   /** 01.03: reception workspace PIT — passes, consult-fee receipts, cancel, calling, tenancy. */
   @Nested
   inner class ReceptionWorkspaceTests {

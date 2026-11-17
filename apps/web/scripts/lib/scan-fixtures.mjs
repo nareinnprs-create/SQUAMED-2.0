@@ -12,6 +12,7 @@ export const SCAN_ROUTES = [
   { path: '/dashboard', label: 'dashboard' },
   { path: '/queue', label: 'queue' },
   { path: '/announcements', label: 'announcements' },
+  { path: '/display', label: 'display' },
   { path: '/reception', label: 'reception' },
   { path: '/consult', label: 'consult' },
 ];
@@ -80,6 +81,33 @@ const ANNOUNCEMENT_ZONES = [
   { id: 'aaaa1111-0000-0000-0000-000000000001', name: 'Main Display', servicePointId: 'SP1', volume: 90, enabled: true },
   { id: 'aaaa1111-0000-0000-0000-000000000002', name: 'Pharmacy Window', servicePointId: 'SP2', volume: 75, enabled: true },
 ];
+
+// Shape-correct display payload for the /display scan route: two counters with a now-serving
+// token and a priority-ranked next list (mirrors the ANNOUNCEMENT_ZONES fixture style).
+const DISPLAY_BOARD = {
+  generatedAt: '2026-01-05T09:00:00Z',
+  counters: [
+    {
+      servicePointId: 'SP1',
+      servicePointName: 'Counter 1',
+      departmentId: 'aaaa1111-0000-0000-0000-000000000003',
+      departmentName: 'Cardiology',
+      current: { tokenNumber: 'C-03', queueType: 'consult', priority: 'emergency', calledAt: '2026-01-05T08:59:00Z' },
+      next: [
+        { tokenNumber: 'C-02', queueType: 'consult', priority: 'urgent', calledAt: null },
+        { tokenNumber: 'C-01', queueType: 'consult', priority: 'routine', calledAt: null },
+      ],
+    },
+    {
+      servicePointId: 'SP2',
+      servicePointName: 'Counter 2',
+      departmentId: 'aaaa1111-0000-0000-0000-000000000003',
+      departmentName: 'Cardiology',
+      current: null,
+      next: [{ tokenNumber: 'C-04', queueType: 'consult', priority: 'routine', calledAt: null }],
+    },
+  ],
+};
 
 const SCAN_USER = {
   userId: 'scan-user-0001',
@@ -162,6 +190,7 @@ function jsonOk(data) {
 // so the catch-all is registered first and specific payloads after it.
 export async function installApiFixtures(page) {
   await page.route('**/api/v1/**', (route) => route.fulfill(jsonOk([])));
+  await page.route('**/api/v1/queue/display-board', (route) => route.fulfill(jsonOk(DISPLAY_BOARD)));
   await page.route('**/api/v1/queue/zones', (route) => route.fulfill(jsonOk(ANNOUNCEMENT_ZONES)));
   await page.route('**/api/v1/patient360/**', (route) => route.fulfill(jsonOk(PATIENT_360)));
   await page.route('**/api/v1/analytics/**', (route) => {

@@ -8142,6 +8142,140 @@ class PlatformIntegrationTests {
       )
     }
 
+    // 01.06 TV display: whole-hospital board grouped per counter — current/next per counter,
+    // priority-ranked next list, department names resolved server-side, unassigned entries
+    // omitted, NO patient identifiers on the public payload, and cross-tenant isolation.
+    @Test
+    fun tvDisplayBoardJourney() {
+      val admin = adminToken()
+      val s = suffix()
+      val h1 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Display H1 $s", "code" to "TB1-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val hF =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Display F $s", "code" to "TBF-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val rec = login(registerRoleUser("RECEPTIONIST", h1, s))
+      val recForeign = login(registerRoleUser("RECEPTIONIST", hF, s, tag = "foreign"))
+
+      // Department (resolved server-side: RECEPTIONIST holds no hospital-config read) + two counters.
+      val dept =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$h1/departments",
+            json("name" to "Cardiology $s", "code" to "CARD-$s", "type" to "clinical"),
+            admin,
+          ),
+        )
+      val deptId = dept["id"].asText()
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/queue/service-points",
+          json("name" to "Counter 1", "code" to "SP1", "queueType" to "consult", "counterNumber" to "1"),
+          rec,
+        ),
+        "create counter 1",
+      )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/queue/service-points",
+          json("name" to "Counter 2", "code" to "SP2", "queueType" to "consult", "counterNumber" to "2"),
+          rec,
+        ),
+        "create counter 2",
+      )
+
+      // Tokens: routine + urgent + emergency queued on Counter 1, one routine on Counter 2, one UNASSIGNED.
+      val p1 = patientIn(admin, h1, "A", s)
+      val p2 = patientIn(admin, h1, "B", s)
+      val p3 = patientIn(admin, h1, "C", s)
+      val p4 = patientIn(admin, h1, "D", s)
+      val p5 = patientIn(admin, h1, "E", s)
+      val token1 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/queue/entries",
+            json("queueType" to "consult", "patientId" to p1, "servicePointId" to "SP1", "departmentId" to deptId),
+            rec,
+          ),
+        )["tokenNumber"].asText()
+      val token2 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/queue/entries",
+            json("queueType" to "consult", "patientId" to p2, "priority" to "urgent", "servicePointId" to "SP1", "departmentId" to deptId),
+            rec,
+          ),
+        )["tokenNumber"].asText()
+      val token3 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/queue/entries",
+            json("queueType" to "consult", "patientId" to p3, "priority" to "emergency", "servicePointId" to "SP1", "departmentId" to deptId),
+            rec,
+          ),
+        )["tokenNumber"].asText()
+      val token4 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/queue/entries",
+            json("queueType" to "consult", "patientId" to p4, "servicePointId" to "SP2", "departmentId" to deptId),
+            rec,
+          ),
+        )["tokenNumber"].asText()
+      val tokenUnassigned =
+        `data`(api(HttpMethod.POST, "/api/v1/queue/entries", json("queueType" to "consult", "patientId" to p5), rec))["tokenNumber"].asText()
+
+      // Call next: the emergency token is served first and stamped on its counter.
+      val called = `data`(api(HttpMethod.POST, "/api/v1/queue/entries/call-next", json("queueType" to "consult"), rec))
+      assertEquals(token3, called["tokenNumber"].asText(), "call-next serves the emergency token first")
+
+      // The board: Counter 1 shows the called token as current and the priority-ranked waiting tokens as next.
+      val board = `data`(api(HttpMethod.GET, "/api/v1/queue/display-board", token = rec))
+      assertNotNull(board["generatedAt"], "board generation timestamp present")
+      val counters = board["counters"]
+      assertEquals(2, counters.size(), "unassigned token omitted from the board")
+      assertEquals("Counter 1", counters[0]["servicePointName"].asText(), "counters sorted by name")
+      assertEquals("SP1", counters[0]["servicePointId"].asText())
+      assertEquals(deptId, counters[0]["departmentId"].asText())
+      assertEquals("Cardiology $s", counters[0]["departmentName"].asText(), "department name resolved server-side")
+      val current = counters[0]["current"]
+      assertEquals(token3, current?.at("/tokenNumber")?.asText(), "called token is the counter's current")
+      assertEquals("emergency", current?.at("/priority")?.asText(), "current keeps its priority")
+      val next = counters[0]["next"]
+      assertEquals(2, next.size(), "next = the counter's waiting tokens")
+      assertEquals(token2, next[0]["tokenNumber"].asText(), "next priority-ranked (urgent before routine)")
+      assertEquals("urgent", next[0]["priority"].asText())
+      assertEquals(token1, next[1]["tokenNumber"].asText())
+      // Counter 2: nothing called yet, one waiting token.
+      assertEquals("Counter 2", counters[1]["servicePointName"].asText())
+      assertEquals(token4, counters[1]["next"][0]["tokenNumber"].asText())
+      assertTrue(!counters[1].has("current") || counters[1]["current"].isNull(), "no token called on counter 2 yet")
+
+      // Privacy: the public display payload carries no patient identifiers anywhere.
+      counters.forEach { counter ->
+        listOfNotNull(counter["current"]).plus(counter["next"]).forEach { token ->
+          assertTrue(!token.has("patientName"), "display token carries no patient name")
+          assertTrue(!token.has("patientId"), "display token carries no patient id")
+        }
+      }
+      assertTrue(!board.toString().contains(tokenUnassigned), "unassigned token omitted entirely")
+      assertTrue(!board.toString().contains(p1), "no patient ids in the board payload")
+
+      // Cross-tenant: another hospital's display sees an empty board.
+      val foreignBoard = `data`(api(HttpMethod.GET, "/api/v1/queue/display-board", token = recForeign))
+      assertEquals(0, foreignBoard["counters"].size(), "cross-tenant board is empty")
+    }
+
     private fun connectRealtime(token: String): RealtimeCollector {
       val collector = RealtimeCollector()
       org.springframework.web.socket.client.standard

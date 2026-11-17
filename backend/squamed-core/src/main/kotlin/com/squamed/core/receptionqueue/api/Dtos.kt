@@ -181,6 +181,38 @@ data class BoardEntry(
   }
 }
 
+// 01.06 TV display: per-token view for the waiting-room screen — deliberately carries NO patient identifiers.
+data class DisplayTokenView(
+  val tokenNumber: String,
+  val queueType: String,
+  val priority: String,
+  val calledAt: Instant?,
+) {
+  companion object {
+    fun from(entity: QueueEntry) =
+      DisplayTokenView(
+        tokenNumber = entity.tokenNumber,
+        queueType = entity.queueType,
+        priority = entity.priority,
+        calledAt = entity.calledAt,
+      )
+  }
+}
+
+data class CounterBoardView(
+  val servicePointId: String,
+  val servicePointName: String,
+  val departmentId: UUID?,
+  val departmentName: String?,
+  val current: DisplayTokenView?,
+  val next: List<DisplayTokenView>,
+)
+
+data class DisplayBoardView(
+  val generatedAt: Instant,
+  val counters: List<CounterBoardView>,
+)
+
 data class QueueStatsView(
   val queueType: String,
   val waiting: Int,

@@ -3,8 +3,12 @@ package com.squamed.core.receptionqueue.service
 import com.fasterxml.jackson.databind.JsonNode
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
+import com.squamed.core.hospitalconfig.repository.DepartmentRepository
 import com.squamed.core.hospitalconfig.service.ConfigDocumentService
 import com.squamed.core.receptionqueue.api.BoardEntry
+import com.squamed.core.receptionqueue.api.CounterBoardView
+import com.squamed.core.receptionqueue.api.DisplayBoardView
+import com.squamed.core.receptionqueue.api.DisplayTokenView
 import com.squamed.core.receptionqueue.api.QueueEntryView
 import com.squamed.core.receptionqueue.api.QueueStatsView
 import com.squamed.core.receptionqueue.api.ServicePointDto
@@ -23,6 +27,7 @@ import java.util.UUID
 class QueueService(
   private val queueEntryRepository: QueueEntryRepository,
   private val servicePointRepository: ServicePointRepository,
+  private val departmentRepository: DepartmentRepository,
   private val configDocumentService: ConfigDocumentService,
   private val eventPublisher: DomainEventPublisher,
   private val announcementService: AnnouncementService,
@@ -31,6 +36,7 @@ class QueueService(
     /** 01.02 built-in priority order; a hospital queue-config `priorityClasses` array overrides it (array order = rank). */
     private val DEFAULT_PRIORITY_ORDER = listOf("emergency", "urgent", "vip", "assisted", "appointment-order", "routine")
     private const val DEFAULT_AVG_CONSULT_MINUTES = 5
+    private const val DISPLAY_NEXT_CAP = 5
   }
 
   /** Queue config item for one queue type (00.05 doc); null = the hospital has not published a queue config. */
@@ -285,6 +291,49 @@ class QueueService(
       .findByQueueTypeAndStatusInAndQueueDate(hospitalId, queueType, statuses, today)
       .sortedWith(compareBy({ statusRank(it.status) }, { ranks[it.priority] ?: ranks.size }, { it.createdAt ?: Instant.EPOCH }))
       .map { BoardEntry.from(it) }
+  }
+
+  // 01.06 TV display: waiting-room board grouped per counter. Current = token being served, next = up to
+  // DISPLAY_NEXT_CAP waiting/postponed tokens in per-queueType priority order. Unassigned entries are omitted
+  // (no counter to show them on), and patient names never leave this method (public screens).
+  @Transactional(readOnly = true)
+  fun displayBoard(hospitalId: UUID?): DisplayBoardView {
+    val today = LocalDate.now()
+    val statuses = listOf("waiting", "called", "in-progress", "postponed")
+    val entries = queueEntryRepository.findByHospitalIdAndStatusInAndQueueDate(hospitalId, statuses, today)
+    val deptNames =
+      hospitalId
+        ?.let { departmentRepository.findByHospitalId(it).associate { dept -> dept.id to dept.name } }
+        ?: emptyMap()
+    val rankMaps = entries.map { it.queueType }.distinct().associateWith { priorityRanks(hospitalId, it) }
+    val counters =
+      entries
+        .filter { it.servicePointId != null }
+        .groupBy { it.servicePointId!! }
+        .map { (servicePointId, group) ->
+          val current =
+            group
+              .filter { it.status == "called" || it.status == "in-progress" }
+              .maxByOrNull { it.calledAt ?: Instant.EPOCH }
+          val next =
+            group
+              .filter { it.status == "waiting" || it.status == "postponed" }
+              .sortedWith(
+                compareBy(
+                  { rankMaps[it.queueType]?.get(it.priority) ?: Int.MAX_VALUE },
+                  { it.createdAt ?: Instant.EPOCH },
+                ),
+              ).take(DISPLAY_NEXT_CAP)
+          CounterBoardView(
+            servicePointId = servicePointId,
+            servicePointName = group.firstNotNullOfOrNull { it.servicePointName } ?: servicePointId,
+            departmentId = group.firstNotNullOfOrNull { it.departmentId },
+            departmentName = group.firstNotNullOfOrNull { it.departmentId }?.let { deptNames[it] },
+            current = current?.let { DisplayTokenView.from(it) },
+            next = next.map { DisplayTokenView.from(it) },
+          )
+        }.sortedBy { it.servicePointName }
+    return DisplayBoardView(generatedAt = Instant.now(), counters = counters)
   }
 
   @Transactional

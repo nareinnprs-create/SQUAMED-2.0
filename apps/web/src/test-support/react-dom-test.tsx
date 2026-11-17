@@ -7,6 +7,7 @@ import type { ReactElement } from 'react';
 export interface Mounted {
   container: HTMLElement;
   root: Root;
+  rerender: (element: ReactElement) => void;
   unmount: () => void;
 }
 
@@ -20,6 +21,11 @@ export function mount(element: ReactElement): Mounted {
   return {
     container,
     root,
+    rerender: (element: ReactElement) => {
+      act(() => {
+        root.render(element);
+      });
+    },
     unmount: () => {
       act(() => {
         root.unmount();

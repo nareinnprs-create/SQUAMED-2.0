@@ -3860,6 +3860,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/queue/display-board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["displayBoard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/queue/board": {
         parameters: {
             query?: never;
@@ -9612,6 +9628,34 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseDisplayBoardView: {
+            data?: components["schemas"]["DisplayBoardView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CounterBoardView: {
+            servicePointId: string;
+            servicePointName: string;
+            /** Format: uuid */
+            departmentId?: string;
+            departmentName?: string;
+            current?: components["schemas"]["DisplayTokenView"];
+            next: components["schemas"]["DisplayTokenView"][];
+        };
+        DisplayBoardView: {
+            /** Format: date-time */
+            generatedAt: string;
+            counters: components["schemas"]["CounterBoardView"][];
+        };
+        DisplayTokenView: {
+            tokenNumber: string;
+            queueType: string;
+            priority: string;
+            /** Format: date-time */
+            calledAt?: string;
         };
         ApiResponseListBoardEntry: {
             data?: components["schemas"]["BoardEntry"][];
@@ -18930,6 +18974,26 @@ export interface operations {
             };
         };
     };
+    displayBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDisplayBoardView"];
+                };
+            };
+        };
+    };
     board: {
         parameters: {
             query: {
@@ -20450,4 +20514,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 80bdd2c526ebcf684b0641e7ac93384cb90e546899449e4615dccacf7752fbbd
+// openapi snapshot sha256: 298bf787736f79a320d7e4808c091780b1613b53ccb814966a69e8509165f6df

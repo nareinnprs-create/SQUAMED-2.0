@@ -56,6 +56,14 @@ class QueueController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<List<BoardEntry>> = ApiResponse.ok(queueService.board(queueType, principal.hospitalId))
 
+  // 01.06 TV display app: whole-hospital board grouped per counter for the waiting-room screen.
+  @GetMapping("/display-board")
+  @RequiresPermission("queue:read:queue")
+  @Transactional(readOnly = true)
+  fun displayBoard(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DisplayBoardView> = ApiResponse.ok(queueService.displayBoard(principal.hospitalId))
+
   @PostMapping("/entries/call-next")
   @RequiresPermission("queue:manage:queue")
   @Transactional

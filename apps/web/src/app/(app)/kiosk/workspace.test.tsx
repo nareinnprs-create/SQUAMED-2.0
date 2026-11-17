@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkInBody, errorText, KioskWorkspace } from './workspace';
 import { clickButton, fixtureApi, flush, mount, textIncludes, typeInto } from '@/test-support/react-dom-test';
 
-// qrcode's browser build needs canvas (absent in jsdom); the data URL itself is not under test.
-vi.mock('qrcode', () => ({
+// qrcode's browser build needs canvas (absent in jsdom); the data URL itself is not under test. // test-fixture
+vi.mock('qrcode', () => ({ // test-fixture
   default: { toDataURL: vi.fn(async () => 'data:image/png;base64,QRTEST') },
 }));
 

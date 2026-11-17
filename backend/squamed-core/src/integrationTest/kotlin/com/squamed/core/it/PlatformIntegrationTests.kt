@@ -8401,7 +8401,8 @@ class PlatformIntegrationTests {
               "lastName" to "Rao$s",
               "gender" to "male",
               "dateOfBirth" to "1988-03-03",
-              "phone" to "55${System.currentTimeMillis()}".take(12),
+              // Tail tag A: same-ms creates must not collide after takeLast(12) truncation (CI run 44162724119).
+              "phone" to ("55${System.currentTimeMillis()}A").takeLast(12),
               "hospitalId" to h1,
             ),
             admin,
@@ -8423,7 +8424,8 @@ class PlatformIntegrationTests {
               "lastName" to "Nair$s",
               "gender" to "female",
               "dateOfBirth" to "1992-07-07",
-              "phone" to "55${System.currentTimeMillis()}".take(12),
+              // Tail tag B: same-ms creates must not collide after takeLast(12) truncation (CI run 44162724119).
+              "phone" to ("55${System.currentTimeMillis()}B").takeLast(12),
               "hospitalId" to h1,
             ),
             admin,
@@ -8472,7 +8474,8 @@ class PlatformIntegrationTests {
               "lastName" to "Comer$s",
               "gender" to "female",
               "dateOfBirth" to "1980-02-02",
-              "phone" to "55${System.currentTimeMillis()}".take(12),
+              // Tail tag C: same-ms creates must not collide after takeLast(12) truncation (CI run 44162724119).
+              "phone" to ("55${System.currentTimeMillis()}C").takeLast(12),
               "hospitalId" to h1,
             ),
             admin,

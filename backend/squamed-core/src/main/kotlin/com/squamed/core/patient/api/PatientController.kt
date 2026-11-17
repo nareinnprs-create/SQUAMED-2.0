@@ -4,8 +4,11 @@ import com.squamed.core.common.api.ApiResponse
 import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
+import com.squamed.core.patient.domain.PatientDocument
+import com.squamed.core.patient.repository.PatientDocumentRepository
 import com.squamed.core.patient.service.EmpiMatcher
 import com.squamed.core.patient.service.EmpiReviewService
+import com.squamed.core.patient.service.PatientDocumentStorage
 import com.squamed.core.patient.service.PatientService
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -33,6 +36,8 @@ class PatientController(
   private val empiMatcher: EmpiMatcher,
   private val empiReviewService: EmpiReviewService,
   private val tenantResolver: TenantResolver,
+  private val documentStorage: PatientDocumentStorage,
+  private val documentRepository: PatientDocumentRepository,
 ) {
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
@@ -349,6 +354,65 @@ class PatientController(
     if (!key.startsWith("photos/")) throw IllegalArgumentException("PHOTO_NOT_STORED")
     val (bytes, contentType) = patientService.getPhoto(key)
     return ResponseEntity.ok().header("Content-Type", contentType).body(bytes)
+  }
+
+  @PostMapping("/{id}/documents", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
+  @RequiresPermission("patient:write:patient")
+  @Transactional
+  fun uploadDocument(
+    @PathVariable id: UUID,
+    @RequestParam("file") file: MultipartFile,
+    @RequestParam("name") name: String,
+    @RequestParam("category", defaultValue = "other") category: String,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<PatientDocumentDto> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    val hospitalId = patientService.getHospitalId(id) ?: throw IllegalStateException("PATIENT_HOSPITAL_MISSING")
+    val storageKey = documentStorage.upload(hospitalId, id, file)
+    val entity =
+      documentRepository.save(
+        PatientDocument(
+          hospitalId = hospitalId,
+          patientId = id,
+          name = name,
+          category = category,
+          contentType = file.contentType ?: "",
+          sizeBytes = file.size,
+          storageKey = storageKey,
+        ),
+      )
+    return ApiResponse.ok(PatientDocumentDto.from(entity))
+  }
+
+  @GetMapping("/{id}/documents")
+  @RequiresPermission("patient:read:patient")
+  @Transactional(readOnly = true)
+  fun listDocuments(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<PatientDocumentDto>> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    return ApiResponse.ok(documentRepository.findByPatientIdOrderByCreatedAtDesc(id).map { PatientDocumentDto.from(it) })
+  }
+
+  @GetMapping("/{id}/documents/{documentId}/download")
+  @RequiresPermission("patient:read:patient")
+  @Transactional(readOnly = true)
+  fun downloadDocument(
+    @PathVariable id: UUID,
+    @PathVariable documentId: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ResponseEntity<ByteArray> {
+    requireSameHospital(principal, patientService.getHospitalId(id))
+    val document =
+      documentRepository.findById(documentId).orElseThrow { IllegalArgumentException("DOCUMENT_NOT_FOUND") }
+    if (document.patientId != id) throw IllegalArgumentException("DOCUMENT_NOT_FOUND")
+    val (bytes, contentType) = documentStorage.download(document.storageKey)
+    return ResponseEntity
+      .ok()
+      .header("Content-Type", contentType)
+      .header("Content-Disposition", "attachment; filename=\"${document.name}\"")
+      .body(bytes)
   }
 
   private fun requireSameHospital(

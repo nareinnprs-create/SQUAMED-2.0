@@ -5,8 +5,9 @@ import { useShellStore } from '@/lib/shell-store';
 
 /**
  * Session-scoped patient context above the shell content. Set by the patient
- * record and 360 pages; the layout clears it when the route leaves a patient
- * record, so no page can act on a stale patient.
+ * record and 360 pages; persists across routes until explicitly dismissed (✕),
+ * so clinical pages keep the active patient in view. Cleared only via the
+ * banner's close button — no route-based auto-clear.
  */
 export function PatientContextBar() {
   const patient = useShellStore((state) => state.activePatient);

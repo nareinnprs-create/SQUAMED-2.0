@@ -1124,6 +1124,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/patients/{id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDocuments"];
+        put?: never;
+        post: operations["uploadDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/patients/{id}/allergies": {
         parameters: {
             query?: never;
@@ -3804,6 +3820,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["board"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/patients/{id}/documents/{documentId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["downloadDocument"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6630,6 +6662,28 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponsePatientDocumentDto: {
+            data?: components["schemas"]["PatientDocumentDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PatientDocumentDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            patientId: string;
+            name: string;
+            category: string;
+            contentType: string;
+            /** Format: int64 */
+            sizeBytes: number;
+            /** Format: date-time */
+            createdAt?: string;
         };
         ApiResponseAllergyDto: {
             data?: components["schemas"]["AllergyDto"];
@@ -9488,6 +9542,13 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListPatientDocumentDto: {
+            data?: components["schemas"]["PatientDocumentDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListAllergyDto: {
             data?: components["schemas"]["AllergyDto"][];
             success: boolean;
@@ -9552,6 +9613,8 @@ export interface components {
             totalInvoices: number;
             tasks: components["schemas"]["TaskView"][];
             taskSummary: components["schemas"]["TaskSummaryView"];
+            consents: components["schemas"]["ConsentView"][];
+            documents: components["schemas"]["PatientDocumentDto"][];
         };
         TaskSummaryView: {
             /** Format: int32 */
@@ -12963,6 +13026,60 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseMedicalHistoryDto"];
+                };
+            };
+        };
+    };
+    listDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPatientDocumentDto"];
+                };
+            };
+        };
+    };
+    uploadDocument: {
+        parameters: {
+            query: {
+                name: string;
+                category?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePatientDocumentDto"];
                 };
             };
         };
@@ -18570,6 +18687,29 @@ export interface operations {
             };
         };
     };
+    downloadDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                documentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
     listMerges: {
         parameters: {
             query?: {
@@ -20045,4 +20185,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 7caf48d329f4287b531a1350797a46ce0b5b46123b63a9f0beb68a1945dd4463
+// openapi snapshot sha256: ffcaa5249c8638e6306ca33873ae538c2547ce7387fb2c028fe80552e8f7f0b4

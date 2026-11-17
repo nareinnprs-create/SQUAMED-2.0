@@ -11,7 +11,6 @@ import { UserMenu } from '@/components/shell/user-menu';
 import { PatientContextBar } from '@/components/shell/patient-context-bar';
 import { NotificationBell } from '@/components/shell/notification-bell';
 import { CommandBar } from '@/components/ai/command-bar';
-import { useShellStore } from '@/lib/shell-store';
 
 // Labels are data (nav model), not rendered literals; each id maps to its route.
 const navItems: SidebarItem[] = [
@@ -38,15 +37,10 @@ const navItems: SidebarItem[] = [
   { id: 'settings', label: 'Settings', href: '/settings' },
 ];
 
-// Patient context survives only inside a single patient record's routes.
-const PATIENT_CONTEXT_ROUTE = /^\/patients\/[0-9a-fA-F-]{36}(\/|$)/;
-
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname() ?? '';
   const { isAuthenticated, isLoading, refreshSession } = useAuth();
-  const activePatient = useShellStore((state) => state.activePatient);
-  const setPatient = useShellStore((state) => state.setPatient);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -60,13 +54,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [refreshSession]);
-
-  // Clear the patient context on any route that is not that patient's record.
-  useEffect(() => {
-    if (activePatient && !PATIENT_CONTEXT_ROUTE.test(pathname)) {
-      setPatient(null);
-    }
-  }, [pathname, activePatient, setPatient]);
 
   if (isLoading || !isAuthenticated) {
     return (

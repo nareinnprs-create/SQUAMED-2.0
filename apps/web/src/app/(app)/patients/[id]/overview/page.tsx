@@ -1,11 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import {
   Badge,
+  Button,
   ContentPanel,
+  Input,
   PageHeader,
+  Select,
   Spinner,
   Stack,
   StatusIndicator,
@@ -207,6 +210,27 @@ interface TaskSummary360 {
   completed: number
 }
 
+interface Consent360 {
+  id: string | null
+  purpose: string
+  status: string
+  scope?: string | null
+  signaturePresent: boolean
+  signedByName?: string | null
+  signedAt?: string | null
+  expiresAt?: string | null
+  withdrawnAt?: string | null
+}
+
+interface Document360 {
+  id: string | null
+  name: string
+  category: string
+  contentType: string
+  sizeBytes: number
+  createdAt?: string | null
+}
+
 interface Patient360View {
   demographics: Patient360Demographics
   latestVitals: VitalSign360 | null
@@ -226,6 +250,8 @@ interface Patient360View {
   totalInvoices: number
   tasks: Task360[]
   taskSummary: TaskSummary360
+  consents: Consent360[]
+  documents: Document360[]
 }
 
 const allergyVariants: Record<string, BadgeVariant> = {
@@ -285,6 +311,20 @@ const taskPriorityVariants: Record<string, BadgeVariant> = {
   low: 'information',
   urgent: 'critical',
   normal: 'neutral',
+}
+
+const consentStatusVariants: Record<string, BadgeVariant> = {
+  granted: 'success',
+  withdrawn: 'critical',
+  expired: 'warning',
+  denied: 'critical',
+  pending: 'neutral',
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${bytes} B`
 }
 
 function formatDate(value: string | null | undefined): string {
@@ -508,44 +548,91 @@ function renderVitalsGrid(vitals: VitalSign360) {
 export default function Patient360OverviewPage() {
   const params = useParams<{ id: string }>()
   const id = params.id
-  const { apiFetch, isReady } = useApi()
+  const { apiFetch, apiFetchRaw, isReady } = useApi()
   const [data, setData] = useState<Patient360View | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const setPatientContext = useShellStore((state) => state.setPatient)
 
+  const fetch360 = useCallback(async () => {
+    const result = await apiFetch<Patient360View>(`/patient360/${id}`)
+    setData(result)
+    setError(null)
+    const d = result.demographics
+    if (d) {
+      const birth = new Date(d.dateOfBirth).getTime()
+      setPatientContext({
+        id: d.id,
+        name: `${d.firstName} ${d.lastName}`.trim(),
+        mrn: d.mrn,
+        dateOfBirth: d.dateOfBirth,
+        gender: d.gender,
+        age: Number.isNaN(birth) ? 0 : Math.max(0, Math.floor((Date.now() - birth) / 31_557_600_000)),
+        allergySummary:
+          result.allergies.length > 0
+            ? result.allergies.map((a) => a.allergen).join(', ')
+            : undefined,
+      })
+    }
+    return result
+  }, [apiFetch, id, setPatientContext])
+
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const result = await apiFetch<Patient360View>(`/patient360/${id}`)
-      setData(result)
-      setError(null)
-      const d = result.demographics
-      if (d) {
-        const birth = new Date(d.dateOfBirth).getTime()
-        setPatientContext({
-          id: d.id,
-          name: `${d.firstName} ${d.lastName}`.trim(),
-          mrn: d.mrn,
-          dateOfBirth: d.dateOfBirth,
-          gender: d.gender,
-          age: Number.isNaN(birth) ? 0 : Math.max(0, Math.floor((Date.now() - birth) / 31_557_600_000)),
-          allergySummary:
-            result.allergies.length > 0
-              ? result.allergies.map((a) => a.allergen).join(', ')
-              : undefined,
-        })
-      }
+      await fetch360()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load patient 360 view')
     } finally {
       setLoading(false)
     }
-  }, [apiFetch, id, setPatientContext])
+  }, [fetch360])
 
   useEffect(() => {
     if (isReady) void load()
   }, [isReady, load])
+
+  const [docFile, setDocFile] = useState<File | null>(null)
+  const [docName, setDocName] = useState('')
+  const [docCategory, setDocCategory] = useState('report')
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const docInputRef = useRef<HTMLInputElement>(null)
+
+  async function uploadDocument() {
+    if (!docFile) return
+    setUploadingDoc(true)
+    try {
+      const body = new FormData()
+      body.append('file', docFile)
+      body.append('name', docName.trim() || docFile.name)
+      body.append('category', docCategory)
+      await apiFetch<unknown>(`/patients/${id}/documents`, { method: 'POST', body })
+      setDocFile(null)
+      setDocName('')
+      setDocCategory('report')
+      await fetch360()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to upload document')
+    } finally {
+      setUploadingDoc(false)
+    }
+  }
+
+  async function downloadDocument(doc: Document360) {
+    if (!doc.id) return
+    try {
+      const response = await apiFetchRaw(`/patients/${id}/documents/${doc.id}/download`)
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = doc.name
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to download document')
+    }
+  }
 
   const patient = data?.demographics
   const fullName = patient ? `${patient.firstName} ${patient.lastName}` : 'Patient'
@@ -1075,6 +1162,131 @@ export default function Patient360OverviewPage() {
                           <Badge variant="neutral" size="sm">{v.priority}</Badge>
                         </td>
                         <td style={tableCellStyle}>{v.source}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </ContentPanel>
+
+          <ContentPanel>
+            <SectionHeading title="Documents" count={data.documents.length} />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 12 }}>
+              <input
+                ref={docInputRef}
+                type="file"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                hidden
+                onChange={(e) => {
+                  setDocFile(e.target.files?.[0] ?? null)
+                  e.target.value = ''
+                }}
+              />
+              <div style={{ width: 200 }}>
+                <Input
+                  placeholder="Document name (optional)"
+                  aria-label="Document name"
+                  value={docName}
+                  onChange={(e) => setDocName(e.target.value)}
+                />
+              </div>
+              <div style={{ width: 160 }}>
+                <Select
+                  value={docCategory}
+                  onChange={(e) => setDocCategory(e.target.value)}
+                  aria-label="Document category"
+                >
+                  <option value="report">Report</option>
+                  <option value="prescription">Prescription</option>
+                  <option value="imaging">Imaging</option>
+                  <option value="referral">Referral</option>
+                  <option value="discharge">Discharge</option>
+                  <option value="id">ID</option>
+                  <option value="other">Other</option>
+                </Select>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                loading={uploadingDoc}
+                onClick={() => docInputRef.current?.click()}
+              >
+                Choose file
+              </Button>
+              <Button size="sm" disabled={!docFile} loading={uploadingDoc} onClick={() => void uploadDocument()}>
+                Upload
+              </Button>
+              {docFile ? <span style={mutedText}>{docFile.name}</span> : null}
+            </div>
+            {data.documents.length === 0 ? (
+              <EmptyState message="No documents uploaded." />
+            ) : (
+              <div style={fullBorderStyle}>
+                <table style={fullWidthTable}>
+                  <thead>
+                    <tr>
+                      <th style={tableHeaderStyle}>Name</th>
+                      <th style={tableHeaderStyle}>Category</th>
+                      <th style={tableHeaderStyle}>Type</th>
+                      <th style={tableHeaderStyle}>Size</th>
+                      <th style={tableHeaderStyle}>Uploaded</th>
+                      <th style={tableHeaderStyle}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.documents.map((doc) => (
+                      <tr key={doc.id ?? doc.name}>
+                        <td style={tableCellStyle}>{doc.name}</td>
+                        <td style={tableCellStyle}>
+                          <Badge variant="neutral" size="sm">{doc.category}</Badge>
+                        </td>
+                        <td style={tableCellStyle}>{doc.contentType}</td>
+                        <td style={tableCellStyle}>{formatBytes(doc.sizeBytes)}</td>
+                        <td style={tableCellStyle}>{formatDateTime(doc.createdAt)}</td>
+                        <td style={tableCellStyle}>
+                          <Button variant="ghost" size="sm" onClick={() => void downloadDocument(doc)}>
+                            Download
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </ContentPanel>
+
+          <ContentPanel>
+            <SectionHeading title="Consents" count={data.consents.length} />
+            {data.consents.length === 0 ? (
+              <EmptyState message="No consents recorded." />
+            ) : (
+              <div style={fullBorderStyle}>
+                <table style={fullWidthTable}>
+                  <thead>
+                    <tr>
+                      <th style={tableHeaderStyle}>Purpose</th>
+                      <th style={tableHeaderStyle}>Effective status</th>
+                      <th style={tableHeaderStyle}>Scope</th>
+                      <th style={tableHeaderStyle}>Signed by</th>
+                      <th style={tableHeaderStyle}>Expires</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.consents.map((consent) => (
+                      <tr key={consent.id ?? consent.purpose}>
+                        <td style={tableCellStyle}>{consent.purpose}</td>
+                        <td style={tableCellStyle}>
+                          <Badge variant={consentStatusVariants[consent.status] ?? 'neutral'} size="sm">
+                            {consent.status}
+                          </Badge>
+                        </td>
+                        <td style={tableCellStyle}>{consent.scope ?? '—'}</td>
+                        <td style={tableCellStyle}>
+                          {consent.signaturePresent ? consent.signedByName ?? 'signed' : '—'}
+                        </td>
+                        <td style={tableCellStyle}>{formatDate(consent.expiresAt)}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -127,6 +127,15 @@ squamed:
     secret-key: ${PHOTOS_SECRET_KEY:squamed_dev_password}
     bucket: ${PHOTOS_BUCKET:squamed-patient-photos}
     path-style: ${PHOTOS_PATH_STYLE:true}
+  documents:
+    # S3 API object storage for patient documents (01.05) — MinIO in dev, S3 in prod.
+    enabled: ${DOCUMENTS_ENABLED:true}
+    endpoint: ${DOCUMENTS_ENDPOINT:http://localhost:9000}
+    region: ${DOCUMENTS_REGION:us-east-1}
+    access-key: ${DOCUMENTS_ACCESS_KEY:squamed}
+    secret-key: ${DOCUMENTS_SECRET_KEY:squamed_dev_password}
+    bucket: ${DOCUMENTS_BUCKET:squamed-patient-documents}
+    path-style: ${DOCUMENTS_PATH_STYLE:true}
 
 logging:
   level:

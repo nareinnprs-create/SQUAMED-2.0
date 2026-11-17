@@ -8080,9 +8080,10 @@ class PlatformIntegrationTests {
       assertNotNull(ann2, "announcement.enqueued for the emergency token")
       assertEquals(6, ann2!!["payload"]["repeatCount"].asInt(), "emergency doubles the rule repeat (3 → 6)")
       assertEquals("emergency", ann2["payload"]["priority"].asText())
-      val frame = awaitEventFrame(ws, "announcement.enqueued", 5000)
-      assertNotNull(frame, "announcement.enqueued broadcast to the hospital WS session: ${ws.messages.toList().takeLast(4)}")
-      assertTrue(frame!!.contains(token2), "WS frame carries the called token")
+      // Wait for a frame carrying THIS token: consumer lag can replay the first
+      // call's announcement.enqueued (published pre-connect) after the WS opens.
+      val frame = awaitEventFrame(ws, "announcement.enqueued", 5000, mustContain = token2)
+      assertNotNull(frame, "announcement.enqueued carrying $token2 broadcast to the hospital WS session: ${ws.messages.toList().takeLast(4)}")
 
       // Manual enqueue (contract /announcements:enqueue): texts echoed, zone volume applied, default repeat 2.
       val manual =
@@ -8150,15 +8151,18 @@ class PlatformIntegrationTests {
       return collector
     }
 
+    // Consumer lag can replay pre-connect frames of the same event type; scope
+    // the wait to a frame actually carrying this content when events repeat.
     private fun awaitEventFrame(
       collector: RealtimeCollector,
       eventType: String,
       timeoutMs: Long,
+      mustContain: String? = null,
     ): String? {
       val deadline = System.currentTimeMillis() + timeoutMs
       while (System.currentTimeMillis() < deadline) {
         collector.messages
-          .firstOrNull { it.contains("\"type\":\"event.received\"") && it.contains(eventType) }
+          .firstOrNull { it.contains("\"type\":\"event.received\"") && it.contains(eventType) && (mustContain == null || it.contains(mustContain)) }
           ?.let { return it }
         Thread.sleep(250)
       }

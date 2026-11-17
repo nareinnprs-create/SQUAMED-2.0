@@ -42,4 +42,9 @@ class Prescription(
   var prescribedBy: UUID? = null,
   @Column(name = "prescribed_at")
   var prescribedAt: Instant? = null,
+  // 01.04 allergy gate (CS-02/CS-03): how the allergy screen went for this Rx.
+  @Column(name = "override_reason", columnDefinition = "text")
+  var overrideReason: String? = null,
+  @Column(name = "allergy_status", length = 20)
+  var allergyStatus: String? = null,
 ) : BaseEntity()

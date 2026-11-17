@@ -32,4 +32,7 @@ class Encounter(
   var startedAt: Instant? = null,
   @Column(name = "ended_at")
   var endedAt: Instant? = null,
+  // 01.04 follow-up: appointment booked from the consultation (scheduling delegate).
+  @Column(name = "follow_up_appointment_id")
+  var followUpAppointmentId: UUID? = null,
 ) : BaseEntity()

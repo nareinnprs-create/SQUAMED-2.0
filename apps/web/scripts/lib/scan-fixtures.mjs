@@ -11,6 +11,7 @@ export const SCAN_ROUTES = [
   { path: '/dashboard', label: 'dashboard' },
   { path: '/queue', label: 'queue' },
   { path: '/reception', label: 'reception' },
+  { path: '/consult', label: 'consult' },
 ];
 
 const SCAN_TOKENS = { access: 'scan-access-token', refresh: 'scan-refresh-token' };

@@ -42,6 +42,12 @@ object EventCatalog {
       Entry("QueueCalled", "queue.called", Status.EMITTED, "Token called to a counter; displays and announcements consume it (01.02)."),
       Entry("QueueTransferred", "queue.transferred", Status.EMITTED, "Token moved to another queue with a fresh token number (01.02)."),
       Entry("QueueBumped", "queue.bumped", Status.EMITTED, "Entry bumped to emergency priority; broadcast to displays over WS (01.02)."),
+      Entry(
+        "EncounterOrderPlaced",
+        "encounter.order.placed",
+        Status.EMITTED,
+        "OPD order placed from a consultation; the task engine consumes it in chunk 2 (01.04).",
+      ),
     )
 
   fun all(): List<Entry> = entries

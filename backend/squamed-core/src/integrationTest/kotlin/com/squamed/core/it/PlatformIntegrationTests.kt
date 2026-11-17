@@ -531,7 +531,7 @@ class PlatformIntegrationTests {
         )
       assert2xx(note, "add SOAP note")
       val noteId = `data`(note)["id"].asText()
-      val sign = api(HttpMethod.POST, "/api/v1/encounters/notes/$noteId/sign", json(), token)
+      val sign = api(HttpMethod.POST, "/api/v1/encounters/notes/$noteId/sign", json("method" to "PIN", "pin" to "1357"), token)
       assertTrue(sign.status == 200 || sign.status == 409, "sign note -> ${sign.status}")
 
       val rx =
@@ -547,6 +547,7 @@ class PlatformIntegrationTests {
             "frequency" to "TID",
             "route" to "oral",
             "quantity" to 10,
+            "patientMrn" to mrn,
           ),
           token,
         )
@@ -2925,6 +2926,7 @@ class PlatformIntegrationTests {
           ),
         )["patient"]
       val patientId = patient["id"].asText()
+      val patientMrn = patient["mrn"].asText()
 
       val enc =
         `data`(
@@ -2991,6 +2993,7 @@ class PlatformIntegrationTests {
               "dose" to "500 mg",
               "frequency" to "TID",
               "quantity" to 6,
+              "patientMrn" to patientMrn,
             ),
             token,
           ),
@@ -3004,6 +3007,7 @@ class PlatformIntegrationTests {
               "orderType" to "LAB",
               "orderName" to "CBC",
               "priority" to "routine",
+              "patientMrn" to patientMrn,
             ),
             token,
           ),
@@ -4166,6 +4170,7 @@ class PlatformIntegrationTests {
           ),
         )["patient"]
       val patientId = patient["id"].asText()
+      val patientMrn = patient["mrn"].asText()
       val patientDetailUrl = "/api/v1/patients/$patientId"
 
       assert2xx(api(HttpMethod.GET, patientDetailUrl, token = token), "get patient detail")
@@ -4292,6 +4297,7 @@ class PlatformIntegrationTests {
             "orderCode" to "CBC",
             "orderName" to "CBC Panel",
             "priority" to "routine",
+            "patientMrn" to patientMrn,
           ),
           token,
         ),
@@ -4995,9 +5001,9 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* (20 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order (21 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
-      assertEquals(20, catalog.size(), "event catalog lists the v1 set + 01.01 appointment + 01.02 queue events: $catalog")
+      assertEquals(21, catalog.size(), "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order events: $catalog")
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "NotificationDispatched" && it["status"].asText() == "EMITTED" })
@@ -5005,6 +5011,7 @@ class PlatformIntegrationTests {
       assertTrue(catalog.any { it["name"].asText() == "TaskEscalated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" })
+      assertTrue(catalog.any { it["name"].asText() == "EncounterOrderPlaced" && it["status"].asText() == "EMITTED" })
 
       assertEquals(403, api(HttpMethod.GET, "/api/v1/admin/events/outbox", token = u1Token).status, "doctor token denied event ops")
     }
@@ -5619,7 +5626,7 @@ class PlatformIntegrationTests {
 
       // Catalog: consent.* EMITTED in the 20-type v1 set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
-      assertEquals(20, catalog.size(), "event catalog lists the v1 set: $catalog")
+      assertEquals(21, catalog.size(), "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order: $catalog")
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "QueueBumped" && it["status"].asText() == "EMITTED" }, "queue.bumped EMITTED")
@@ -8405,6 +8412,272 @@ class PlatformIntegrationTests {
       val audit = api(HttpMethod.GET, "/api/v1/audit/logs?entityId=${created[0]}&limit=10", token = admin)
       assert2xx(audit, "audit logs for the cancelled appointment")
       assertTrue(`data`(audit).size() >= 1, "status change audited: ${audit.body.take(300)}")
+    }
+  }
+
+  /** 01.04 OPD EMR core: allergy gate, two-identifier confirm, note signature, catalog, procedures/referrals/follow-up. */
+  @Nested
+  inner class OpdEmrCoreTests {
+    private fun registerRoleUser(
+      role: String,
+      hospitalId: String,
+      s: String,
+      tag: String = role,
+    ): String {
+      val email = "emr-${tag.lowercase()}-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Emr",
+            "lastName" to "$role$s",
+            "roles" to listOf(role),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register $role $email",
+      )
+      return email
+    }
+
+    private fun login(email: String): String {
+      val login = api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123"))
+      assert2xx(login, "login $email: ${login.body.take(200)}")
+      return `data`(login)["accessToken"].asText()
+    }
+
+    /** Admin creates the patient; returns id + MRN (CS-01 two-identifier confirm needs both). */
+    private fun patientIn(
+      admin: String,
+      hospitalId: String,
+      s: String,
+    ): Pair<String, String> {
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Emr",
+              "lastName" to "Patient$s",
+              "gender" to "female",
+              "dateOfBirth" to "1990-02-02",
+              "hospitalId" to hospitalId,
+            ),
+            admin,
+          ),
+        )["patient"]
+      return patient["id"].asText() to patient["mrn"].asText()
+    }
+
+    private fun prom(): String {
+      val r = api(HttpMethod.GET, "/actuator/prometheus")
+      assert2xx(r, "prometheus scrape")
+      return r.body
+    }
+
+    @Test
+    fun opdEmrCoreClinicalSafetyAndWorkflow() {
+      val admin = adminToken()
+      val adminId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = admin))["userId"].asText()
+      val s = suffix()
+      // Fresh hospital per run: global catalogs are shared, but encounters/allergies/slots are per-hospital.
+      val hid =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Emr L $s", "code" to "EMR-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val hidForeign =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Emr F $s", "code" to "EMF-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val doc = login(registerRoleUser("DOCTOR", hid, s))
+      val rec = login(registerRoleUser("RECEPTIONIST", hid, s))
+      val docForeign = login(registerRoleUser("DOCTOR", hidForeign, s, tag = "foreign"))
+
+      val (patientId, mrn) = patientIn(admin, hid, s)
+
+      // Allergy on file: one row drives both the BLOCK (exact) and WARN (substring) paths.
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients/$patientId/allergies",
+          json("allergen" to "Penicillin", "reaction" to "Urticaria", "severity" to "high"),
+          doc,
+        ),
+        "add allergy",
+      )
+
+      val enc =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters",
+            json("patientId" to patientId, "reason" to "OPD EMR core", "chiefComplaint" to "sore throat"),
+            doc,
+          ),
+        )["id"].asText()
+
+      // CS-02: exact allergen match blocks the Rx outright — no override path.
+      val blocked =
+        api(
+          HttpMethod.POST,
+          "/api/v1/encounters/$enc/prescriptions",
+          json("drugName" to "Penicillin", "patientMrn" to mrn),
+          doc,
+        )
+      assertEquals(409, blocked.status, "exact allergy match blocks: ${blocked.body.take(300)}")
+      assertTrue(blocked.body.contains("ALLERGY_BLOCK"), "block guard code: ${blocked.body.take(200)}")
+
+      // CS-03: substring match warns — override without a typed reason is rejected.
+      val warnNoReason =
+        api(
+          HttpMethod.POST,
+          "/api/v1/encounters/$enc/prescriptions",
+          json("drugName" to "Benzylpenicillin", "patientMrn" to mrn),
+          doc,
+        )
+      assertEquals(409, warnNoReason.status, "warn requires an override reason: ${warnNoReason.body.take(300)}")
+      assertTrue(warnNoReason.body.contains("ALLERGY_WARN_REASON_REQUIRED"), "warn guard code: ${warnNoReason.body.take(200)}")
+
+      val warnOverridden =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters/$enc/prescriptions",
+            json("drugName" to "Benzylpenicillin", "patientMrn" to mrn, "overrideReason" to "Culture confirms susceptible strain"),
+            doc,
+          ),
+        )
+      assertEquals("warn_override", warnOverridden["allergyStatus"].asText(), "warn override recorded: $warnOverridden")
+      assertNotNull(warnOverridden["overrideReason"].asText(), "override reason kept for audit")
+      val metrics = prom()
+      assertTrue(metrics.contains("squamed_rx_allergy_warn_overrides_total"), "warn-override KPI counter exported")
+
+      // CS-01: the two-identifier confirm rejects a missing or wrong patient MRN.
+      val rxNoMrn = api(HttpMethod.POST, "/api/v1/encounters/$enc/prescriptions", json("drugName" to "Paracetamol"), doc)
+      assertEquals(400, rxNoMrn.status, "Rx without MRN rejected: ${rxNoMrn.body.take(200)}")
+      assertTrue(rxNoMrn.body.contains("PATIENT_MISMATCH"), "Rx MRN guard code: ${rxNoMrn.body.take(200)}")
+      val rxWrongMrn =
+        api(HttpMethod.POST, "/api/v1/encounters/$enc/prescriptions", json("drugName" to "Paracetamol", "patientMrn" to "MQ-0000-0001"), doc)
+      assertEquals(400, rxWrongMrn.status, "Rx with a wrong MRN rejected")
+      val cleanRx =
+        `data`(api(HttpMethod.POST, "/api/v1/encounters/$enc/prescriptions", json("drugName" to "Paracetamol", "patientMrn" to mrn), doc))
+      assertEquals("checked", cleanRx["allergyStatus"].asText(), "clean Rx records the allergy screen: $cleanRx")
+
+      val orderNoMrn = api(HttpMethod.POST, "/api/v1/encounters/$enc/orders", json("orderType" to "lab", "orderName" to "CBC"), doc)
+      assertEquals(400, orderNoMrn.status, "order without MRN rejected: ${orderNoMrn.body.take(200)}")
+      assertTrue(orderNoMrn.body.contains("PATIENT_MISMATCH"), "order MRN guard code: ${orderNoMrn.body.take(200)}")
+      val order =
+        `data`(api(HttpMethod.POST, "/api/v1/encounters/$enc/orders", json("orderType" to "lab", "orderName" to "CBC", "patientMrn" to mrn), doc))
+      assertEquals("pending", order["status"].asText(), "confirmed order lands pending: $order")
+
+      // E5 signature: PIN required, re-sign conflicts, ESIGN needs its transaction id.
+      val noteId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters/$enc/notes",
+            json("noteType" to "progress", "title" to "OPD note", "subjective" to "sore throat 2 days", "assessment" to "pharyngitis", "plan" to "rest"),
+            doc,
+          ),
+        )["id"].asText()
+      val noPin = api(HttpMethod.POST, "/api/v1/encounters/notes/$noteId/sign", json("method" to "PIN"), doc)
+      assertEquals(400, noPin.status, "sign without a PIN rejected: ${noPin.body.take(200)}")
+      assertTrue(noPin.body.contains("SIGNATURE_PIN_REQUIRED"), "PIN guard code: ${noPin.body.take(200)}")
+      val signed = api(HttpMethod.POST, "/api/v1/encounters/notes/$noteId/sign", json("method" to "PIN", "pin" to "4821"), doc)
+      assert2xx(signed, "PIN sign: ${signed.body.take(300)}")
+      assertEquals("PIN", `data`(signed)["signatureMethod"].asText(), "signature method recorded")
+      val resign = api(HttpMethod.POST, "/api/v1/encounters/notes/$noteId/sign", json("method" to "PIN", "pin" to "4821"), doc)
+      assertEquals(409, resign.status, "re-signing a signed note conflicts: ${resign.body.take(200)}")
+      assertTrue(resign.body.contains("NOTE_ALREADY_SIGNED"), "re-sign guard code: ${resign.body.take(200)}")
+
+      val note2Id =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/encounters/$enc/notes", json("noteType" to "progress", "title" to "eSign note"), doc),
+        )["id"].asText()
+      val esignNoTx = api(HttpMethod.POST, "/api/v1/encounters/notes/$note2Id/sign", json("method" to "ESIGN"), doc)
+      assertEquals(400, esignNoTx.status, "ESIGN without a transaction id rejected: ${esignNoTx.body.take(200)}")
+      assertTrue(esignNoTx.body.contains("ESIGN_TRANSACTION_REQUIRED"), "eSign guard code: ${esignNoTx.body.take(200)}")
+      val esigned =
+        api(HttpMethod.POST, "/api/v1/encounters/notes/$note2Id/sign", json("method" to "ESIGN", "eSignTransactionId" to "tx-$s"), doc)
+      assert2xx(esigned, "ESIGN with tx id: ${esigned.body.take(300)}")
+      assertEquals("ESIGN", `data`(esigned)["signatureMethod"].asText(), "eSign method recorded")
+
+      // Coded diagnosis: unknown codes rejected; catalog code resolves its display name.
+      val unknownDx = api(HttpMethod.POST, "/api/v1/encounters/$enc/diagnoses", json("code" to "ZZZ9", "system" to "ICD-10"), doc)
+      assertEquals(400, unknownDx.status, "unknown dx code rejected: ${unknownDx.body.take(200)}")
+      assertTrue(unknownDx.body.contains("DIAGNOSIS_CODE_UNKNOWN"), "dx guard code: ${unknownDx.body.take(200)}")
+      val codedDx =
+        `data`(api(HttpMethod.POST, "/api/v1/encounters/$enc/diagnoses", json("code" to "E11.9", "system" to "ICD-10"), doc))
+      assertEquals("Type 2 diabetes mellitus without complications", codedDx["name"].asText(), "catalog display fills the name: $codedDx")
+      assertEquals("ICD-10", codedDx["system"].asText(), "canonical system saved")
+
+      // Global catalogs: 8+ specialty SOAP templates and the seeded dx catalog (47 rows).
+      val templates = `data`(api(HttpMethod.GET, "/api/v1/encounters/note-templates", token = doc))
+      assertTrue(templates.size() >= 8, "specialty note templates seeded: ${templates.size()}")
+      val catalog = `data`(api(HttpMethod.GET, "/api/v1/encounters/diagnosis-catalog", token = doc))
+      assertTrue(catalog.size() >= 45, "diagnosis catalog seeded: ${catalog.size()}")
+
+      // Procedures: documented on the encounter, listable.
+      val procedure =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters/$enc/procedures",
+            json("procedureName" to "Nebulisation", "status" to "completed", "notes" to "single dose"),
+            doc,
+          ),
+        )
+      assertEquals("completed", procedure["status"].asText(), "procedure recorded: $procedure")
+      val procedures = `data`(api(HttpMethod.GET, "/api/v1/encounters/$enc/procedures", token = doc))
+      assertEquals(1, procedures.size(), "one procedure listed: $procedures")
+
+      // Referrals: target required; specialty referral persists with the referring doctor.
+      val noTarget = api(HttpMethod.POST, "/api/v1/encounters/$enc/referrals", json("reason" to "unclear"), doc)
+      assertEquals(400, noTarget.status, "referral without a target rejected: ${noTarget.body.take(200)}")
+      assertTrue(noTarget.body.contains("REFERRAL_TARGET_REQUIRED"), "referral guard code: ${noTarget.body.take(200)}")
+      val referral =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters/$enc/referrals",
+            json("toSpecialty" to "Cardiology", "reason" to "chest pain workup", "urgency" to "urgent"),
+            doc,
+          ),
+        )
+      assertEquals("pending", referral["status"].asText(), "referral starts pending: $referral")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/encounters/$enc/referrals", token = doc)).size(), "one referral listed")
+
+      // Follow-up: booking rights stay with reception/admin (V54); the encounter gets the appointment stamp.
+      val doctorFollowUp = api(HttpMethod.POST, "/api/v1/encounters/$enc/follow-up", json("slotId" to "00000000-0000-0000-0000-000000000000"), doc)
+      assertEquals(403, doctorFollowUp.status, "doctor cannot book follow-up: ${doctorFollowUp.body.take(200)}")
+      val day = LocalDate.now().plusDays(3)
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/schedules/templates",
+          json("doctorId" to adminId, "weekday" to day.dayOfWeek.value, "startTime" to "09:00", "endTime" to "10:00", "slotMinutes" to 30, "capacity" to 1),
+          rec,
+        ),
+        "follow-up slot template",
+      )
+      val followUpSlot = `data`(api(HttpMethod.GET, "/api/v1/schedules/$adminId/slots?from=$day&to=$day", token = rec))[0]["id"].asText()
+      val followUp = api(HttpMethod.POST, "/api/v1/encounters/$enc/follow-up", json("slotId" to followUpSlot), rec)
+      assert2xx(followUp, "receptionist books the follow-up: ${followUp.body.take(300)}")
+      val followUpId = `data`(followUp)["followUpAppointmentId"].asText()
+      assertTrue(followUpId.isNotBlank(), "encounter stamped with the follow-up appointment: ${followUp.body.take(300)}")
+
+      // 01.04 orders→tasks contract: the placed order lands in the outbox for the chunk-2 task engine.
+      val outboxRows = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = admin))
+      val emitted = outboxRows.firstOrNull { it["eventType"].asText() == "encounter.order.placed" }
+      assertNotNull(emitted, "encounter.order.placed outbox row present: head=${outboxRows.take(3)}")
+
+      // Cross-tenant: a foreign doctor cannot read the encounter.
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/encounters/$enc", token = docForeign).status, "cross-tenant encounter denied")
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/encounters/$enc/procedures", token = docForeign).status, "cross-tenant procedures denied")
     }
   }
 }

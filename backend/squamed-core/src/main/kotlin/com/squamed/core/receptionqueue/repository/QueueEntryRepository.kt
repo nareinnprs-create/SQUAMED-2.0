@@ -68,4 +68,14 @@ interface QueueEntryRepository : JpaRepository<QueueEntry, UUID> {
     @Param("statuses") statuses: Collection<String>,
     @Param("queueDate") queueDate: LocalDate,
   ): List<QueueEntry>
+
+  // 01.06 TV display: today's live entries across every queue type, grouped per counter client-side of the service.
+  @Query(
+    "select e from QueueEntry e where (:hid is null or e.hospitalId = :hid) and e.status in :statuses and e.queueDate = :queueDate",
+  )
+  fun findByHospitalIdAndStatusInAndQueueDate(
+    @Param("hid") hospitalId: UUID?,
+    @Param("statuses") statuses: Collection<String>,
+    @Param("queueDate") queueDate: LocalDate,
+  ): List<QueueEntry>
 }

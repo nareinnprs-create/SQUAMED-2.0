@@ -5,6 +5,7 @@ import org.hibernate.type.Type
 import org.springframework.boot.autoconfigure.orm.jpa.HibernatePropertiesCustomizer
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.transaction.annotation.EnableTransactionManagement
 import java.util.UUID
 
 /**
@@ -75,6 +76,10 @@ class AuditHibernateInterceptor(
 }
 
 @Configuration
+// 01.12 fail-closed audit: order 0 makes the transaction advisor outermost, so AuditAspect
+// (LOWEST_PRECEDENCE) and its finally-record run INSIDE the tx — an audit failure rolls the
+// clinical write back. Boot's own @EnableTransactionManagement auto-config backs off.
+@EnableTransactionManagement(order = 0)
 class AuditInterceptorConfig {
   @Bean
   fun auditHibernateInterceptor(objectMapper: ObjectMapper): AuditHibernateInterceptor = AuditHibernateInterceptor(objectMapper)

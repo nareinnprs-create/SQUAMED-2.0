@@ -383,7 +383,13 @@ class FhirService(
 
   fun allOrganizations(): List<Map<String, Any?>> = hospitalRepository.findAll().map { organization(it.id, it) }
 
-  fun allEncounters(): List<Map<String, Any?>> = encounterRepository.findAll().map { encounter(it.id, it) }
+  /** 01.12 dual review: FHIR Encounter search is tenant-scoped (null hospitalId = unscoped system use). */
+  fun allEncounters(hospitalId: UUID?): List<Map<String, Any?>> =
+    if (hospitalId == null) {
+      encounterRepository.findAll().map { encounter(it.id, it) }
+    } else {
+      encounterRepository.findByHospitalId(hospitalId).map { encounter(it.id, it) }
+    }
 
   fun allConditions(): List<Map<String, Any?>> = diagnosisRepository.findAll().map { condition(it.id, it) }
 

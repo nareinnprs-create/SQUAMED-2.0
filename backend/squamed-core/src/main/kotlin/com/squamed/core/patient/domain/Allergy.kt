@@ -24,4 +24,20 @@ class Allergy(
   var isActive: Boolean = true,
   @Column(name = "notes")
   var notes: String? = null,
-) : BaseEntity()
+) : BaseEntity() {
+  companion object {
+    /** NKA sentinel allergen (SAFETY L49): an explicit, audited "no known allergies" row. */
+    const val NKA_ALLERGEN = "NO KNOWN ALLERGIES"
+
+    const val SEVERITY_NONE = "none"
+
+    /** SAFETY L50 severity codes: block | warn | mild | none. Unknown input fails safe to warn. */
+    fun normalizeSeverity(raw: String?): String =
+      when (raw?.trim()?.lowercase()) {
+        "block", "anaphylaxis", "critical", "high", "life-threatening", "life_threatening" -> "block"
+        "mild", "low", "minor" -> "mild"
+        SEVERITY_NONE, "nka" -> SEVERITY_NONE
+        else -> "warn" // unknown severity forces the typed-reason path, never a silent pass
+      }
+  }
+}

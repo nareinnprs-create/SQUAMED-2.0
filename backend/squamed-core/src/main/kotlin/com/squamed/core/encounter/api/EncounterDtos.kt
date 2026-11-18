@@ -27,6 +27,8 @@ data class StartEncounterDto(
 data class VitalSignRequestDto(
   val recordedAt: Instant? = null,
   val recordedBy: UUID? = null,
+  // CS-01 two-identifier confirm (chunk-1 dual review): every encounter-scoped write carries it.
+  val patientMrn: String? = null,
   val bloodPressureSystolic: Int? = null,
   val bloodPressureDiastolic: Int? = null,
   val heartRate: Int? = null,
@@ -46,6 +48,8 @@ data class ClinicalNoteRequestDto(
   val objective: String? = null,
   val assessment: String? = null,
   val plan: String? = null,
+  // CS-01 two-identifier confirm (draft notes too: the encounter binds the content to the patient).
+  val patientMrn: String? = null,
 )
 
 data class DiagnosisRequestDto(
@@ -54,6 +58,8 @@ data class DiagnosisRequestDto(
   val name: String? = null,
   val type: String? = null,
   val notes: String? = null,
+  // CS-01 two-identifier confirm.
+  val patientMrn: String? = null,
 )
 
 data class OrderRequestDto(
@@ -95,6 +101,8 @@ data class ProcedureRequestDto(
   val performedBy: UUID? = null,
   val outcome: String? = null,
   val notes: String? = null,
+  // CS-01 two-identifier confirm.
+  val patientMrn: String? = null,
 )
 
 data class ReferralRequestDto(
@@ -104,6 +112,8 @@ data class ReferralRequestDto(
   val reason: String,
   val urgency: String? = null,
   val notes: String? = null,
+  // CS-01 two-identifier confirm.
+  val patientMrn: String? = null,
 )
 
 data class FollowUpRequestDto(
@@ -116,6 +126,8 @@ data class SignNoteRequest(
   val method: String? = "PIN",
   val pin: String? = null,
   val eSignTransactionId: String? = null,
+  // CS-01 two-identifier confirm: signing names the patient too.
+  val patientMrn: String? = null,
 )
 
 data class EncounterView(
@@ -214,6 +226,8 @@ data class ClinicalNoteView(
   val signedAt: Instant?,
   val signedBy: UUID?,
   val signatureMethod: String?,
+  // SAFETY L51: set when this note is an amendment of an earlier signed note.
+  val amendsNoteId: UUID?,
   val createdAt: Instant?,
   val updatedAt: Instant?,
 ) {
@@ -233,6 +247,7 @@ data class ClinicalNoteView(
         signedAt = entity.signedAt,
         signedBy = entity.signedBy,
         signatureMethod = entity.signatureMethod,
+        amendsNoteId = entity.amendsNoteId,
         createdAt = entity.createdAt,
         updatedAt = entity.updatedAt,
       )

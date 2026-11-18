@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
@@ -42,6 +43,7 @@ class EncounterController(
         reason = dto.reason,
         chiefComplaint = dto.chiefComplaint,
         hospitalId = tenantResolver.pinOrDefault(principal, dto.hospitalId),
+        principal = principal,
       )
     return ApiResponse.ok(encounter)
   }
@@ -60,7 +62,7 @@ class EncounterController(
   fun completeEncounter(
     @PathVariable id: UUID,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<EncounterView> = ApiResponse.ok(encounterService.completeEncounter(id, principal.hospitalId))
+  ): ApiResponse<EncounterView> = ApiResponse.ok(encounterService.completeEncounter(id, principal.hospitalId, principal))
 
   @PostMapping("/{id}/vitals")
   @RequiresPermission("clinical:write:vital")
@@ -87,7 +89,7 @@ class EncounterController(
     @PathVariable id: UUID,
     @RequestBody dto: ClinicalNoteRequestDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<ClinicalNoteView> = ApiResponse.ok(encounterService.addNote(id, dto, principal.userId, principal.hospitalId))
+  ): ApiResponse<ClinicalNoteView> = ApiResponse.ok(encounterService.addNote(id, dto, principal, principal.hospitalId))
 
   @GetMapping("/{id}/notes")
   @RequiresPermission("clinical:read:note")
@@ -104,7 +106,18 @@ class EncounterController(
     @PathVariable noteId: UUID,
     @RequestBody body: SignNoteRequest,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<ClinicalNoteView> = ApiResponse.ok(encounterService.signNote(noteId, body, principal.userId, principal.hospitalId))
+  ): ApiResponse<ClinicalNoteView> = ApiResponse.ok(encounterService.signNote(noteId, body, principal, principal.hospitalId))
+
+  // SAFETY L51: amendments are new note rows linked to the signed original (the legal record is never rewritten).
+  @PostMapping("/notes/{noteId}/amendments")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("clinical:write:note")
+  @Transactional
+  fun addAmendment(
+    @PathVariable noteId: UUID,
+    @RequestBody dto: ClinicalNoteRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<ClinicalNoteView> = ApiResponse.ok(encounterService.addAmendment(noteId, dto, principal, principal.hospitalId))
 
   // 01.04: template picker + coded-diagnosis catalog (global reads ride clinical:read:note).
   @GetMapping("/note-templates")
@@ -126,7 +139,7 @@ class EncounterController(
     @PathVariable id: UUID,
     @RequestBody dto: ProcedureRequestDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<ProcedureView> = ApiResponse.ok(encounterService.addProcedure(id, dto, principal.hospitalId))
+  ): ApiResponse<ProcedureView> = ApiResponse.ok(encounterService.addProcedure(id, dto, principal, principal.hospitalId))
 
   @GetMapping("/{id}/procedures")
   @RequiresPermission("clinical:read:note")
@@ -145,7 +158,7 @@ class EncounterController(
     @PathVariable id: UUID,
     @RequestBody dto: ReferralRequestDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<ReferralView> = ApiResponse.ok(encounterService.addReferral(id, dto, principal.userId, principal.hospitalId))
+  ): ApiResponse<ReferralView> = ApiResponse.ok(encounterService.addReferral(id, dto, principal, principal.hospitalId))
 
   @GetMapping("/{id}/referrals")
   @RequiresPermission("clinical:read:note")
@@ -173,7 +186,7 @@ class EncounterController(
     @PathVariable id: UUID,
     @RequestBody dto: DiagnosisRequestDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<DiagnosisView> = ApiResponse.ok(encounterService.addDiagnosis(id, dto, principal.hospitalId))
+  ): ApiResponse<DiagnosisView> = ApiResponse.ok(encounterService.addDiagnosis(id, dto, principal, principal.hospitalId))
 
   @GetMapping("/{id}/diagnoses")
   @RequiresPermission("clinical:read:note")
@@ -189,9 +202,10 @@ class EncounterController(
   fun removeDiagnosis(
     @PathVariable id: UUID,
     @PathVariable diagnosisId: UUID,
+    @RequestParam patientMrn: String,
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<Unit> {
-    encounterService.removeDiagnosis(id, diagnosisId, principal.hospitalId)
+    encounterService.removeDiagnosis(id, diagnosisId, patientMrn, principal, principal.hospitalId)
     return ApiResponse.ok()
   }
 
@@ -203,7 +217,7 @@ class EncounterController(
     @PathVariable id: UUID,
     @RequestBody dto: OrderRequestDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<OrderView> = ApiResponse.ok(encounterService.placeOrder(id, dto, principal.hospitalId))
+  ): ApiResponse<OrderView> = ApiResponse.ok(encounterService.placeOrder(id, dto, principal, principal.hospitalId))
 
   @GetMapping("/{id}/orders")
   @RequiresPermission("encounter:read:encounter")
@@ -221,7 +235,7 @@ class EncounterController(
     @PathVariable id: UUID,
     @RequestBody dto: PrescriptionRequestDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<PrescriptionView> = ApiResponse.ok(encounterService.prescribe(id, dto, principal.hospitalId))
+  ): ApiResponse<PrescriptionView> = ApiResponse.ok(encounterService.prescribe(id, dto, principal, principal.hospitalId))
 
   @GetMapping("/{id}/prescriptions")
   @RequiresPermission("encounter:read:encounter")

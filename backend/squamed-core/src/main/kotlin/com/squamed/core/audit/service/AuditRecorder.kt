@@ -25,6 +25,8 @@ private val logger = KotlinLogging.logger {}
  * AuditChainBatcher assigns the per-tenant seq/hash under the chain-head lock in batches, so a
  * request never queues on the serialized append (~26.5 ms/commit when one hospital shares one
  * chain). The zero UUID keys the system chain for rows without a hospital.
+ * 01.12 fail-closed: record() rethrows AuditWriteException so an audit failure rolls back the
+ * clinical write.
  */
 @Component
 class AuditRecorder(
@@ -85,12 +87,15 @@ class AuditRecorder(
           )
         auditLogRepository.save(row)
       }
+    } catch (e: Exception) {
+      // 01.12 dual-review hardening: fail closed — an unprovable audit trail fails the request
+      // (and rolls back the unaudited business write) instead of being swallowed.
+      logger.warn(e) { "Failed to persist audit log action=$action entityType=$entityType" }
+      throw AuditWriteException(action, e)
+    } finally {
       // The audit write's own flush (AuditLog/outbox rows) must not leak into the next request
       // on this pooled thread.
       AuditStateCapture.clear()
-    } catch (e: Exception) {
-      AuditStateCapture.clear()
-      logger.warn(e) { "Failed to persist audit log action=$action entityType=$entityType" }
     }
   }
 

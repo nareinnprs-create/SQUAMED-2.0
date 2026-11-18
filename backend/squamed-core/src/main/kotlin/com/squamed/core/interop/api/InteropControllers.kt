@@ -2,9 +2,11 @@ package com.squamed.core.interop.api
 
 import com.squamed.core.common.api.ApiResponse
 import com.squamed.core.identity.security.RequiresPermission
+import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.interop.fhir.FhirService
 import com.squamed.core.interop.hl7.Hl7Service
 import com.squamed.core.interop.service.IntegrationConnectionService
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -156,9 +158,12 @@ class FhirController(
   @RequiresPermission("hospital-config:read:hospital")
   fun allOrganizations(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allOrganizations()))
 
+  // 01.12 dual review: the Encounter search bundle is filtered to the caller's hospital.
   @GetMapping("/Encounter")
   @RequiresPermission("encounter:read:encounter")
-  fun allEncounters(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allEncounters()))
+  fun allEncounters(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allEncounters(principal.hospitalId)))
 
   @GetMapping("/Encounter/{id}")
   @RequiresPermission("encounter:read:encounter")

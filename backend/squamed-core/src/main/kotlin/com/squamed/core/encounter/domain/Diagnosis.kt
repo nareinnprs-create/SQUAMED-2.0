@@ -23,4 +23,7 @@ class Diagnosis(
   var type: String = "working",
   @Column(name = "notes")
   var notes: String? = null,
+  // 01.12 dual-review hardening: removals deactivate (audit trail kept), never hard-delete.
+  @Column(name = "is_active", nullable = false)
+  var isActive: Boolean = true,
 ) : BaseEntity()

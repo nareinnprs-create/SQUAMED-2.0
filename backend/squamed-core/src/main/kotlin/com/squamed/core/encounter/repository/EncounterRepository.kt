@@ -11,6 +11,8 @@ interface EncounterRepository : JpaRepository<Encounter, UUID> {
 
   fun findByVisitId(visitId: UUID): List<Encounter>
 
+  fun findByHospitalId(hospitalId: UUID): List<Encounter>
+
   fun findByIdAndHospitalId(
     id: UUID,
     hospitalId: UUID,

@@ -18,6 +18,8 @@ import java.util.UUID
 
 private val logger = KotlinLogging.logger {}
 
+/** 01.12 fail-closed audit: see AuditWriteException on record(). */
+
 /**
  * Audit writer (00.10): REQUIRES_NEW transaction that (1) resolves actor identity incl. the
  * login session + registered device, (2) drains the Hibernate before/after capture buffer and
@@ -85,12 +87,15 @@ class AuditRecorder(
           )
         auditLogRepository.save(row)
       }
+    } catch (e: Exception) {
+      // 01.12 dual-review hardening: fail closed — an unprovable audit trail fails the request
+      // (and rolls back the unaudited business write) instead of being swallowed.
+      logger.warn(e) { "Failed to persist audit log action=$action entityType=$entityType" }
+      throw AuditWriteException(action, e)
+    } finally {
       // The audit write's own flush (AuditLog/outbox rows) must not leak into the next request
       // on this pooled thread.
       AuditStateCapture.clear()
-    } catch (e: Exception) {
-      AuditStateCapture.clear()
-      logger.warn(e) { "Failed to persist audit log action=$action entityType=$entityType" }
     }
   }
 

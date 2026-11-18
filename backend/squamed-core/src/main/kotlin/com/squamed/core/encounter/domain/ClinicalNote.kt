@@ -39,4 +39,7 @@ class ClinicalNote(
   var signatureData: String? = null,
   @Column(name = "esign_transaction_id", length = 100)
   var esignTransactionId: String? = null,
+  // SAFETY L51 amendment chain: an amendment is a NEW note row linked to the original.
+  @Column(name = "amends_note_id")
+  var amendsNoteId: UUID? = null,
 ) : BaseEntity()

@@ -43,12 +43,15 @@ import com.squamed.core.encounter.repository.ReferralRepository
 import com.squamed.core.encounter.repository.VitalSignRepository
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
+import com.squamed.core.identity.security.SquamedPermissionEvaluator
 import com.squamed.core.identity.security.SquamedPrincipal
+import com.squamed.core.patient.domain.Allergy
 import com.squamed.core.patient.repository.AllergyRepository
 import com.squamed.core.patient.repository.PatientRecordRepository
 import com.squamed.core.scheduling.service.SchedulingService
 import com.squamed.core.search.SearchIndexer
 import io.micrometer.core.instrument.MeterRegistry
+import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -75,6 +78,7 @@ class EncounterService(
   private val referralRepository: ReferralRepository,
   private val schedulingService: SchedulingService,
   private val meterRegistry: MeterRegistry,
+  private val permissionEvaluator: SquamedPermissionEvaluator,
 ) {
   @Transactional
   fun startEncounter(
@@ -85,14 +89,23 @@ class EncounterService(
     reason: String? = null,
     chiefComplaint: String? = null,
     hospitalId: UUID,
+    principal: SquamedPrincipal,
   ): EncounterView {
+    // SAFETY L40 ABAC: the owner is the session doctor; a DOCTOR cannot assign the encounter to someone else.
+    val ownerDoctorId =
+      if (permissionEvaluator.hasRole(principal, "DOCTOR") && !permissionEvaluator.hasRole(principal, "SYSTEM_ADMIN")) {
+        if (doctorId != null && doctorId != principal.userId) throw AccessDeniedException("ENCOUNTER_OWNER_MISMATCH")
+        principal.userId
+      } else {
+        doctorId
+      }
     val encounter =
       encounterRepository.save(
         Encounter(
           hospitalId = hospitalId,
           patientId = patientId,
           visitId = visitId,
-          doctorId = doctorId,
+          doctorId = ownerDoctorId,
           departmentId = departmentId,
           reason = reason,
           chiefComplaint = chiefComplaint,
@@ -118,8 +131,11 @@ class EncounterService(
   fun completeEncounter(
     encounterId: UUID,
     hospitalId: UUID?,
+    principal: SquamedPrincipal,
   ): EncounterView {
     val encounter = findEncounter(encounterId, hospitalId)
+    requireOpenEncounter(encounter)
+    requireOwner(encounter, principal)
     encounter.status = "completed"
     encounter.endedAt = Instant.now()
     encounterRepository.save(encounter)
@@ -134,6 +150,9 @@ class EncounterService(
     hospitalId: UUID?,
   ): VitalSignView {
     val encounter = findEncounter(encounterId, hospitalId)
+    requireOpenEncounter(encounter)
+    // CS-01 two-identifier confirm. No owner check: vitals are the nursing path.
+    requireMrn(encounter.patientId, dto.patientMrn)
     val height = dto.heightCm
     val weight = dto.weightKg
     val bmi =
@@ -183,10 +202,13 @@ class EncounterService(
   fun addNote(
     encounterId: UUID,
     dto: ClinicalNoteRequestDto,
-    authorId: UUID? = null,
+    principal: SquamedPrincipal,
     hospitalId: UUID?,
   ): ClinicalNoteView {
     val encounter = findEncounter(encounterId, hospitalId)
+    requireOpenEncounter(encounter)
+    requireOwner(encounter, principal)
+    requireMrn(encounter.patientId, dto.patientMrn)
     val note =
       clinicalNoteRepository
         .save(
@@ -201,7 +223,7 @@ class EncounterService(
             plan = dto.plan,
             isSigned = false,
           ),
-        ).also { it.createdBy = authorId }
+        ).also { it.createdBy = principal.userId }
     return ClinicalNoteView.from(note)
   }
 
@@ -209,12 +231,15 @@ class EncounterService(
   fun signNote(
     noteId: UUID,
     dto: SignNoteRequest,
-    signerId: UUID,
+    principal: SquamedPrincipal,
     hospitalId: UUID?,
   ): ClinicalNoteView {
     val note = clinicalNoteRepository.findById(noteId).orElseThrow { IllegalArgumentException("NOTE_NOT_FOUND") }
     // 00.04 tenant sweep (D7): notes carry no hospital_id — verify via the parent encounter.
-    findEncounter(note.encounterId, hospitalId)
+    val encounter = findEncounter(note.encounterId, hospitalId)
+    requireOpenEncounter(encounter)
+    requireOwner(encounter, principal)
+    requireMrn(encounter.patientId, dto.patientMrn)
     if (note.isSigned) throw IllegalStateException("NOTE_ALREADY_SIGNED")
     when (dto.method?.uppercase()) {
       "ESIGN" -> {
@@ -239,7 +264,7 @@ class EncounterService(
     }
     note.isSigned = true
     note.signedAt = Instant.now()
-    note.signedBy = signerId
+    note.signedBy = principal.userId
     clinicalNoteRepository.save(note)
     return ClinicalNoteView.from(note)
   }
@@ -260,9 +285,13 @@ class EncounterService(
   fun addDiagnosis(
     encounterId: UUID,
     dto: DiagnosisRequestDto,
+    principal: SquamedPrincipal,
     hospitalId: UUID?,
   ): DiagnosisView {
     val encounter = findEncounter(encounterId, hospitalId)
+    requireOpenEncounter(encounter)
+    requireOwner(encounter, principal)
+    requireMrn(encounter.patientId, dto.patientMrn)
     val system = dto.system ?: "ICD-10"
     val catalogEntry =
       diagnosisCatalogRepository.findBySystemIgnoreCaseAndCodeIgnoreCaseAndHospitalIdIsNullAndIsActiveTrue(
@@ -291,16 +320,21 @@ class EncounterService(
     hospitalId: UUID?,
   ): List<DiagnosisView> {
     findEncounter(encounterId, hospitalId)
-    return diagnosisRepository.findByEncounterId(encounterId).map { DiagnosisView.from(it) }
+    return diagnosisRepository.findByEncounterIdAndIsActiveTrue(encounterId).map { DiagnosisView.from(it) }
   }
 
   @Transactional
   fun removeDiagnosis(
     encounterId: UUID,
     diagnosisId: UUID,
+    patientMrn: String?,
+    principal: SquamedPrincipal,
     hospitalId: UUID?,
   ) {
-    findEncounter(encounterId, hospitalId)
+    val encounter = findEncounter(encounterId, hospitalId)
+    requireOpenEncounter(encounter)
+    requireOwner(encounter, principal)
+    requireMrn(encounter.patientId, patientMrn)
     val diagnosis =
       diagnosisRepository
         .findById(diagnosisId)
@@ -308,16 +342,21 @@ class EncounterService(
     if (diagnosis.encounterId != encounterId) {
       throw IllegalArgumentException("DIAGNOSIS_NOT_FOUND")
     }
-    diagnosisRepository.delete(diagnosis)
+    // Dual review: removals deactivate so the clinical record keeps its history.
+    diagnosis.isActive = false
+    diagnosisRepository.save(diagnosis)
   }
 
   @Transactional
   fun placeOrder(
     encounterId: UUID,
     dto: OrderRequestDto,
+    principal: SquamedPrincipal,
     hospitalId: UUID?,
   ): OrderView {
     val encounter = findEncounter(encounterId, hospitalId)
+    requireOpenEncounter(encounter)
+    requireOwner(encounter, principal)
     requireMrn(encounter.patientId, dto.patientMrn)
     val order =
       orderEntryRepository.save(
@@ -360,11 +399,20 @@ class EncounterService(
   @Transactional
   fun cancelOrder(
     orderId: UUID,
-    reason: String? = null,
+    encounterId: UUID?,
+    patientMrn: String?,
+    principal: SquamedPrincipal,
     hospitalId: UUID?,
   ): OrderView {
     val order = orderEntryRepository.findById(orderId).orElseThrow { IllegalArgumentException("ORDER_NOT_FOUND") }
-    requireSameHospital(hospitalId, order.hospitalId)
+    // Orders cancel only through their open owning encounter (cross-context orders are not visible here).
+    if (order.encounterId == null || (encounterId != null && order.encounterId != encounterId)) {
+      throw IllegalArgumentException("ORDER_NOT_FOUND")
+    }
+    val encounter = findEncounter(order.encounterId!!, hospitalId)
+    requireOpenEncounter(encounter)
+    requireOwner(encounter, principal)
+    requireMrn(encounter.patientId, patientMrn)
     order.status = "cancelled"
     orderEntryRepository.save(order)
     return OrderView.from(order)
@@ -383,23 +431,34 @@ class EncounterService(
   fun prescribe(
     encounterId: UUID,
     dto: PrescriptionRequestDto,
+    principal: SquamedPrincipal,
     hospitalId: UUID?,
   ): PrescriptionView {
     val encounter = findEncounter(encounterId, hospitalId)
+    requireOpenEncounter(encounter)
+    requireOwner(encounter, principal)
     requireMrn(encounter.patientId, dto.patientMrn)
     val drug = dto.drugName.trim().lowercase()
-    val allergens =
-      allergyRepository
-        .findByPatientIdAndIsActiveTrue(encounter.patientId)
-        .map { it.allergen.trim().lowercase() }
-        .filter { it.isNotEmpty() }
-    // CS-02: exact token match blocks outright — no override path exists for BLOCK.
-    if (allergens.any { it == drug }) throw IllegalStateException("ALLERGY_BLOCK")
-    // CS-03: partial (substring) match of at least 4 chars warns; override requires a typed reason.
-    val warned = allergens.firstOrNull { it.length >= 4 && drug.length >= 4 && (drug.contains(it) || it.contains(drug)) }
+    val active = allergyRepository.findByPatientIdAndIsActiveTrue(encounter.patientId)
+    // SAFETY L49: the NKA sentinel counts as documented; it never matches a drug.
+    val nkaDocumented = active.any { it.allergen.trim().equals(Allergy.NKA_ALLERGEN, ignoreCase = true) }
+    val realAllergies = active.filterNot { it.allergen.trim().equals(Allergy.NKA_ALLERGEN, ignoreCase = true) }
+    if (realAllergies.isEmpty() && !nkaDocumented) throw IllegalStateException("ALLERGY_NOT_DOCUMENTED")
+    // CS-02/CS-03: match = exact token OR >=4-char substring (unchanged); severity arbitrates the outcome.
+    val matched =
+      realAllergies.firstOrNull { allergy ->
+        val allergen = allergy.allergen.trim().lowercase()
+        allergen.isNotEmpty() &&
+          (
+            allergen == drug ||
+              (allergen.length >= 4 && drug.length >= 4 && (drug.contains(allergen) || allergen.contains(drug)))
+          )
+      }
     var overrideReason: String? = null
     var allergyStatus = "checked"
-    if (warned != null) {
+    if (matched != null) {
+      // Severity arbitrates: a block-severity match hard-fails with no override; all else needs a typed reason.
+      if (matched.severity == "block") throw IllegalStateException("ALLERGY_BLOCK")
       val reason = dto.overrideReason?.trim()
       if (reason.isNullOrEmpty()) throw IllegalStateException("ALLERGY_WARN_REASON_REQUIRED")
       meterRegistry.counter("squamed.rx.allergy.warn.overrides").increment()
@@ -453,7 +512,7 @@ class EncounterService(
         .findByEncounterId(encounterId)
         .sortedByDescending { it.createdAt ?: Instant.EPOCH }
         .map { ClinicalNoteView.from(it) }
-    val diagnoses = diagnosisRepository.findByEncounterId(encounterId).map { DiagnosisView.from(it) }
+    val diagnoses = diagnosisRepository.findByEncounterIdAndIsActiveTrue(encounterId).map { DiagnosisView.from(it) }
     val orders = orderEntryRepository.findByEncounterId(encounterId).map { OrderView.from(it) }
     val prescriptions = prescriptionRepository.findByEncounterId(encounterId).map { PrescriptionView.from(it) }
     val procedures = procedureRepository.findByEncounterIdOrderByCreatedAtDesc(encounterId).map { ProcedureView.from(it) }
@@ -482,9 +541,13 @@ class EncounterService(
   fun addProcedure(
     encounterId: UUID,
     dto: ProcedureRequestDto,
+    principal: SquamedPrincipal,
     hospitalId: UUID?,
   ): ProcedureView {
     val encounter = findEncounter(encounterId, hospitalId)
+    requireOpenEncounter(encounter)
+    requireOwner(encounter, principal)
+    requireMrn(encounter.patientId, dto.patientMrn)
     val procedure =
       procedureRepository.save(
         ProcedureEntry(
@@ -527,10 +590,13 @@ class EncounterService(
   fun addReferral(
     encounterId: UUID,
     dto: ReferralRequestDto,
-    fromDoctorId: UUID?,
+    principal: SquamedPrincipal,
     hospitalId: UUID?,
   ): ReferralView {
     val encounter = findEncounter(encounterId, hospitalId)
+    requireOpenEncounter(encounter)
+    requireOwner(encounter, principal)
+    requireMrn(encounter.patientId, dto.patientMrn)
     if (dto.toDepartmentId == null && dto.toSpecialty.isNullOrBlank() && dto.targetFacility.isNullOrBlank()) {
       throw IllegalArgumentException("REFERRAL_TARGET_REQUIRED")
     }
@@ -542,7 +608,7 @@ class EncounterService(
               ?: throw IllegalStateException("ENCOUNTER_HOSPITAL_MISSING"),
           encounterId = encounterId,
           patientId = encounter.patientId,
-          fromDoctorId = fromDoctorId,
+          fromDoctorId = principal.userId,
           toDepartmentId = dto.toDepartmentId,
           toSpecialty = dto.toSpecialty,
           targetFacility = dto.targetFacility,
@@ -577,6 +643,55 @@ class EncounterService(
     encounter.followUpAppointmentId = appointment.id
     encounterRepository.save(encounter)
     return EncounterView.from(encounter)
+  }
+
+  /** SAFETY L51: an amendment is a NEW unsigned note linked to the signed original via amends_note_id. */
+  @Transactional
+  fun addAmendment(
+    noteId: UUID,
+    dto: ClinicalNoteRequestDto,
+    principal: SquamedPrincipal,
+    hospitalId: UUID?,
+  ): ClinicalNoteView {
+    val original = clinicalNoteRepository.findById(noteId).orElseThrow { IllegalArgumentException("NOTE_NOT_FOUND") }
+    val encounter = findEncounter(original.encounterId, hospitalId)
+    if (!original.isSigned) throw IllegalStateException("NOTE_NOT_SIGNED")
+    requireOpenEncounter(encounter)
+    requireOwner(encounter, principal)
+    requireMrn(encounter.patientId, dto.patientMrn)
+    val note =
+      clinicalNoteRepository
+        .save(
+          ClinicalNote(
+            encounterId = original.encounterId,
+            patientId = original.patientId,
+            noteType = dto.noteType ?: original.noteType,
+            title = dto.title ?: original.title,
+            subjective = dto.subjective,
+            objective = dto.objective,
+            assessment = dto.assessment,
+            plan = dto.plan,
+            isSigned = false,
+            amendsNoteId = original.id,
+          ),
+        ).also { it.createdBy = principal.userId }
+    return ClinicalNoteView.from(note)
+  }
+
+  /** Dual review: clinical writes land only on an open encounter. */
+  private fun requireOpenEncounter(encounter: Encounter) {
+    if (encounter.status != "in-progress") throw IllegalStateException("ENCOUNTER_NOT_ACTIVE")
+  }
+
+  /** SAFETY L40 ABAC: a doctor writes only to own encounters; SYSTEM_ADMIN bypasses; unclaimed encounters stay writable. */
+  private fun requireOwner(
+    encounter: Encounter,
+    principal: SquamedPrincipal,
+  ) {
+    if (permissionEvaluator.hasRole(principal, "SYSTEM_ADMIN")) return
+    if (!permissionEvaluator.hasRole(principal, "DOCTOR")) return
+    val owner = encounter.doctorId ?: return
+    if (owner != principal.userId) throw AccessDeniedException("ENCOUNTER_NOT_OWNED")
   }
 
   /** CS-01 two-identifier confirm: the request MRN must name the encounter's patient. */

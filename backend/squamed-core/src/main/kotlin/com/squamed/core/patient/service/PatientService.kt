@@ -313,13 +313,29 @@ class PatientService(
     dto: AllergyDto,
   ): AllergyDto {
     findPatient(patientId)
+    val allergen = dto.allergen ?: throw IllegalArgumentException("ALLERGEN_REQUIRED")
+    val isNka = allergen.trim().equals(Allergy.NKA_ALLERGEN, ignoreCase = true)
+    if (isNka) {
+      // SAFETY L49: NKA is an attestation; it cannot coexist with a documented active allergy.
+      val known =
+        allergyRepository
+          .findByPatientIdAndIsActiveTrue(patientId)
+          .any { !it.allergen.trim().equals(Allergy.NKA_ALLERGEN, ignoreCase = true) }
+      if (known) throw IllegalStateException("NKA_CONFLICTS_WITH_KNOWN_ALLERGIES")
+    } else {
+      // A newly documented real allergy invalidates any standing NKA attestation.
+      allergyRepository
+        .findByPatientIdAndIsActiveTrue(patientId)
+        .filter { it.allergen.trim().equals(Allergy.NKA_ALLERGEN, ignoreCase = true) }
+        .forEach { it.isActive = false }
+    }
     val allergy =
       allergyRepository.save(
         Allergy(
           patientId = patientId,
-          allergen = dto.allergen ?: throw IllegalArgumentException("ALLERGEN_REQUIRED"),
+          allergen = allergen,
           reaction = dto.reaction,
-          severity = dto.severity ?: "mild",
+          severity = if (isNka) Allergy.SEVERITY_NONE else Allergy.normalizeSeverity(dto.severity),
           recordedDate = dto.recordedDate,
           isActive = dto.isActive ?: true,
           notes = dto.notes,

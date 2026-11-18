@@ -88,10 +88,10 @@ interface PatientDetail {
 }
 
 const allergyVariants: Record<string, BadgeVariant> = {
+  block: 'critical',
+  warn: 'warning',
   mild: 'information',
-  moderate: 'warning',
-  severe: 'critical',
-  life_threatening: 'critical',
+  none: 'neutral',
 };
 
 const emptyAllergyForm = { allergen: '', reaction: '', severity: 'mild' };
@@ -168,7 +168,7 @@ export default function PatientDetailPage() {
         dateOfBirth: data.dateOfBirth,
         gender: data.gender,
         age: ageFrom(data.dateOfBirth),
-        isEmergency: (data.allergies ?? []).some((a) => a.severity === 'life_threatening'),
+        isEmergency: (data.allergies ?? []).some((a) => a.severity === 'block'),
         allergySummary:
           (data.allergies ?? []).length > 0
             ? (data.allergies ?? []).map((a) => a.allergen).join(', ')
@@ -305,6 +305,22 @@ export default function PatientDetailPage() {
       await loadPatient();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add allergy');
+    } finally {
+      setSavingAllergy(false);
+    }
+  }
+
+  async function addNka() {
+    // SAFETY L49: posts the NKA attestation sentinel directly; the backend rejects it when real allergies exist.
+    setSavingAllergy(true);
+    try {
+      await apiFetch<unknown>(`/patients/${id}/allergies`, {
+        method: 'POST',
+        body: JSON.stringify({ allergen: 'NO KNOWN ALLERGIES', severity: 'none' }),
+      });
+      await loadPatient();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to record NKA');
     } finally {
       setSavingAllergy(false);
     }
@@ -502,9 +518,14 @@ export default function PatientDetailPage() {
             }}
           >
             <strong style={{ fontSize: 14 }}>Allergies</strong>
-            <Button size="sm" onClick={() => setAllergyOpen(true)}>
-              Add allergy
-            </Button>
+            <Stack direction="row" gap={8}>
+              <Button size="sm" variant="outline" onClick={() => void addNka()} disabled={savingAllergy}>
+                No known allergies
+              </Button>
+              <Button size="sm" onClick={() => setAllergyOpen(true)}>
+                Add allergy
+              </Button>
+            </Stack>
           </div>
           {!patient || patient.allergies.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--sq-fg-muted)' }}>No allergies recorded.</div>
@@ -641,10 +662,10 @@ export default function PatientDetailPage() {
             value={allergyForm.severity}
             onChange={(e) => setAllergyForm({ ...allergyForm, severity: e.target.value })}
           >
+            <option value="block">block — life-threatening / anaphylaxis</option>
+            <option value="warn">warn</option>
             <option value="mild">mild</option>
-            <option value="moderate">moderate</option>
-            <option value="severe">severe</option>
-            <option value="life_threatening">life_threatening</option>
+            <option value="none">none</option>
           </Select>
         </Stack>
       </Modal>

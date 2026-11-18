@@ -329,6 +329,7 @@ export default function ConsultBoardPage() {
           spo2Percent: vitals.spo2Percent !== '' ? Number(vitals.spo2Percent) : undefined,
           weightKg: vitals.weightKg !== '' ? Number(vitals.weightKg) : undefined,
           heightCm: vitals.heightCm !== '' ? Number(vitals.heightCm) : undefined,
+          patientMrn: selectedPatient?.mrn ?? undefined,
         }),
       });
       setVitalsOpen(false);
@@ -360,7 +361,7 @@ export default function ConsultBoardPage() {
     try {
       const note = await apiFetch<ClinicalNote>(`/encounters/${encounterId}/notes`, {
         method: 'POST',
-        body: JSON.stringify({ noteType: 'consultation', ...soap }),
+        body: JSON.stringify({ noteType: 'consultation', ...soap, patientMrn: selectedPatient?.mrn ?? undefined }),
       });
       setSoap({ subjective: '', objective: '', assessment: '', plan: '' });
       await loadDetail(encounterId);
@@ -385,7 +386,7 @@ export default function ConsultBoardPage() {
     try {
       await apiFetch(`/encounters/notes/${pendingNoteId}/sign`, {
         method: 'POST',
-        body: JSON.stringify({ method: 'PIN', pin: signPin }),
+        body: JSON.stringify({ method: 'PIN', pin: signPin, patientMrn: selectedPatient?.mrn ?? undefined }),
       });
       setSignOpen(false);
       setPendingNoteId(null);
@@ -455,6 +456,10 @@ export default function ConsultBoardPage() {
       } else if (e instanceof Error && e.message.includes('ALLERGY_BLOCK')) {
         setNotice(null);
         setError('Blocked: the patient has a documented allergy to this drug.');
+      } else if (e instanceof Error && e.message.includes('ALLERGY_NOT_DOCUMENTED')) {
+        // SAFETY L49: no allergy documented — record one (or the NKA attestation) on the patient page first.
+        setNotice(null);
+        setError('No allergies documented for this patient — record allergies or the NO KNOWN ALLERGIES attestation first.');
       } else if (e instanceof Error && e.message.includes('PATIENT_MISMATCH')) {
         setNotice(null);
         setError('Patient identity confirm failed — check the MRN.');
@@ -480,6 +485,7 @@ export default function ConsultBoardPage() {
           procedureName: procedureForm.procedureName,
           status: procedureForm.status,
           notes: procedureForm.notes !== '' ? procedureForm.notes : undefined,
+          patientMrn: selectedPatient?.mrn ?? undefined,
         }),
       });
       setProcedureOpen(false);
@@ -505,6 +511,7 @@ export default function ConsultBoardPage() {
           targetFacility: referralForm.targetFacility !== '' ? referralForm.targetFacility : undefined,
           reason: referralForm.reason,
           urgency: referralForm.urgency,
+          patientMrn: selectedPatient?.mrn ?? undefined,
         }),
       });
       setReferralOpen(false);

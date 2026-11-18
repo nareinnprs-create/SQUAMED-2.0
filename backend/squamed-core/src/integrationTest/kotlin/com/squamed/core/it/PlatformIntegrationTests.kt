@@ -9083,7 +9083,7 @@ class PlatformIntegrationTests {
       val visit =
         `data`(
           api(HttpMethod.POST, "/api/v1/reception/visits", json("patientId" to pF, "hospitalId" to h1, "reason" to "pre-booked before outage"), admin),
-        )
+        )["visit"]
       val visitId = visit["id"].asText()
       assertEquals("registered", visit["status"].asText(), "visit starts unregistered-checkin")
       `data`(api(HttpMethod.POST, "/api/v1/downtime/reentries", json("hospitalId" to h1, "visitIds" to listOf(visitId)), rec))

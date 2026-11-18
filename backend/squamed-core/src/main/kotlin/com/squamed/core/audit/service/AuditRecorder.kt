@@ -18,8 +18,6 @@ import java.util.UUID
 
 private val logger = KotlinLogging.logger {}
 
-/** 01.12 fail-closed audit: see AuditWriteException on record(). */
-
 /**
  * Audit writer (00.10): REQUIRES_NEW transaction that (1) resolves actor identity incl. the
  * login session + registered device, (2) drains the Hibernate before/after capture buffer and
@@ -27,6 +25,8 @@ private val logger = KotlinLogging.logger {}
  * AuditChainBatcher assigns the per-tenant seq/hash under the chain-head lock in batches, so a
  * request never queues on the serialized append (~26.5 ms/commit when one hospital shares one
  * chain). The zero UUID keys the system chain for rows without a hospital.
+ * 01.12 fail-closed: record() rethrows AuditWriteException so an audit failure rolls back the
+ * clinical write.
  */
 @Component
 class AuditRecorder(

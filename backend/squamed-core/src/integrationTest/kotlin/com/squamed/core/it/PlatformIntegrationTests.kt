@@ -9922,7 +9922,14 @@ class PlatformIntegrationTests {
           api(
             HttpMethod.POST,
             "/api/v1/encounters/$enc/notes",
-            json("noteType" to "progress", "title" to "OPD note", "subjective" to "sore throat 2 days", "assessment" to "pharyngitis", "plan" to "rest", "patientMrn" to mrn),
+            json(
+              "noteType" to "progress",
+              "title" to "OPD note",
+              "subjective" to "sore throat 2 days",
+              "assessment" to "pharyngitis",
+              "plan" to "rest",
+              "patientMrn" to mrn,
+            ),
             doc,
           ),
         )["id"].asText()

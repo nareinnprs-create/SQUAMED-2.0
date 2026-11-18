@@ -2164,6 +2164,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/encounters/notes/{noteId}/amendments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["addAmendment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/emergency/registrations": {
         parameters: {
             query?: never;
@@ -7898,6 +7914,7 @@ export interface components {
             recordedAt?: string;
             /** Format: uuid */
             recordedBy?: string;
+            patientMrn?: string;
             /** Format: int32 */
             bloodPressureSystolic?: number;
             /** Format: int32 */
@@ -7961,6 +7978,7 @@ export interface components {
             reason: string;
             urgency?: string;
             notes?: string;
+            patientMrn?: string;
         };
         ApiResponseReferralView: {
             data?: components["schemas"]["ReferralView"];
@@ -7997,6 +8015,7 @@ export interface components {
             performedBy?: string;
             outcome?: string;
             notes?: string;
+            patientMrn?: string;
         };
         ApiResponseProcedureView: {
             data?: components["schemas"]["ProcedureView"];
@@ -8130,6 +8149,7 @@ export interface components {
             objective?: string;
             assessment?: string;
             plan?: string;
+            patientMrn?: string;
         };
         ApiResponseClinicalNoteView: {
             data?: components["schemas"]["ClinicalNoteView"];
@@ -8157,6 +8177,8 @@ export interface components {
             /** Format: uuid */
             signedBy?: string;
             signatureMethod?: string;
+            /** Format: uuid */
+            amendsNoteId?: string;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -8173,6 +8195,7 @@ export interface components {
             name?: string;
             type?: string;
             notes?: string;
+            patientMrn?: string;
         };
         ApiResponseDiagnosisView: {
             data?: components["schemas"]["DiagnosisView"];
@@ -8200,6 +8223,7 @@ export interface components {
             method?: string;
             pin?: string;
             eSignTransactionId?: string;
+            patientMrn?: string;
             esignTransactionId?: string;
         };
         EmergencyRegisterDto: {
@@ -15949,6 +15973,32 @@ export interface operations {
             };
         };
     };
+    addAmendment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                noteId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClinicalNoteRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseClinicalNoteView"];
+                };
+            };
+        };
+    };
     listRegistrations: {
         parameters: {
             query?: {
@@ -20736,7 +20786,9 @@ export interface operations {
     };
     removeDiagnosis: {
         parameters: {
-            query?: never;
+            query: {
+                patientMrn: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -20825,4 +20877,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 231bc59f1b9722852cb00226a311a8726aa0b030cdc5d497c4d7d394c8f62070
+// openapi snapshot sha256: e94d5949b7115c5b37d1bccb81bd1910381c09ad13a252cfb633470708b23b48

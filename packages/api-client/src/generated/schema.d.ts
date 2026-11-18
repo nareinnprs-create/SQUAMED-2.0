@@ -932,6 +932,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/queue/entries/{queueType}/{tokenNumber}/triage-lite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["triageLite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/queue/entries/{queueType}/{tokenNumber}/transfer": {
         parameters: {
             query?: never;
@@ -2190,6 +2206,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["activateTrauma"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/downtime/windows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listWindows"];
+        put?: never;
+        post: operations["openWindow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/downtime/reentries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reenter"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3490,6 +3538,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateStatus_1"];
+        trace?: never;
+    };
+    "/api/v1/downtime/windows/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["closeWindow"];
         trace?: never;
     };
     "/api/v1/blood-bank/units/{id}/status": {
@@ -6555,6 +6619,9 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        QueueTriageLiteDto: {
+            tag?: string;
+        };
         QueueTransferDto: {
             queueType?: string;
         };
@@ -8214,6 +8281,58 @@ export interface components {
             assessedBy?: string;
             /** Format: date-time */
             assessedAt?: string;
+        };
+        DowntimeOpenDto: {
+            /** Format: uuid */
+            hospitalId?: string;
+            reason?: string;
+        };
+        ApiResponseDowntimeLogView: {
+            data?: components["schemas"]["DowntimeLogView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        DowntimeLogView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            reason: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            endedAt?: string;
+            open: boolean;
+        };
+        DowntimeReentryDto: {
+            /** Format: uuid */
+            hospitalId?: string;
+            tokens?: components["schemas"]["DowntimeTokenReentryDto"][];
+            visitIds?: string[];
+        };
+        DowntimeTokenReentryDto: {
+            queueType?: string;
+            tokenNumber?: string;
+            /** Format: uuid */
+            patientId?: string;
+            patientName?: string;
+            priority?: string;
+            servicePointId?: string;
+            /** Format: uuid */
+            departmentId?: string;
+        };
+        ApiResponseDowntimeReentryResult: {
+            data?: components["schemas"]["DowntimeReentryResult"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        DowntimeReentryResult: {
+            tokens: components["schemas"]["QueueEntryView"][];
+            visits: components["schemas"]["VisitDto"][];
         };
         ChannelOptInDto: {
             channel?: string;
@@ -10282,6 +10401,13 @@ export interface components {
         };
         ApiResponseListEmergencyRegistrationView: {
             data?: components["schemas"]["EmergencyRegistrationView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListDowntimeLogView: {
+            data?: components["schemas"]["DowntimeLogView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -12798,6 +12924,33 @@ export interface operations {
         responses: {
             /** @description Created */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseQueueEntryView"];
+                };
+            };
+        };
+    };
+    triageLite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                queueType: string;
+                tokenNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueueTriageLiteDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -15889,6 +16042,74 @@ export interface operations {
             };
         };
     };
+    listWindows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListDowntimeLogView"];
+                };
+            };
+        };
+    };
+    openWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DowntimeOpenDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDowntimeLogView"];
+                };
+            };
+        };
+    };
+    reenter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DowntimeReentryDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDowntimeReentryResult"];
+                };
+            };
+        };
+    };
     listForPatient: {
         parameters: {
             query: {
@@ -18459,6 +18680,28 @@ export interface operations {
             };
         };
     };
+    closeWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDowntimeLogView"];
+                };
+            };
+        };
+    };
     updateUnitStatus: {
         parameters: {
             query?: never;
@@ -20580,4 +20823,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: bc144ab0b2e06ff77d8c5ee16972ef56f319a428360955b1b2ef3a1782978285
+// openapi snapshot sha256: bae28d3e49547004890dea201d235e05afc7e2ac009a2a296bda8796e054355f

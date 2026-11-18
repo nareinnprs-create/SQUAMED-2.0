@@ -1,5 +1,6 @@
 -- V33: Emergency and Trauma schema
 -- Module: emergency (registration, triage, trauma workflow)
+-- Rollback: DROP TABLE emergency.trauma_workflow; DROP TABLE emergency.triage_assessment; DROP TABLE emergency.emergency_registration; DROP SCHEMA emergency;
 
 CREATE SCHEMA IF NOT EXISTS emergency;
 

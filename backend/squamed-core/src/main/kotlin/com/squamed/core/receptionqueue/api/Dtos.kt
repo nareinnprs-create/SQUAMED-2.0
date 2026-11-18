@@ -105,6 +105,11 @@ data class QueueTransferDto(
   val queueType: String? = null,
 )
 
+/** 01.09 emergency fast-path: walk-in triage-lite tag (red/yellow/green). */
+data class QueueTriageLiteDto(
+  val tag: String? = null,
+)
+
 data class QueueEntryView(
   val id: UUID?,
   val queueType: String,

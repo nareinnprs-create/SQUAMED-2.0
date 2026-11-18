@@ -37,6 +37,9 @@ class QueueService(
     private val DEFAULT_PRIORITY_ORDER = listOf("emergency", "urgent", "vip", "assisted", "appointment-order", "routine")
     private const val DEFAULT_AVG_CONSULT_MINUTES = 5
     private const val DISPLAY_NEXT_CAP = 5
+
+    /** 01.09 triage-lite tags: red boosts to emergency, yellow to urgent, green leaves the entry as-is. */
+    val TRIAGE_TAGS = listOf("red", "yellow", "green")
   }
 
   /** Queue config item for one queue type (00.05 doc); null = the hospital has not published a queue config. */
@@ -193,6 +196,91 @@ class QueueService(
     val entry = findTodayEntry(queueType, tokenNumber, hospitalId)
     entry.priority = "emergency"
     queueEntryRepository.save(entry)
+    publishBumped(entry)
+    return QueueEntryView.from(entry)
+  }
+
+  /** 01.09 emergency fast-path: walk-in triage-lite tag (red/yellow/green) boosts the live queue entry.
+   * red -> emergency priority (+ queue.bumped to displays and CriticalQueueEvent queue.urgent_arrival),
+   * yellow -> urgent, green -> no change. */
+  @Transactional
+  fun triageLite(
+    queueType: String,
+    tokenNumber: String,
+    tag: String,
+    hospitalId: UUID?,
+  ): QueueEntryView {
+    if (tag !in TRIAGE_TAGS) throw IllegalArgumentException("TRIAGE_TAG_INVALID")
+    val entry = findTodayEntry(queueType, tokenNumber, hospitalId)
+    if (tag == "red") {
+      entry.priority = "emergency"
+      queueEntryRepository.save(entry)
+      publishBumped(entry)
+      eventPublisher.publish(
+        DomainEvent(
+          eventId = UUID.randomUUID(),
+          eventType = "queue.urgent_arrival",
+          occurredAt = Instant.now(),
+          source = "queue-service",
+          entityType = "queue-entry",
+          entityId = entry.id,
+          hospitalId = entry.hospitalId,
+          payload =
+            mapOf(
+              "tokenNumber" to entry.tokenNumber,
+              "queueType" to entry.queueType,
+              "tag" to tag,
+            ),
+        ),
+      )
+    } else if (tag == "yellow") {
+      entry.priority = "urgent"
+      queueEntryRepository.save(entry)
+    }
+    return QueueEntryView.from(entry)
+  }
+
+  /** 01.09 downtime re-entry: recreate a paper-issued token with its original number (CS-09 no loss). */
+  @Transactional
+  fun reenterToken(
+    queueType: String,
+    tokenNumber: String,
+    patientId: UUID,
+    patientName: String?,
+    priority: String?,
+    servicePointId: String?,
+    departmentId: UUID?,
+    hospitalId: UUID,
+  ): QueueEntryView {
+    if (tokenNumber.isBlank() || tokenNumber.length > 20) throw IllegalArgumentException("TOKEN_NUMBER_INVALID")
+    val today = LocalDate.now()
+    if (queueEntryRepository.findByQueueTypeAndTokenNumberAndQueueDate(hospitalId, queueType, tokenNumber, today) != null) {
+      throw IllegalStateException("DOWNTIME_TOKEN_EXISTS")
+    }
+    // Compute the fresh estimate BEFORE saving (01.02 auto-flush lesson).
+    val estimatedWait = estimateWaitMinutes(hospitalId, queueType, today)
+    val servicePointName = servicePointId?.let { servicePointRepository.findFirstByHospitalIdAndCode(hospitalId, it)?.name }
+    val entry =
+      queueEntryRepository.save(
+        QueueEntry(
+          hospitalId = hospitalId,
+          queueType = queueType,
+          departmentId = departmentId,
+          servicePointId = servicePointId,
+          servicePointName = servicePointName,
+          patientId = patientId,
+          patientName = patientName,
+          tokenNumber = tokenNumber,
+          priority = priority ?: "routine",
+          estimatedWaitMinutes = estimatedWait,
+          notes = "downtime re-entry",
+          queueDate = today,
+        ),
+      )
+    return QueueEntryView.from(entry)
+  }
+
+  private fun publishBumped(entry: QueueEntry) {
     eventPublisher.publish(
       DomainEvent(
         eventId = UUID.randomUUID(),
@@ -210,7 +298,6 @@ class QueueService(
           ),
       ),
     )
-    return QueueEntryView.from(entry)
   }
 
   @Transactional

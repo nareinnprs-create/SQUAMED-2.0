@@ -9304,6 +9304,109 @@ class PlatformIntegrationTests {
     }
 
     @Test
+    fun analyticsShadowRunCoverage() {
+      val admin = adminToken()
+      val adminId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = admin))["userId"].asText()
+      val s = suffix()
+      val hid =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Shadow L $s", "code" to "SHD-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val rec = login(registerRoleUser("RECEPTIONIST", hid, s, tag = "RA"))
+      // Only SYSTEM_ADMIN carries report:read:report; bound to the hospital via the role's
+      // hospitalId so its analytics reads are hospital-scoped (principal.hospitalId).
+      val reader = login(registerRoleUser("SYSTEM_ADMIN", hid, s, tag = "SAA"))
+      val day = LocalDate.now().plusDays(3)
+
+      // Seed known terminal outcomes: one completed booking, one no-show → rate 50.0.
+      val template =
+        api(
+          HttpMethod.POST,
+          "/api/v1/schedules/templates",
+          json(
+            "hospitalId" to hid,
+            "doctorId" to adminId,
+            "weekday" to day.dayOfWeek.value,
+            "sessionType" to "in_person",
+            "startTime" to "09:00",
+            "endTime" to "10:00",
+            "slotMinutes" to 30,
+            "capacity" to 1,
+          ),
+          admin,
+        )
+      assert2xx(template, "create template: ${template.body.take(300)}")
+      val templateId = `data`(template)["id"].asText()
+      val slots = `data`(slotsOfDay(rec, adminId, day)).filter { it["templateId"].asText() == templateId }
+      assertEquals(2, slots.size, "two slots for the shadow-run hospital: ${`data`(slotsOfDay(rec, adminId, day))}")
+
+      val p1 = patientIn(admin, hid, "PA", s)
+      val p2 = patientIn(admin, hid, "PB", s)
+
+      fun book(
+        slotId: String,
+        patientId: String,
+      ): ApiResp =
+        api(
+          HttpMethod.POST,
+          "/api/v1/appointments",
+          json(
+            "slotId" to slotId,
+            "patientId" to patientId,
+            "appointmentType" to "OPD",
+            "reason" to "shadow run",
+            "priority" to "routine",
+            "visitType" to "outpatient",
+          ),
+          rec,
+        )
+
+      val a1 = book(slots[0]["id"].asText(), p1)
+      assertEquals(201, a1.status, "book slot 0: ${a1.body.take(300)}")
+      val a2 = book(slots[1]["id"].asText(), p2)
+      assertEquals(201, a2.status, "book slot 1: ${a2.body.take(300)}")
+      val a1Id = `data`(a1)["id"].asText()
+      val a2Id = `data`(a2)["id"].asText()
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/appointments/$a1Id/status", json("status" to "completed"), rec), "complete booking 1")
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/appointments/$a2Id/status", json("status" to "no-show"), rec), "mark booking 2 no-show")
+
+      // 01.11: appointments analytics carries the exact no-show rate over terminal outcomes.
+      val stats = `data`(api(HttpMethod.GET, "/api/v1/analytics/appointments", token = reader))
+      assertEquals(2L, stats["total"].asLong(), "fresh hospital sees only its own appointments")
+      assertEquals(50.0, stats["noShowRate"].asDouble(), 0.0001, "no-show rate = no-show / (completed + no-show)")
+      val statuses = stats["byStatus"].associate { it["name"].asText() to it["count"].asLong() }
+      assertEquals(1L, statuses["completed"], "completed bucket")
+      assertEquals(1L, statuses["no-show"], "no-show bucket")
+
+      // Queue entries seed the 01.02 wait-time estimates → avg wait non-null for this hospital.
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/queue/entries", json("queueType" to "OPD", "patientId" to p1, "patientName" to "ShadowA$s", "priority" to "normal"), rec),
+        "queue entry 1",
+      )
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/queue/entries", json("queueType" to "OPD", "patientId" to p2, "patientName" to "ShadowB$s", "priority" to "normal"), rec),
+        "queue entry 2",
+      )
+      val queue = `data`(api(HttpMethod.GET, "/api/v1/analytics/queue", token = reader))
+      assertTrue(queue.has("avgWaitMinutes") && !queue["avgWaitMinutes"].isNull, "queue avg wait populated: $queue")
+      val overview = `data`(api(HttpMethod.GET, "/api/v1/analytics/overview", token = reader))
+      assertTrue(overview.has("avgWaitMinutes") && !overview["avgWaitMinutes"].isNull, "overview avg wait populated")
+
+      // Cross-tenant scoping: a second fresh hospital reads only its own (empty) numbers.
+      val hid2 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Shadow R $s", "code" to "SHR-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val rec2 = login(registerRoleUser("RECEPTIONIST", hid2, s, tag = "RB"))
+      val reader2 = login(registerRoleUser("SYSTEM_ADMIN", hid2, s, tag = "SAB"))
+      val foreign = `data`(api(HttpMethod.GET, "/api/v1/analytics/appointments", token = reader2))
+      assertEquals(0L, foreign["total"].asLong(), "foreign hospital sees no cross-tenant appointments")
+      assertTrue(foreign["noShowRate"].isNull, "no terminal outcomes → null no-show rate")
+      val foreignQueue = `data`(api(HttpMethod.GET, "/api/v1/analytics/queue", token = reader2))
+      assertTrue(foreignQueue.has("avgWaitMinutes") && foreignQueue["avgWaitMinutes"].isNull, "no queue entries → null avg wait")
+    }
+
+    @Test
     fun schedulingPolicyOverbookNoshowRbacTenant() {
       val admin = adminToken()
       val adminId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = admin))["userId"].asText()

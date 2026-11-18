@@ -241,15 +241,23 @@ class AnalyticsService {
         "to" to tomorrowStart,
         "hid" to hospitalId,
       )
+    val byStatus = groupBy("select a.status, count(a) from Appointment a where (:hid is null or a.hospitalId = :hid) group by a.status", "hid" to hospitalId)
+
+    // No-show rate over terminal outcomes: no-show / (completed + no-show); null when none resolved yet.
+    fun statusCount(name: String): Long = byStatus.firstOrNull { it.name == name }?.count ?: 0L
+    val completed = statusCount("completed")
+    val noShow = statusCount("no-show")
+    val noShowRate = if (completed + noShow == 0L) null else Math.round(1000.0 * noShow / (completed + noShow)) / 10.0
     return AppointmentStats(
       total = total,
       today = today,
-      byStatus = groupBy("select a.status, count(a) from Appointment a where (:hid is null or a.hospitalId = :hid) group by a.status", "hid" to hospitalId),
+      byStatus = byStatus,
       byType =
         groupBy(
           "select a.appointmentType, count(a) from Appointment a where (:hid is null or a.hospitalId = :hid) group by a.appointmentType",
           "hid" to hospitalId,
         ),
+      noShowRate = noShowRate,
     )
   }
 

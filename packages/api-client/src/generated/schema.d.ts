@@ -10759,6 +10759,8 @@ export interface components {
             today: number;
             byStatus: components["schemas"]["NameCount"][];
             byType: components["schemas"]["NameCount"][];
+            /** Format: double */
+            noShowRate?: number;
         };
         ApiResponseListRecoveryView: {
             data?: components["schemas"]["RecoveryView"][];
@@ -20823,4 +20825,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: bae28d3e49547004890dea201d235e05afc7e2ac009a2a296bda8796e054355f
+// openapi snapshot sha256: 231bc59f1b9722852cb00226a311a8726aa0b030cdc5d497c4d7d394c8f62070

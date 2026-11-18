@@ -49,6 +49,12 @@ object EventCatalog {
       Entry("QueueTransferred", "queue.transferred", Status.EMITTED, "Token moved to another queue with a fresh token number (01.02)."),
       Entry("QueueBumped", "queue.bumped", Status.EMITTED, "Entry bumped to emergency priority; broadcast to displays over WS (01.02)."),
       Entry(
+        "CriticalQueueEvent",
+        "queue.urgent_arrival",
+        Status.EMITTED,
+        "Walk-in tagged red at triage-lite; the urgent arrival escalates the live queue (01.09).",
+      ),
+      Entry(
         "EncounterOrderPlaced",
         "encounter.order.placed",
         Status.EMITTED,

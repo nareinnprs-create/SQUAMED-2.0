@@ -15,6 +15,8 @@ export const SCAN_ROUTES = [
   { path: '/display', label: 'display' },
   { path: '/kiosk', label: 'kiosk' },
   { path: '/reception', label: 'reception' },
+  { path: '/emergency', label: 'emergency' },
+  { path: '/downtime', label: 'downtime' },
   { path: '/consult', label: 'consult' },
 ];
 
@@ -116,6 +118,42 @@ const DISPLAY_BOARD = {
   ],
 };
 
+// Shape-correct consult board for the /emergency scan route: one waiting walk-in so the
+// triage-lite Red/Yellow/Green buttons render with stable content.
+const EMERGENCY_BOARD = [
+  {
+    queueType: 'consult',
+    tokenNumber: 'C-01',
+    patientName: 'Arjun Walkin',
+    status: 'waiting',
+    priority: 'routine',
+    estimatedWaitMinutes: 7,
+    calledAt: null,
+  },
+  {
+    queueType: 'consult',
+    tokenNumber: 'C-02',
+    patientName: 'Beena Walkin',
+    status: 'called',
+    priority: 'urgent',
+    estimatedWaitMinutes: null,
+    calledAt: '2026-01-05T09:01:00Z',
+  },
+];
+
+// Shape-correct downtime log for the /downtime scan route: one open window (close button
+// renders) and one closed one.
+const DOWNTIME_WINDOWS = [
+  { id: 'dddd2222-0000-0000-0000-000000000001', reason: 'PG outage drill', startedAt: '2026-01-05T09:00:00Z', endedAt: null, open: true },
+  {
+    id: 'dddd2222-0000-0000-0000-000000000000',
+    reason: 'Network switch replacement',
+    startedAt: '2026-01-04T14:00:00Z',
+    endedAt: '2026-01-04T15:30:00Z',
+    open: false,
+  },
+];
+
 const SCAN_USER = {
   userId: 'scan-user-0001',
   email: 'scan@squamed.local',
@@ -199,6 +237,8 @@ export async function installApiFixtures(page) {
   await page.route('**/api/v1/**', (route) => route.fulfill(jsonOk([])));
   await page.route('**/api/v1/queue/display-board', (route) => route.fulfill(jsonOk(DISPLAY_BOARD)));
   await page.route('**/api/v1/queue/zones', (route) => route.fulfill(jsonOk(ANNOUNCEMENT_ZONES)));
+  await page.route('**/api/v1/queue/board?*', (route) => route.fulfill(jsonOk(EMERGENCY_BOARD)));
+  await page.route('**/api/v1/downtime/windows', (route) => route.fulfill(jsonOk(DOWNTIME_WINDOWS)));
   await page.route('**/api/v1/hospital-config/hospitals/*/departments', (route) =>
     route.fulfill(jsonOk(KIOSK_DEPARTMENTS)),
   );

@@ -5193,9 +5193,13 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement (22 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival (23 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
-      assertEquals(22, catalog.size(), "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement events: $catalog")
+      assertEquals(
+        23,
+        catalog.size(),
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival events: $catalog",
+      )
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "AnnouncementEnqueued" && it["status"].asText() == "EMITTED" })
@@ -5817,9 +5821,13 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the 21-type set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
-      assertEquals(22, catalog.size(), "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement: $catalog")
+      assertEquals(
+        23,
+        catalog.size(),
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival: $catalog",
+      )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "QueueBumped" && it["status"].asText() == "EMITTED" }, "queue.bumped EMITTED")
@@ -8858,6 +8866,241 @@ class PlatformIntegrationTests {
           api(HttpMethod.POST, "/api/v1/reception/visits/${fVisit["id"].asText()}/passes", json("visitorName" to "Foreign Attendant"), recForeign),
         )
       assertEquals("VPS-0001", fPass["passNumber"].asText(), "foreign hospital pass sequence starts at 0001 (hospital-scoped)")
+    }
+  }
+
+  @Nested
+  inner class EmergencyFastPathTests {
+    private fun errCode(resp: ApiResp): String = om.readTree(resp.body)["error"]["code"].asText()
+
+    private fun registerRoleUser(
+      role: String,
+      hospitalId: String,
+      s: String,
+      tag: String = role,
+    ): String {
+      val email = "efp-${tag.lowercase()}-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "FastPath",
+            "lastName" to "$role$s",
+            "roles" to listOf(role),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register $role $email",
+      )
+      return email
+    }
+
+    private fun login(email: String): String {
+      val login = api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123"))
+      assert2xx(login, "login $email: ${login.body.take(200)}")
+      return `data`(login)["accessToken"].asText()
+    }
+
+    private fun createTaggedPatient(
+      token: String,
+      hospitalId: String,
+      first: String,
+      last: String,
+      s: String,
+      tag: String,
+    ): String =
+      `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json(
+            "firstName" to first,
+            "lastName" to "$last$s",
+            "gender" to "male",
+            "dateOfBirth" to "1980-01-01",
+            // Tail tag: same-ms creates must not collide after takeLast(12) truncation (01.08 CI lesson).
+            "phone" to ("55${System.currentTimeMillis()}$tag").takeLast(12),
+            "hospitalId" to hospitalId,
+          ),
+          token,
+        ),
+      )["patient"]["id"].asText()
+
+    @Test
+    fun emergencyFastPathAndDowntimePack() {
+      val admin = adminToken()
+      val s = suffix()
+      val h1 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "FastPath L $s", "code" to "FPL-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val rec = login(registerRoleUser("RECEPTIONIST", h1, s, tag = "rec"))
+
+      // Walk-ins A/B/C join today's live queue as routine; board is insertion-ordered.
+      val pA = createTaggedPatient(admin, h1, "Arjun", "Walkin", s, "A")
+      val pB = createTaggedPatient(admin, h1, "Beena", "Walkin", s, "B")
+      val pC = createTaggedPatient(admin, h1, "Chirag", "Walkin", s, "C")
+      val entryA =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/queue/entries", json("queueType" to "consult", "patientId" to pA, "patientName" to "Arjun", "hospitalId" to h1), admin),
+        )
+      val entryB =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/queue/entries", json("queueType" to "consult", "patientId" to pB, "patientName" to "Beena", "hospitalId" to h1), admin),
+        )
+      val entryC =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/queue/entries",
+            json("queueType" to "consult", "patientId" to pC, "patientName" to "Chirag", "hospitalId" to h1),
+            admin,
+          ),
+        )
+      val tokenA = entryA["tokenNumber"].asText()
+      val tokenB = entryB["tokenNumber"].asText()
+      val tokenC = entryC["tokenNumber"].asText()
+      assertEquals("C-01", tokenA, "fresh hospital consult queue starts at C-01")
+      assertEquals("C-02", tokenB, "token sequence per queue type")
+
+      val board0 = `data`(api(HttpMethod.GET, "/api/v1/queue/board?queueType=consult", token = rec))
+      assertTrue(board0.any { it["tokenNumber"].asText() == tokenA && it["priority"].asText() == "routine" }, "walk-in A waiting routine: $board0")
+
+      // Triage-lite validation before any boost.
+      val noTag = api(HttpMethod.POST, "/api/v1/queue/entries/consult/$tokenA/triage-lite", json(), rec)
+      assertEquals(400, noTag.status, "tag required -> ${noTag.body.take(200)}")
+      val badTag = api(HttpMethod.POST, "/api/v1/queue/entries/consult/$tokenA/triage-lite", json("tag" to "purple"), rec)
+      assertEquals(400, badTag.status, "unknown tag rejected -> ${badTag.body.take(200)}")
+      assertEquals("TRIAGE_TAG_INVALID", errCode(badTag), "bad tag error code")
+      val missing = api(HttpMethod.POST, "/api/v1/queue/entries/consult/ZZ-99/triage-lite", json("tag" to "red"), rec)
+      assertEquals(400, missing.status, "unknown token rejected -> ${missing.body.take(200)}")
+
+      // Yellow -> urgent, green -> stays routine, red -> emergency.
+      val yellow = `data`(api(HttpMethod.POST, "/api/v1/queue/entries/consult/$tokenB/triage-lite", json("tag" to "yellow"), rec))
+      assertEquals("urgent", yellow["priority"].asText(), "yellow tag boosts to urgent")
+      val green = `data`(api(HttpMethod.POST, "/api/v1/queue/entries/consult/$tokenC/triage-lite", json("tag" to "green"), rec))
+      assertEquals("routine", green["priority"].asText(), "green tag leaves priority as-is")
+      val red = `data`(api(HttpMethod.POST, "/api/v1/queue/entries/consult/$tokenA/triage-lite", json("tag" to "red"), rec))
+      assertEquals("emergency", red["priority"].asText(), "red tag boosts to emergency")
+
+      val board = `data`(api(HttpMethod.GET, "/api/v1/queue/board?queueType=consult", token = rec))
+      val ordered = board.map { it["tokenNumber"].asText() }
+      assertTrue(ordered.indexOf(tokenA) < ordered.indexOf(tokenB), "red ranks before yellow on the board: $ordered")
+      assertTrue(ordered.indexOf(tokenB) < ordered.indexOf(tokenC), "urgent ranks before routine: $ordered")
+
+      // Boost ordering holds when the counter pulls: red first, then yellow, routine last.
+      assertEquals(
+        tokenA,
+        `data`(api(HttpMethod.POST, "/api/v1/queue/entries/call-next", json("queueType" to "consult"), rec))["tokenNumber"].asText(),
+        "call-next pulls the red-tagged token first",
+      )
+      assertEquals(
+        tokenB,
+        `data`(api(HttpMethod.POST, "/api/v1/queue/entries/call-next", json("queueType" to "consult"), rec))["tokenNumber"].asText(),
+        "call-next pulls the yellow token before routine",
+      )
+
+      // CriticalQueueEvent (contract EVENTS: urgent arrival) + display bump event on red.
+      val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
+      assertTrue(
+        catalog.any { it["name"].asText() == "CriticalQueueEvent" && it["status"].asText() == "EMITTED" },
+        "CriticalQueueEvent cataloged EMITTED: $catalog",
+      )
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = admin))
+      assertTrue(
+        outbox.any {
+          it["eventType"].asText() == "queue.urgent_arrival" && it["envelope"].asText().contains(tokenA)
+        },
+        "queue.urgent_arrival outbox row present",
+      )
+      assertTrue(
+        outbox.any {
+          it["eventType"].asText() == "queue.bumped" && it["envelope"].asText().contains(tokenA)
+        },
+        "queue.bumped outbox row present (displays escalate)",
+      )
+
+      // Role-less user never boosts.
+      val noPerm = noRoleToken()
+      assertEquals(
+        403,
+        api(HttpMethod.POST, "/api/v1/queue/entries/consult/$tokenA/triage-lite", json("tag" to "red"), noPerm).status,
+        "triage-lite denied for role-less user",
+      )
+
+      // --- Downtime pack v1 (CS-09): window -> paper tokens/check-ins -> re-entry restores without loss.
+      val noReason = api(HttpMethod.POST, "/api/v1/downtime/windows", json("hospitalId" to h1), rec)
+      assertEquals(400, noReason.status, "downtime reason required")
+      val openWindow = `data`(api(HttpMethod.POST, "/api/v1/downtime/windows", json("reason" to "PG outage drill $s", "hospitalId" to h1), rec))
+      assertNotNull(openWindow["id"])
+      assertTrue(openWindow["open"].asBoolean(), "window opens open")
+      val dupOpen = api(HttpMethod.POST, "/api/v1/downtime/windows", json("reason" to "second window", "hospitalId" to h1), rec)
+      assertEquals(409, dupOpen.status, "second open window rejected -> ${dupOpen.body.take(200)}")
+      assertEquals("DOWNTIME_ALREADY_OPEN", errCode(dupOpen), "open-window guard")
+
+      val windows = `data`(api(HttpMethod.GET, "/api/v1/downtime/windows", token = rec))
+      assertEquals(1, windows.size(), "one window listed for the fresh hospital")
+
+      // Paper tokens issued during the outage keep their written numbers on re-entry.
+      val pD = createTaggedPatient(admin, h1, "Devika", "Paper", s, "D")
+      val pE = createTaggedPatient(admin, h1, "Eshan", "Paper", s, "E")
+      val reentry =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/downtime/reentries",
+            json(
+              "hospitalId" to h1,
+              "tokens" to
+                listOf(
+                  mapOf("queueType" to "consult", "tokenNumber" to "DT-01", "patientId" to pD, "patientName" to "Devika"),
+                  mapOf("queueType" to "consult", "tokenNumber" to "DT-02", "patientId" to pE, "patientName" to "Eshan", "priority" to "urgent"),
+                ),
+            ),
+            rec,
+          ),
+        )
+      assertEquals(2, reentry["tokens"].size(), "both paper tokens re-entered")
+      val dt1 = reentry["tokens"][0]
+      assertEquals("DT-01", dt1["tokenNumber"].asText(), "paper token number preserved")
+      assertEquals("routine", dt1["priority"].asText(), "untagged paper token defaults to routine")
+
+      val dupToken =
+        api(
+          HttpMethod.POST,
+          "/api/v1/downtime/reentries",
+          json("hospitalId" to h1, "tokens" to listOf(mapOf("queueType" to "consult", "tokenNumber" to "DT-01", "patientId" to pD))),
+          rec,
+        )
+      assertEquals(409, dupToken.status, "paper token number already live -> ${dupToken.body.take(200)}")
+      assertEquals("DOWNTIME_TOKEN_EXISTS", errCode(dupToken), "duplicate paper token rejected, nothing silently dropped")
+
+      // Paper check-in: a pre-booked visit marked checked-in on paper re-stamps the visit.
+      val pF = createTaggedPatient(admin, h1, "Farah", "Paper", s, "F")
+      val visit =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/reception/visits", json("patientId" to pF, "hospitalId" to h1, "reason" to "pre-booked before outage"), admin),
+        )["visit"]
+      val visitId = visit["id"].asText()
+      assertEquals("registered", visit["status"].asText(), "visit starts unregistered-checkin")
+      `data`(api(HttpMethod.POST, "/api/v1/downtime/reentries", json("hospitalId" to h1, "visitIds" to listOf(visitId)), rec))
+      assertEquals("checked-in", `data`(api(HttpMethod.GET, "/api/v1/reception/visits/$visitId", token = rec))["status"].asText(), "paper check-in restored")
+
+      // Close the window; closing twice is rejected.
+      val closed = `data`(api(HttpMethod.PATCH, "/api/v1/downtime/windows/${openWindow["id"].asText()}/close", json(), rec))
+      assertFalse(closed["open"].asBoolean(), "window closed")
+      assertNotNull(closed["endedAt"], "close stamps endedAt")
+      val reclose = api(HttpMethod.PATCH, "/api/v1/downtime/windows/${openWindow["id"].asText()}/close", json(), rec)
+      assertEquals(409, reclose.status, "already-closed window rejected")
+      assertEquals("DOWNTIME_NOT_OPEN", errCode(reclose), "reclose error code")
+
+      // Nothing was lost: all five consult tokens (3 live + 2 paper) still on the board.
+      val boardAfter = `data`(api(HttpMethod.GET, "/api/v1/queue/board?queueType=consult", token = rec))
+      val tokensAfter = boardAfter.map { it["tokenNumber"].asText() }
+      assertTrue(tokensAfter.containsAll(listOf("DT-01", "DT-02", tokenC)), "re-entered tokens live next to originals: $tokensAfter")
     }
   }
 

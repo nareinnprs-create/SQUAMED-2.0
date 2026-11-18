@@ -102,6 +102,26 @@ class QueueController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.bump(queueType, tokenNumber, principal.hospitalId))
 
+  // 01.09 emergency fast-path: walk-in triage-lite tag boosts the live queue entry
+  // (red -> emergency + queue.bumped + queue.urgent_arrival, yellow -> urgent, green -> no change).
+  @PostMapping("/entries/{queueType}/{tokenNumber}/triage-lite")
+  @RequiresPermission("queue:manage:queue")
+  @Transactional
+  fun triageLite(
+    @PathVariable queueType: String,
+    @PathVariable tokenNumber: String,
+    @RequestBody dto: QueueTriageLiteDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QueueEntryView> =
+    ApiResponse.ok(
+      queueService.triageLite(
+        queueType,
+        tokenNumber,
+        dto.tag ?: throw IllegalArgumentException("TRIAGE_TAG_REQUIRED"),
+        principal.hospitalId,
+      ),
+    )
+
   // 01.02 re-print: stateless view fetch for kiosk/thermal printers (GET → no audit write).
   @GetMapping("/entries/{queueType}/{tokenNumber}/reprint")
   @RequiresPermission("queue:read:queue")

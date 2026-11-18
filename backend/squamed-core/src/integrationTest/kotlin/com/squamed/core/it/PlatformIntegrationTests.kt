@@ -540,16 +540,8 @@ class PlatformIntegrationTests {
       val sign = api(HttpMethod.POST, "/api/v1/encounters/notes/$noteId/sign", json("method" to "PIN", "pin" to "1357", "patientMrn" to mrn), token)
       assertTrue(sign.status == 200 || sign.status == 409, "sign note -> ${sign.status}")
 
-      // SAFETY L49: the journey patient documents the NKA attestation before any prescription.
-      assert2xx(
-        api(
-          HttpMethod.POST,
-          "/api/v1/patients/$patientId/allergies",
-          json("allergen" to "NO KNOWN ALLERGIES", "severity" to "none"),
-          token,
-        ),
-        "nka attestation",
-      )
+      // SAFETY L49: the journey patient already documents a real allergy (Penicillin above)
+      // before any prescription - an NKA attestation would conflict, so none is posted here.
 
       val rx =
         api(
@@ -3268,10 +3260,58 @@ class PlatformIntegrationTests {
             docForeign,
           ),
         )["id"].asText()
-      val encounterBundle = api(HttpMethod.GET, "/api/v1/fhir/Encounter", token = token)
-      assert2xx(encounterBundle, "fhir encounter bundle")
+      // The admin token is unscoped by design (global admin -> null principal hospital), so the
+      // tenant filter is asserted with a hospital-scoped doctor: own hospital, own encounter.
+      val hidOwn =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Fhir O $s", "code" to "FHO-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      val docOwnEmail = "fhiro-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to docOwnEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "FhirO",
+            "lastName" to "Doc$s",
+            "roles" to listOf("DOCTOR"),
+            "hospitalId" to hidOwn,
+          ),
+        ),
+        "register own-scoped doctor",
+      )
+      val docOwn =
+        `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to docOwnEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+      val patientOwn =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "FhirO",
+              "lastName" to "Patient$s",
+              "gender" to "female",
+              "dateOfBirth" to "1990-01-01",
+              "hospitalId" to hidOwn,
+            ),
+            docOwn,
+          ),
+        )["patient"]
+      val encOwn =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters",
+            json("patientId" to patientOwn["id"].asText(), "reason" to "own tenant", "chiefComplaint" to "fever"),
+            docOwn,
+          ),
+        )["id"].asText()
+      val encounterBundle = api(HttpMethod.GET, "/api/v1/fhir/Encounter", token = docOwn)
+      assert2xx(encounterBundle, "fhir encounter bundle (scoped doctor)")
       assertFalse(encounterBundle.body.contains(encForeign), "fhir Encounter bundle hides foreign-hospital encounters")
-      assertTrue(encounterBundle.body.contains(enc), "fhir Encounter bundle keeps own-hospital encounters")
+      assertTrue(encounterBundle.body.contains(encOwn), "fhir Encounter bundle keeps own-hospital encounters")
 
       listOf(
         "Patient",

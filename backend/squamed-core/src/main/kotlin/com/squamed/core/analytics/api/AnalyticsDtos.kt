@@ -49,6 +49,7 @@ data class AppointmentStats(
   val today: Long,
   val byStatus: List<NameCount>,
   val byType: List<NameCount>,
+  val noShowRate: Double?,
 )
 
 data class QueueStats(

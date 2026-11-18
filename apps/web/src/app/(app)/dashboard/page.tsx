@@ -64,6 +64,7 @@ interface AppointmentsStats {
   today: number
   byStatus: NameCount[]
   byType: NameCount[]
+  noShowRate: number | null
 }
 
 interface QueueStats {
@@ -416,6 +417,9 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
               <Badge variant="information">{data.appointments.today} today</Badge>
               <Badge variant="neutral">{data.appointments.total} total</Badge>
+              <Badge variant="warning">
+                no-show {data.appointments.noShowRate != null ? `${data.appointments.noShowRate}%` : '—'}
+              </Badge>
             </div>
             <PanelLabel>By status</PanelLabel>
             <DistributionBar items={data.appointments.byStatus} colors={statusColors} />

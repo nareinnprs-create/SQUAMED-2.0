@@ -1700,6 +1700,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lab/reports/{reportId}/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["deliverReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/reference-ranges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listReferenceRanges"];
+        put?: never;
+        post: operations["createReferenceRange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lab/qc-runs": {
         parameters: {
             query?: never;
@@ -1774,6 +1806,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["enterResults"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/orders/{id}/results/{testRequestId}/amend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["amendResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/orders/{id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["downloadReport"];
+        put?: never;
+        post: operations["publishReport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4276,6 +4340,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lab/tat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tatAnalytics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lab/phlebotomy/worklist": {
         parameters: {
             query?: never;
@@ -4300,6 +4380,38 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getOrder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/orders/{id}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listReports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/orders/{id}/amendments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAmendments"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7737,6 +7849,70 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        DeliverReportDto: {
+            via: string;
+            /** Format: uuid */
+            deliveredTo?: string;
+        };
+        ApiResponseLabReportView: {
+            data?: components["schemas"]["LabReportView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        LabReportView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            labOrderId: string;
+            /** Format: int32 */
+            reportVersion: number;
+            storageKey: string;
+            /** Format: uuid */
+            publishedBy?: string;
+            /** Format: date-time */
+            publishedAt?: string;
+            deliveredVia?: string;
+            /** Format: uuid */
+            deliveredTo?: string;
+            /** Format: date-time */
+            deliveredAt?: string;
+        };
+        CreateReferenceRangeDto: {
+            testCode: string;
+            sex: string;
+            /** Format: int32 */
+            ageMinYears: number;
+            /** Format: int32 */
+            ageMaxYears: number;
+            rangeText: string;
+            /** Format: uuid */
+            hospitalId?: string;
+        };
+        ApiResponseReferenceRangeView: {
+            data?: components["schemas"]["ReferenceRangeView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ReferenceRangeView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            testCode: string;
+            sex: string;
+            /** Format: int32 */
+            ageMinYears: number;
+            /** Format: int32 */
+            ageMaxYears: number;
+            rangeText: string;
+            isActive: boolean;
+        };
         CreateQcRunDto: {
             testCode: string;
             level: string;
@@ -7900,6 +8076,10 @@ export interface components {
             unit?: string;
             referenceRange?: string;
             isAbnormal?: boolean;
+        };
+        AmendResultDto: {
+            newValue: string;
+            reason: string;
         };
         RejectRequestDto: {
             reason: string;
@@ -10676,6 +10856,31 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListTatRowView: {
+            data?: components["schemas"]["TatRowView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        TatRowView: {
+            testCode: string;
+            /** Format: int32 */
+            count: number;
+            /** Format: double */
+            avgMinutes: number;
+            /** Format: int64 */
+            minMinutes: number;
+            /** Format: int64 */
+            maxMinutes: number;
+        };
+        ApiResponseListReferenceRangeView: {
+            data?: components["schemas"]["ReferenceRangeView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListQcRunView: {
             data?: components["schemas"]["QcRunView"][];
             success: boolean;
@@ -10689,6 +10894,35 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseListLabReportView: {
+            data?: components["schemas"]["LabReportView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListLabResultAmendmentView: {
+            data?: components["schemas"]["LabResultAmendmentView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        LabResultAmendmentView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            labOrderId: string;
+            /** Format: uuid */
+            labTestRequestId: string;
+            oldValue?: string;
+            newValue: string;
+            reason: string;
+            /** Format: uuid */
+            amendedBy?: string;
+            /** Format: date-time */
+            amendedAt?: string;
         };
         ApiResponseListCriticalResultView: {
             data?: components["schemas"]["CriticalResultView"][];
@@ -15410,6 +15644,78 @@ export interface operations {
             };
         };
     };
+    deliverReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reportId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliverReportDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseLabReportView"];
+                };
+            };
+        };
+    };
+    listReferenceRanges: {
+        parameters: {
+            query?: {
+                testCode?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListReferenceRangeView"];
+                };
+            };
+        };
+    };
+    createReferenceRange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateReferenceRangeDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReferenceRangeView"];
+                };
+            };
+        };
+    };
     listQcRuns: {
         parameters: {
             query?: never;
@@ -15572,6 +15878,77 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseLabOrderDetailView"];
+                };
+            };
+        };
+    };
+    amendResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                testRequestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AmendResultDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseLabOrderDetailView"];
+                };
+            };
+        };
+    };
+    downloadReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    publishReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseLabReportView"];
                 };
             };
         };
@@ -20440,6 +20817,28 @@ export interface operations {
             };
         };
     };
+    tatAnalytics: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListTatRowView"];
+                };
+            };
+        };
+    };
     phlebotomyWorklist: {
         parameters: {
             query?: never;
@@ -20478,6 +20877,50 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseLabOrderDetailView"];
+                };
+            };
+        };
+    };
+    listReports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListLabReportView"];
+                };
+            };
+        };
+    };
+    listAmendments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListLabResultAmendmentView"];
                 };
             };
         };
@@ -21892,4 +22335,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 659605bc221564fe86ec12eeda533638e05eb3da632e1b5c50dd592e33c369a3
+// openapi snapshot sha256: f06855bc77507cde61fcbdeedbd587ec69d580c7fefbfbe301bd90f7a1999ccd

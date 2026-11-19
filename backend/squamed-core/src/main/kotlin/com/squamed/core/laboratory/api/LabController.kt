@@ -5,7 +5,10 @@ import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.laboratory.service.LabService
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
@@ -168,4 +171,90 @@ class LabController(
   fun listQcRuns(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<List<QcRunView>> = ApiResponse.ok(labService.listQcRuns(principal.hospitalId))
+
+  // ---- 02.04 Lab reports + delivery ----
+
+  @PostMapping("/orders/{id}/report")
+  @RequiresPermission("laboratory:verify:lab")
+  @Transactional
+  fun publishReport(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<LabReportView> = ApiResponse.ok(labService.publishReport(id, principal.userId))
+
+  @GetMapping("/orders/{id}/report")
+  @RequiresPermission("laboratory:read:lab")
+  @Transactional(readOnly = true)
+  fun downloadReport(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ResponseEntity<ByteArray> {
+    val download = labService.getReportBytes(id, principal.hospitalId)
+    val filename = "${download.orderNumber}-v${download.reportVersion}.pdf"
+    return ResponseEntity
+      .ok()
+      .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"$filename\"")
+      .contentType(MediaType.APPLICATION_PDF)
+      .body(download.bytes)
+  }
+
+  @GetMapping("/orders/{id}/reports")
+  @RequiresPermission("laboratory:read:lab")
+  @Transactional(readOnly = true)
+  fun listReports(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<LabReportView>> = ApiResponse.ok(labService.listReports(id, principal.hospitalId))
+
+  @PostMapping("/reports/{reportId}/deliver")
+  @RequiresPermission("laboratory:verify:lab")
+  @Transactional
+  fun deliverReport(
+    @PathVariable reportId: UUID,
+    @RequestBody dto: DeliverReportDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<LabReportView> = ApiResponse.ok(labService.deliverReport(reportId, dto, principal.userId, principal.hospitalId))
+
+  @PostMapping("/orders/{id}/results/{testRequestId}/amend")
+  @RequiresPermission("laboratory:verify:lab")
+  @Transactional
+  fun amendResult(
+    @PathVariable id: UUID,
+    @PathVariable testRequestId: UUID,
+    @RequestBody dto: AmendResultDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.amendResult(id, testRequestId, dto, principal.userId))
+
+  @GetMapping("/orders/{id}/amendments")
+  @RequiresPermission("laboratory:read:lab")
+  @Transactional(readOnly = true)
+  fun listAmendments(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<LabResultAmendmentView>> = ApiResponse.ok(labService.listAmendments(id, principal.hospitalId))
+
+  @PostMapping("/reference-ranges")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("laboratory:verify:lab")
+  @Transactional
+  fun createReferenceRange(
+    @RequestBody dto: CreateReferenceRangeDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<ReferenceRangeView> = ApiResponse.ok(labService.createReferenceRange(dto, tenantResolver.pinOrDefault(principal, dto.hospitalId)))
+
+  @GetMapping("/reference-ranges")
+  @RequiresPermission("laboratory:read:lab")
+  @Transactional(readOnly = true)
+  fun listReferenceRanges(
+    @RequestParam(required = false) testCode: String?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ReferenceRangeView>> = ApiResponse.ok(labService.listReferenceRanges(testCode, principal.hospitalId))
+
+  @GetMapping("/tat")
+  @RequiresPermission("laboratory:read:lab")
+  @Transactional(readOnly = true)
+  fun tatAnalytics(
+    @RequestParam(required = false, defaultValue = "30") days: Int,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<TatRowView>> = ApiResponse.ok(labService.tatAnalytics(principal.hospitalId, days))
 }

@@ -5402,6 +5402,225 @@ class PlatformIntegrationTests {
     }
 
     @Test
+    fun labReportsDeliveryCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+
+      val femaleId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Maria",
+              "lastName" to "Report$s",
+              "gender" to "female",
+              "dateOfBirth" to "1988-03-03",
+              "phone" to "5561$s".take(11),
+              "qid" to "RP1$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+            ),
+            token,
+          ),
+        )["patient"]["id"].asText()
+      val maleId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Victor",
+              "lastName" to "ReportM$s",
+              "gender" to "male",
+              "dateOfBirth" to "1990-01-01",
+              "phone" to "5562$s".take(11),
+              "qid" to "RP2$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+            ),
+            token,
+          ),
+        )["patient"]["id"].asText()
+
+      val testCode = "REF-$s"
+
+      // Age/sex reference ranges: the 11-200 female band will be picked for a 38yo; the 0-10 band
+      // is out of her age window and must be ignored (age selection proof).
+      val rangeF =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/reference-ranges",
+            json(
+              "testCode" to testCode,
+              "sex" to "F",
+              "ageMinYears" to 11,
+              "ageMaxYears" to 200,
+              "rangeText" to "3.5-4.6",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )
+      assertEquals("3.5-4.6", rangeF["rangeText"].asText(), "female adult range stored")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/lab/reference-ranges",
+          json("testCode" to testCode, "sex" to "F", "ageMinYears" to 0, "ageMaxYears" to 10, "rangeText" to "2.0-3.0", "hospitalId" to hospitalId),
+          token,
+        ),
+        "child female range stored",
+      )
+      assert4xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/lab/reference-ranges",
+          json("testCode" to testCode, "sex" to "X", "rangeText" to "1.0-2.0", "hospitalId" to hospitalId),
+          token,
+        ),
+        "invalid sex rejected",
+      )
+      val rangeList = `data`(api(HttpMethod.GET, "/api/v1/lab/reference-ranges?testCode=$testCode", token = token))
+      assertEquals(2, rangeList.size(), "both ranges listed for the test code")
+
+      fun createOrder(patientId: String): Pair<String, String> {
+        val created =
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/orders",
+            json(
+              "patientId" to patientId,
+              "tests" to listOf(mapOf("testCode" to testCode, "testName" to "TSH $s")),
+            ),
+            token,
+          )
+        assert2xx(created, "create lab order")
+        val orderId = `data`(created)["order"]["id"].asText()
+        val testRequestId = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$orderId", token = token))["tests"][0]["id"].asText()
+        return orderId to testRequestId
+      }
+
+      fun runLab(
+        orderId: String,
+        testRequestId: String,
+        manualRange: String?,
+        release: Boolean,
+      ): String {
+        assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/collect", json(), token), "collect $orderId")
+        assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/receive", json(), token), "receive $orderId")
+        assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/start", json(), token), "start $orderId")
+        val result =
+          mapOf(
+            "testRequestId" to testRequestId,
+            "resultValue" to "4.8",
+            "unit" to "mIU/L",
+            "referenceRange" to manualRange,
+          )
+        assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/results", json("results" to listOf(result)), token), "enter results $orderId")
+        assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/verify", json(), token), "verify $orderId")
+        if (release) assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/release", json(), token), "release $orderId")
+        return `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$orderId", token = token))["order"]["orderNumber"].asText()
+      }
+
+      // Female 38y, no manual range: structured adult-female band 3.5-4.6 applies (not the 0-10
+      // band), so 4.8 is abnormal.
+      val (orderF, reqF) = createOrder(femaleId)
+      val orderFNo = runLab(orderF, reqF, manualRange = null, release = true)
+      val testF = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$orderF", token = token))["tests"][0]
+      assertEquals("3.5-4.6", testF["referenceRange"].asText(), "structured age/sex range applied")
+      assertTrue(testF["isAbnormal"].asBoolean(), "4.8 above the adult female band flagged abnormal")
+
+      // Publish gate: only released orders may produce a report.
+      val (orderGate, reqGate) = createOrder(femaleId)
+      runLab(orderGate, reqGate, manualRange = null, release = false)
+      val gatePub = api(HttpMethod.POST, "/api/v1/lab/orders/$orderGate/report", json(), token)
+      assert4xx(gatePub, "publish gated on released status")
+      assertTrue(gatePub.body.contains("LAB_ORDER_NOT_RELEASED"), "publish gate error: ${gatePub.body.take(200)}")
+
+      // Publish v1: branded PDF bytes carry the order number, structured range and abnormal flag.
+      val report1 = `data`(api(HttpMethod.POST, "/api/v1/lab/orders/$orderF/report", json(), token))
+      assertEquals(1, report1["reportVersion"].asInt(), "first publish is version 1")
+      assertTrue(report1["deliveredVia"].isNull, "fresh report undelivered")
+      val pdf1 = api(HttpMethod.GET, "/api/v1/lab/orders/$orderF/report", token = token)
+      assert2xx(pdf1, "download report v1")
+      assertTrue(pdf1.body.contains("%PDF-1.4"), "pdf header in bytes: ${pdf1.body.take(120)}")
+      assertTrue(pdf1.body.contains(orderFNo), "branded pdf carries the order number")
+      assertTrue(pdf1.body.contains("3.5-4.6"), "pdf carries the structured reference range")
+      assertTrue(pdf1.body.contains("ABNORMAL"), "pdf carries the abnormal flag")
+
+      // Delivery: counter pickup stamps once; a second delivery and an invalid via are rejected.
+      val delivered =
+        `data`(api(HttpMethod.POST, "/api/v1/lab/reports/${report1["id"].asText()}/deliver", json("via" to "COUNTER"), token))
+      assertEquals("COUNTER", delivered["deliveredVia"].asText(), "counter delivery stamped")
+      assertFalse(delivered["deliveredAt"].isNull, "delivery timestamp recorded")
+      val secondDeliver =
+        api(HttpMethod.POST, "/api/v1/lab/reports/${report1["id"].asText()}/deliver", json("via" to "COUNTER"), token)
+      assert4xx(secondDeliver, "second delivery rejected")
+      assertTrue(secondDeliver.body.contains("REPORT_ALREADY_DELIVERED"), "double-delivery error: ${secondDeliver.body.take(200)}")
+      val badVia = api(HttpMethod.POST, "/api/v1/lab/reports/${report1["id"].asText()}/deliver", json("via" to "COURIER"), token)
+      assert4xx(badVia, "invalid delivery via rejected")
+      assertTrue(badVia.body.contains("DELIVERY_VIA_INVALID"), "invalid via error: ${badVia.body.take(200)}")
+
+      // Amendment of a released result: old value preserved, new value in place, reason required.
+      val noReason = api(HttpMethod.POST, "/api/v1/lab/orders/$orderF/results/$reqF/amend", json("newValue" to "4.0", "reason" to "  "), token)
+      assert4xx(noReason, "blank amendment reason rejected")
+      assertTrue(noReason.body.contains("AMENDMENT_REASON_REQUIRED"), "reason-required error: ${noReason.body.take(200)}")
+      val amended =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/orders/$orderF/results/$reqF/amend",
+            json(
+              "newValue" to "4.0",
+              "reason" to "transcription corrected",
+            ),
+            token,
+          ),
+        )
+      assertEquals("4.0", amended["tests"][0]["resultValue"].asText(), "amended value in place")
+      assertFalse(amended["tests"][0]["isAbnormal"].asBoolean(), "4.0 within 3.5-4.6 not abnormal")
+      val amendments = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$orderF/amendments", token = token))
+      assertEquals(1, amendments.size(), "one versioned amendment row")
+      assertEquals("4.8", amendments[0]["oldValue"].asText(), "old value preserved")
+      assertEquals("4.0", amendments[0]["newValue"].asText(), "new value recorded")
+      assertEquals("transcription corrected", amendments[0]["reason"].asText(), "reason recorded")
+
+      // Republish after amendment: version 2 carries the amendment trail.
+      val report2 = `data`(api(HttpMethod.POST, "/api/v1/lab/orders/$orderF/report", json(), token))
+      assertEquals(2, report2["reportVersion"].asInt(), "republish after amendment is version 2")
+      val versions = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$orderF/reports", token = token))
+      assertEquals(2, versions.size(), "two report versions listed")
+      assertEquals(2, versions[0]["reportVersion"].asInt(), "latest version first")
+      val pdf2 = api(HttpMethod.GET, "/api/v1/lab/orders/$orderF/report", token = token)
+      assert2xx(pdf2, "download report v2")
+      assertTrue(pdf2.body.contains("AMENDED"), "v2 pdf lists the amendment trail")
+
+      // Male fallback: no structured male/ANY band -> manual master string 3.5-5.1, 4.8 normal.
+      val (orderM, reqM) = createOrder(maleId)
+      runLab(orderM, reqM, manualRange = "3.5-5.1", release = true)
+      val testM = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$orderM", token = token))["tests"][0]
+      assertEquals("3.5-5.1", testM["referenceRange"].asText(), "manual master range fallback")
+      assertFalse(testM["isAbnormal"].asBoolean(), "4.8 within the male master band")
+      val reportM = `data`(api(HttpMethod.POST, "/api/v1/lab/orders/$orderM/report", json(), token))
+      assertEquals(1, reportM["reportVersion"].asInt(), "male order first publish v1")
+      val deliveredM =
+        `data`(api(HttpMethod.POST, "/api/v1/lab/reports/${reportM["id"].asText()}/deliver", json("via" to "APP", "deliveredTo" to maleId), token))
+      assertEquals("APP", deliveredM["deliveredVia"].asText(), "app delivery stamped")
+      assertEquals(maleId, deliveredM["deliveredTo"].asText(), "app recipient recorded")
+
+      // TAT analytics: released orders counted per test code plus an ALL row.
+      val tat = `data`(api(HttpMethod.GET, "/api/v1/lab/tat?days=30", token = token))
+      val allRow = tat.first { it["testCode"].asText() == "ALL" }
+      assertTrue(allRow["count"].asInt() >= 2, "released orders counted in the TAT window")
+      val refRow = tat.first { it["testCode"].asText() == testCode }
+      assertEquals(2, refRow["count"].asInt(), "per-test TAT counts both released orders")
+      assertTrue(refRow.has("avgMinutes") && refRow.has("minMinutes") && refRow.has("maxMinutes"), "tat stats fields present")
+    }
+
+    @Test
     fun financialAndOperationsCoverage() {
       val token = adminToken()
       val s = suffix()

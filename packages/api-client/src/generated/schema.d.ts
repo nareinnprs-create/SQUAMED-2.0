@@ -22528,4 +22528,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 7dfc2c2f2c1973782a7aab9e81da83a2cb0d82f25ea699162bb6c8c9f4c33990
+// openapi snapshot sha256: 640d46a6ca0c8d698722804663b2191b3cb69d3f233aa7d02fa7d19a2d3ff93a

@@ -45,6 +45,8 @@ import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.identity.security.SquamedPermissionEvaluator
 import com.squamed.core.identity.security.SquamedPrincipal
+import com.squamed.core.medsafety.api.MedSafetyOverrideDto
+import com.squamed.core.medsafety.service.MedicationSafetyService
 import com.squamed.core.patient.domain.Allergy
 import com.squamed.core.patient.repository.AllergyRepository
 import com.squamed.core.patient.repository.PatientRecordRepository
@@ -79,6 +81,7 @@ class EncounterService(
   private val schedulingService: SchedulingService,
   private val meterRegistry: MeterRegistry,
   private val permissionEvaluator: SquamedPermissionEvaluator,
+  private val medicationSafetyService: MedicationSafetyService, // 02.07 safety gate
 ) {
   @Transactional
   fun startEncounter(
@@ -464,6 +467,22 @@ class EncounterService(
       meterRegistry.counter("squamed.rx.allergy.warn.overrides").increment()
       overrideReason = reason
       allergyStatus = "warn_override"
+    }
+    // 02.07 medication safety engine: interactions/duplicate/dose/renal (allergy gate above).
+    val safetyDrug = medicationSafetyService.resolveDrug(dto.drugId, dto.drugName)
+    if (safetyDrug != null) {
+      val screen = medicationSafetyService.screenForPrescribing(encounter.patientId, safetyDrug.id!!)
+      val blockFindings = screen.findings.filter { it.severity == "BLOCK" }
+      if (blockFindings.isNotEmpty()) {
+        val reason = dto.overrideReason?.trim()
+        if (reason.isNullOrEmpty()) throw IllegalStateException("MEDICATION_SAFETY_BLOCK")
+        val top = blockFindings.first()
+        medicationSafetyService.recordOverride(
+          MedSafetyOverrideDto(encounter.patientId, safetyDrug.code, top.type, top.severity, reason),
+          principal.userId,
+          hospitalId,
+        )
+      }
     }
     val prescription =
       prescriptionRepository.save(

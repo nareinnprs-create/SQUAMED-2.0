@@ -17,6 +17,13 @@ interface DrugRepository : JpaRepository<Drug, UUID> {
 
   fun findByCode(code: String): List<Drug>
 
+  // 02.07 safety engine: exact-master lookup for free-text prescriptions (name -> generic -> brand).
+  fun findFirstByCodeIgnoreCaseAndIsActiveTrue(code: String): Drug?
+
+  fun findFirstByGenericNameIgnoreCaseAndIsActiveTrue(genericName: String): Drug?
+
+  fun findFirstByBrandNameIgnoreCaseAndIsActiveTrue(brandName: String): Drug?
+
   fun findByNameContainingIgnoreCase(name: String): List<Drug>
 
   @Query("select d from Drug d where lower(d.name) like lower(:name) or lower(d.code) like lower(:code)")

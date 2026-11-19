@@ -25,4 +25,16 @@ interface LabTestRequestRepository : JpaRepository<LabTestRequest, UUID> {
     @Param("excludeOrderId") excludeOrderId: UUID,
     pageable: Pageable,
   ): List<LabTestRequest>
+
+  // 02.07 renal flag: released numeric results for a patient + test code (eGFR), newest first.
+  @Query(
+    "select r from LabTestRequest r join LabOrder o on r.labOrderId = o.id " +
+      "where o.patientId = :patientId and o.resultStatus = 'released' " +
+      "and lower(r.testCode) = lower(:testCode) and r.resultValue is not null " +
+      "order by r.resultEnteredAt desc",
+  )
+  fun findReleasedResults(
+    @Param("patientId") patientId: UUID,
+    @Param("testCode") testCode: String,
+  ): List<LabTestRequest>
 }

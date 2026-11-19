@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.events.IntegrationErrorService
 import com.squamed.core.events.IntegrationReplayer
+import com.squamed.core.interop.analyzer.AnalyzerIntakeService
 import com.squamed.core.interop.domain.Hl7MessageLog
 import com.squamed.core.interop.repository.Hl7MessageLogRepository
 import com.squamed.core.patient.api.PatientCreateDto
@@ -24,6 +25,7 @@ class Hl7Service(
   private val hl7MessageLogRepository: Hl7MessageLogRepository,
   private val patientService: PatientService,
   private val integrationErrorService: IntegrationErrorService,
+  private val analyzerIntakeService: AnalyzerIntakeService,
   private val tenantResolver: TenantResolver,
   private val objectMapper: ObjectMapper,
   transactionManager: PlatformTransactionManager,
@@ -156,7 +158,22 @@ class Hl7Service(
     raw: String,
     source: String,
   ): Map<String, Any?> {
-    val message = Hl7Messages.parse(raw)
+    val message =
+      try {
+        Hl7Messages.parse(raw)
+      } catch (e: Exception) {
+        // zero silent drops (02.01): unparseable REST payload -> quarantine row + alert + CE ack
+        analyzerIntakeService.quarantine(raw, transport = "HL7V2", source = source, reason = "PARSE_FAILED: ${e.message ?: e.javaClass.simpleName}")
+        return mapOf(
+          "status" to "QUARANTINED",
+          "ackCode" to "CE",
+          "reason" to (e.message ?: e.javaClass.simpleName),
+          "importedPatientId" to null,
+          "importError" to null,
+          "ack" to Hl7Messages.buildAck(Hl7Message(emptyList()), "CE", e.message),
+          "logId" to null,
+        )
+      }
     var ackCode = "AA"
     var error: String? = null
     var importedPatientId: UUID? = null
@@ -201,7 +218,18 @@ class Hl7Service(
     raw: String,
     source: String,
   ): Map<String, Any?> {
-    val message = Hl7Messages.parse(raw)
+    val message =
+      try {
+        Hl7Messages.parse(raw)
+      } catch (e: Exception) {
+        // zero silent drops (02.01): malformed MLLP payload -> quarantine + alert + ERR ack
+        analyzerIntakeService.quarantine(raw, transport = "HL7V2", source = source, reason = "PARSE_FAILED: ${e.message ?: e.javaClass.simpleName}")
+        return mapOf(
+          "ackCode" to "CE",
+          "importError" to (e.message ?: e.javaClass.simpleName),
+          "ack" to Hl7Messages.buildAck(Hl7Message(emptyList()), "CE", e.message),
+        )
+      }
     var ackCode = "AA"
     var error: String? = null
     try {
@@ -232,7 +260,15 @@ class Hl7Service(
     try {
       hl7MessageLogRepository.save(log)
     } catch (e: Exception) {
-      logger.warn(e) { "Could not persist MLLP message log" }
+      // zero silent drops (02.01): losing the log row alerts on the integration error queue
+      integrationErrorService.record(
+        hospitalId = runCatching { tenantResolver.primaryHospitalId() }.getOrNull(),
+        integration = "hl7",
+        messageType = message.messageType,
+        payload = raw.take(20000),
+        error = "LOG_WRITE_FAILED: ${e.message ?: e.javaClass.simpleName}",
+      )
+      logger.warn(e) { "Could not persist MLLP message log - payload recorded on integration error queue" }
     }
     return mapOf(
       "messageType" to message.messageType,

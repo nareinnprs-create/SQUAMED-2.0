@@ -32,4 +32,10 @@ class LabTestRequest(
   var resultEnteredBy: UUID? = null,
   @Column(name = "result_entered_at")
   var resultEnteredAt: Instant? = null,
+  @Column(name = "prior_value")
+  var priorValue: String? = null,
+  @Column(name = "delta_percent")
+  var deltaPercent: Double? = null,
+  @Column(name = "entered_via", nullable = false, length = 20)
+  var enteredVia: String = "MANUAL",
 ) : BaseEntity()

@@ -60,13 +60,21 @@ class LabController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.getOrder(id, principal.hospitalId))
 
+  @GetMapping("/phlebotomy/worklist")
+  @RequiresPermission("laboratory:collect:lab")
+  @Transactional(readOnly = true)
+  fun phlebotomyWorklist(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<LabOrderView>> = ApiResponse.ok(labService.phlebotomyWorklist(hospitalId = principal.hospitalId))
+
   @PostMapping("/orders/{id}/collect")
   @RequiresPermission("laboratory:collect:lab")
   @Transactional
   fun collectSpecimen(
     @PathVariable id: UUID,
     @RequestBody dto: CollectRequestDto,
-  ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.collectSpecimen(id, dto.collectedBy))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.collectSpecimen(id, dto.collectedBy ?: principal.userId))
 
   @PostMapping("/orders/{id}/receive")
   @RequiresPermission("laboratory:write:lab")
@@ -89,7 +97,10 @@ class LabController(
     @PathVariable id: UUID,
     @RequestBody dto: EnterResultsDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.enterResults(id, dto.results, enteredBy = principal.userId))
+  ): ApiResponse<LabOrderDetailView> =
+    ApiResponse.ok(
+      labService.enterResults(id, dto.results, enteredBy = principal.userId, enteredVia = dto.enteredVia ?: "MANUAL"),
+    )
 
   @PostMapping("/orders/{id}/verify")
   @RequiresPermission("laboratory:verify:lab")
@@ -113,5 +124,6 @@ class LabController(
   fun rejectOrder(
     @PathVariable id: UUID,
     @RequestBody dto: RejectRequestDto,
-  ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.rejectOrder(id, dto.reason))
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.rejectOrder(id, dto.reason, rejectedBy = principal.userId, recollect = dto.recollect))
 }

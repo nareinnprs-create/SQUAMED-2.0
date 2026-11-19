@@ -50,4 +50,14 @@ class LabOrder(
   var releasedAt: Instant? = null,
   @Column(name = "released_by")
   var releasedBy: UUID? = null,
+  @Column(name = "barcode_id", length = 50)
+  var barcodeId: String? = null,
+  @Column(name = "accession_id", length = 50)
+  var accessionId: String? = null,
+  @Column(name = "rejected_by")
+  var rejectedBy: UUID? = null,
+  @Column(name = "rejected_at")
+  var rejectedAt: Instant? = null,
+  @Column(name = "recollect_of")
+  var recollectOf: UUID? = null,
 ) : BaseEntity()

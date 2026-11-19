@@ -1,0 +1,64 @@
+{
+  "metadata": {
+    "id": "a11ce5e5-0000-4000-8000-000000020101",
+    "name": "Analyzer Intake - HL7v2 to SQM Analyzer API",
+    "revision": 1,
+    "lastModified": "2026-11-19T00:00:00.000Z",
+    "pruningSettings": {
+      "archiveEnabled": true
+    }
+  },
+  "sourceConnector": {
+    "name": "analyzer_mllp_listener",
+    "properties": {
+      "protocol": "MLLP",
+      "listenerConnectorProperties": {
+        "host": "0.0.0.0",
+        "port": "6661",
+        "dataTypeBinary": false,
+        "charsetEncoding": "UTF-8",
+        "responseVariable": "mirth_response",
+        "respondAfterProcessing": "1",
+        "processBatch": false,
+        "useMLLPv2": false,
+        "maxRetries": "3",
+        "bufferSize": "65536"
+      },
+      "transmissionModeProperties": {
+        "mode": "SERVER",
+        "remoteAddress": "",
+        "remotePort": "0",
+        "overrideLocalBinding": false
+      },
+      "dataType": "HL7V2",
+      "ack": "AA"
+    }
+  },
+  "destinationConnectors": [
+    {
+      "name": "sqm_analyzer_api",
+      "properties": {
+        "protocol": "HTTP",
+        "httpConnectorProperties": {
+          "method": "POST",
+          "url": "${sqm.appBaseUrl}/api/v1/analyzer/messages",
+          "headers": {
+            "Authorization": "Bearer ${sqm.serviceAccountToken}",
+            "Content-Type": "application/json"
+          },
+          "body": "{\"raw\": ${message.rawJson}, \"transport\": \"HL7V2\", \"source\": \"mirth:analyzer-intake\"}",
+          "expectedResponse": "2xx"
+        },
+        "dataType": "JSON"
+      },
+      "responseTransformer": {
+        "failIfResponseCodeOutside200s": true,
+        "onFailure": "ERROR"
+      }
+    }
+  ],
+  "preprocessingScript": "// ADR-14: analyzers -> Mirth -> SQM analyzer intake API.\n// Mirth never drops: its own store keeps undelivered messages; the app quarantines malformed ones.",
+  "postprocessingScript": "// App replies {status: ACCEPTED|QUARANTINED, ackCode, reason}.\n// QUARANTINED/AE/CE responses are channel errors -> Mirth store re-queue + alert webhook.",
+  "deployScript": "// sqm.appBaseUrl and sqm.serviceAccountToken come from the deployment configuration map.",
+  "undeployScript": ""
+}

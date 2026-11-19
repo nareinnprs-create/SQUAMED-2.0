@@ -8,10 +8,14 @@ import com.squamed.core.laboratory.api.LabOrderDetailView
 import com.squamed.core.laboratory.api.LabOrderView
 import com.squamed.core.laboratory.api.LabTestRequestView
 import com.squamed.core.laboratory.api.LabTestResultInput
+import com.squamed.core.laboratory.api.SpecimenCustodyView
 import com.squamed.core.laboratory.domain.LabOrder
 import com.squamed.core.laboratory.domain.LabTestRequest
+import com.squamed.core.laboratory.domain.SpecimenCustody
 import com.squamed.core.laboratory.repository.LabOrderRepository
 import com.squamed.core.laboratory.repository.LabTestRequestRepository
+import com.squamed.core.laboratory.repository.SpecimenCustodyRepository
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -22,6 +26,7 @@ import java.util.UUID
 class LabService(
   private val labOrderRepository: LabOrderRepository,
   private val labTestRequestRepository: LabTestRequestRepository,
+  private val specimenCustodyRepository: SpecimenCustodyRepository,
   private val eventPublisher: DomainEventPublisher,
 ) {
   @Transactional
@@ -87,6 +92,22 @@ class LabService(
     hospitalId: UUID?,
   ): LabOrderDetailView = getOrderDetail(orderId, hospitalId)
 
+  /** Phlebotomy worklist: uncollected orders, priority-ranked (chunk-02 item 1). */
+  @Transactional(readOnly = true)
+  fun phlebotomyWorklist(hospitalId: UUID?): List<LabOrderView> =
+    labOrderRepository
+      .findAllForHospital(hospitalId)
+      .filter { it.status == "ordered" }
+      .sortedWith(compareBy({ priorityRank(it.priority) }, { it.orderedAt ?: Instant.EPOCH }))
+      .map { LabOrderView.from(it) }
+
+  private fun priorityRank(priority: String): Int =
+    when (priority) {
+      "emergency" -> 0
+      "urgent" -> 1
+      else -> 2
+    }
+
   @Transactional
   fun collectSpecimen(
     orderId: UUID,
@@ -97,6 +118,9 @@ class LabService(
     labOrder.status = "collected"
     labOrder.specimenTakenAt = Instant.now()
     labOrder.collectedBy = collectedBy
+    // Specimen label: the order number doubles as the barcode (accession id is stamped at receive).
+    labOrder.barcodeId = labOrder.orderNumber
+    custody(labOrder, "COLLECTED", collectedBy)
     return getOrderDetail(orderId)
   }
 
@@ -108,6 +132,9 @@ class LabService(
     }
     labOrder.status = "received"
     labOrder.receivedAt = Instant.now()
+    // Accessioning: the lab registers the specimen into its accession register.
+    if (labOrder.accessionId == null) labOrder.accessionId = "ACC-${labOrder.orderNumber}"
+    custody(labOrder, "RECEIVED", null)
     return getOrderDetail(orderId)
   }
 
@@ -117,6 +144,7 @@ class LabService(
     if (labOrder.status != "received") throw IllegalArgumentException("LAB_ORDER_WRONG_STATUS")
     labOrder.status = "processing"
     labOrder.startedAt = Instant.now()
+    custody(labOrder, "PROCESS_STARTED", null)
     return getOrderDetail(orderId)
   }
 
@@ -125,6 +153,7 @@ class LabService(
     orderId: UUID,
     results: List<LabTestResultInput>,
     enteredBy: UUID? = null,
+    enteredVia: String = "MANUAL",
   ): LabOrderDetailView {
     val labOrder = findOrder(orderId)
     if (labOrder.status != "processing") throw IllegalArgumentException("LAB_ORDER_WRONG_STATUS")
@@ -139,12 +168,32 @@ class LabService(
       if (result.unit != null) request.unit = result.unit
       if (result.referenceRange != null) request.referenceRange = result.referenceRange
       request.isAbnormal = computeIsAbnormal(request.resultValue, request.referenceRange, result.isAbnormal)
+      request.enteredVia = enteredVia
+      applyDeltaCheck(labOrder, request, result.resultValue)
       request.status = "resulted"
       request.resultEnteredBy = enteredBy
       request.resultEnteredAt = now
     }
     labOrder.status = "resulted"
+    custody(labOrder, "RESULTS_ENTERED", enteredBy, "via $enteredVia")
     return getOrderDetail(orderId)
+  }
+
+  /** Delta check: record % change vs the most recent prior result for the same patient + test code. */
+  private fun applyDeltaCheck(
+    labOrder: LabOrder,
+    request: LabTestRequest,
+    newValue: String?,
+  ) {
+    val prior =
+      labTestRequestRepository
+        .findPriorResults(labOrder.patientId, request.testCode, labOrder.id!!, PageRequest.of(0, 1))
+        .firstOrNull() ?: return
+    val priorValue = prior.resultValue?.trim()?.toDoubleOrNull() ?: return
+    val new = newValue?.trim()?.toDoubleOrNull() ?: return
+    if (priorValue == 0.0) return
+    request.priorValue = prior.resultValue
+    request.deltaPercent = Math.abs(new - priorValue) / Math.abs(priorValue) * 100.0
   }
 
   @Transactional
@@ -157,6 +206,7 @@ class LabService(
     labOrder.resultStatus = "verified"
     labOrder.verifiedAt = Instant.now()
     labOrder.verifiedBy = verifierId
+    custody(labOrder, "VERIFIED", verifierId)
     return getOrderDetail(orderId)
   }
 
@@ -170,6 +220,7 @@ class LabService(
     labOrder.resultStatus = "released"
     labOrder.releasedAt = Instant.now()
     labOrder.releasedBy = releaseorId
+    custody(labOrder, "RELEASED", releaseorId)
     eventPublisher.publish(
       DomainEvent(
         eventId = UUID.randomUUID(),
@@ -194,11 +245,63 @@ class LabService(
   fun rejectOrder(
     orderId: UUID,
     reason: String,
+    rejectedBy: UUID? = null,
+    recollect: Boolean = false,
   ): LabOrderDetailView {
     val labOrder = findOrder(orderId)
     labOrder.status = "rejected"
     labOrder.rejectedReason = reason
+    labOrder.rejectedBy = rejectedBy
+    labOrder.rejectedAt = Instant.now()
+    custody(labOrder, "REJECTED", rejectedBy, reason)
+    // Reject-and-recollect: never edit-in-place — a fresh successor order re-runs the same tests.
+    if (recollect) {
+      val successor =
+        labOrderRepository.save(
+          LabOrder(
+            hospitalId = labOrder.hospitalId,
+            patientId = labOrder.patientId,
+            encounterId = labOrder.encounterId,
+            orderNumber = generateOrderNumber(),
+            priority = labOrder.priority,
+            status = "ordered",
+            resultStatus = "pending",
+            clinicalNote = "Recollect of ${labOrder.orderNumber}: $reason",
+            orderedBy = rejectedBy,
+            orderedAt = Instant.now(),
+            recollectOf = labOrder.id,
+          ),
+        )
+      labTestRequestRepository.findByLabOrderId(orderId).forEach { original ->
+        labTestRequestRepository.save(
+          LabTestRequest(
+            labOrderId = successor.id!!,
+            testCode = original.testCode,
+            testName = original.testName,
+            status = "ordered",
+          ),
+        )
+      }
+      return getOrderDetail(successor.id!!)
+    }
     return getOrderDetail(orderId)
+  }
+
+  private fun custody(
+    labOrder: LabOrder,
+    event: String,
+    actorId: UUID?,
+    note: String? = null,
+  ) {
+    specimenCustodyRepository.save(
+      SpecimenCustody(
+        labOrderId = labOrder.id!!,
+        event = event,
+        actorId = actorId,
+        note = note?.take(400),
+        occurredAt = Instant.now(),
+      ),
+    )
   }
 
   private fun getOrderDetail(
@@ -209,7 +312,8 @@ class LabService(
     // 00.04 tenant sweep (U8): null hospitalId means internal/system caller (mutations, createOrder) — unguarded.
     requireSameHospital(hospitalId, labOrder.hospitalId)
     val tests = labTestRequestRepository.findByLabOrderId(orderId).map { LabTestRequestView.from(it) }
-    return LabOrderDetailView(order = LabOrderView.from(labOrder), tests = tests)
+    val custody = specimenCustodyRepository.findByLabOrderIdOrderByOccurredAtAsc(orderId).map { SpecimenCustodyView.from(it) }
+    return LabOrderDetailView(order = LabOrderView.from(labOrder), tests = tests, custody = custody)
   }
 
   private fun findOrder(orderId: UUID): LabOrder = labOrderRepository.findById(orderId).orElseThrow { IllegalArgumentException("LAB_ORDER_NOT_FOUND") }

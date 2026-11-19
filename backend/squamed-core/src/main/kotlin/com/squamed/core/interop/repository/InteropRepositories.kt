@@ -17,5 +17,7 @@ interface Hl7MessageLogRepository : JpaRepository<Hl7MessageLog, UUID> {
 interface AnalyzerMessageLogRepository : JpaRepository<AnalyzerMessageLog, UUID> {
   fun findAllByOrderByCreatedAtDesc(): List<AnalyzerMessageLog>
 
+  fun findAllByStatusOrderByCreatedAtDesc(status: String): List<AnalyzerMessageLog>
+
   fun countByStatus(status: String): Long
 }

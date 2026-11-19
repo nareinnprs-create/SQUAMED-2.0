@@ -64,6 +64,16 @@ class AnalyzerIntakeService(
       status = "QUARANTINED"
       ackCode = if (transport == "HL7V2") "CE" else null
       reason = (e.message ?: e.javaClass.simpleName).take(400)
+      // zero silent drops: every quarantined payload is alerted on the integration error queue (00.09 DLQ)
+      runCatching {
+        integrationErrorService.record(
+          hospitalId = hospitalId,
+          integration = "analyzer",
+          messageType = messageType,
+          payload = raw.take(20000),
+          error = "QUARANTINED: $reason",
+        )
+      }
     }
     val log = persist(hospitalId, transport, source, messageType, controlId, status, ackCode, reason, raw, parsedJson)
     if (log.id == null) {
@@ -105,6 +115,14 @@ class AnalyzerIntakeService(
       raw,
       null,
     )
+    runCatching {
+      integrationErrorService.record(
+        hospitalId = runCatching { tenantResolver.primaryHospitalId() }.getOrNull(),
+        integration = "analyzer",
+        payload = raw.take(20000),
+        error = "QUARANTINED: ${reason.take(400)}",
+      )
+    }
   }
 
   @Transactional
@@ -123,11 +141,17 @@ class AnalyzerIntakeService(
   fun history(
     limit: Int,
     status: String?,
-  ): List<Map<String, Any?>> =
-    analyzerMessageLogRepository
-      .findAllByOrderByCreatedAtDesc()
+  ): List<Map<String, Any?>> {
+    // Filter by status in the query first — take(limit) after the filter, else the lane
+    // read misses rows that fall outside the newest `limit` window (zero-silent-drop view).
+    val rows =
+      if (status == null) {
+        analyzerMessageLogRepository.findAllByOrderByCreatedAtDesc()
+      } else {
+        analyzerMessageLogRepository.findAllByStatusOrderByCreatedAtDesc(status)
+      }
+    return rows
       .take(limit)
-      .filter { status == null || it.status == status }
       .map { log ->
         mapOf(
           "id" to log.id,
@@ -142,6 +166,7 @@ class AnalyzerIntakeService(
           "createdAt" to log.createdAt,
         )
       }
+  }
 
   fun counts(): Map<String, Any?> =
     mapOf(

@@ -3,6 +3,7 @@ package com.squamed.core.interop.api
 import com.squamed.core.common.api.ApiResponse
 import com.squamed.core.identity.security.RequiresPermission
 import com.squamed.core.identity.security.SquamedPrincipal
+import com.squamed.core.interop.analyzer.AnalyzerIntakeService
 import com.squamed.core.interop.fhir.FhirService
 import com.squamed.core.interop.hl7.Hl7Service
 import com.squamed.core.interop.service.IntegrationConnectionService
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
@@ -127,6 +129,42 @@ class Hl7Controller(
   @GetMapping("/health")
   @RequiresPermission("integration:read:integration")
   fun health(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(hl7Service.health())
+}
+
+data class AnalyzerIntakeRequest(
+  val raw: String,
+  val transport: String = "HL7V2",
+  val source: String? = null,
+)
+
+@RestController
+@RequestMapping("/api/v1/analyzer")
+class AnalyzerController(
+  private val intakeService: AnalyzerIntakeService,
+) {
+  // Intake for Mirth (ADR-14) and the ASTM bridge: ACCEPTED or QUARANTINED, never dropped.
+  @PostMapping("/messages")
+  @RequiresPermission("integration:manage:integration")
+  fun receive(
+    @RequestBody req: AnalyzerIntakeRequest,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(intakeService.intake(req.raw, req.transport, req.source))
+
+  @GetMapping("/messages")
+  @RequiresPermission("integration:read:integration")
+  fun history(
+    @RequestParam(defaultValue = "100") limit: Int,
+    @RequestParam(required = false) status: String?,
+  ): ApiResponse<List<Map<String, Any?>>> = ApiResponse.ok(intakeService.history(limit, status))
+
+  @PostMapping("/messages/{id}:replay")
+  @RequiresPermission("integration:manage:integration")
+  fun replay(
+    @PathVariable id: UUID,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(intakeService.replay(id))
+
+  @GetMapping("/counts")
+  @RequiresPermission("integration:read:integration")
+  fun counts(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(intakeService.counts())
 }
 
 @RestController

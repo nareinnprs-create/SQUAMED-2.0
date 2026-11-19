@@ -54,3 +54,30 @@ class Hl7MessageLog(
   @Column(name = "parsed_json")
   var parsedJson: String? = null,
 ) : BaseEntity()
+
+@Entity
+@Table(name = "analyzer_message_log", schema = "interop")
+class AnalyzerMessageLog(
+  @Column(name = "hospital_id")
+  var hospitalId: UUID? = null,
+  @Column(name = "transport", nullable = false, length = 20)
+  var transport: String,
+  @Column(name = "source", length = 120)
+  var source: String? = null,
+  @Column(name = "message_type", length = 50)
+  var messageType: String? = null,
+  @Column(name = "control_id", length = 100)
+  var controlId: String? = null,
+  @Column(name = "status", nullable = false, length = 20)
+  var status: String,
+  @Column(name = "ack_code", length = 10)
+  var ackCode: String? = null,
+  @Column(name = "reason", length = 400)
+  var reason: String? = null,
+  @Column(name = "raw_message")
+  var rawMessage: String? = null,
+  @Column(name = "parsed_json")
+  var parsedJson: String? = null,
+  @Column(name = "replayed_at")
+  var replayedAt: Instant? = null,
+) : BaseEntity()

@@ -4128,6 +4128,261 @@ class PlatformIntegrationTests {
     }
 
     @Test
+    fun analyzerIntakeZeroSilentDropCoverage() {
+      val token = adminToken()
+      val s = suffix()
+
+      val countsBefore = `data`(api(HttpMethod.GET, "/api/v1/analyzer/counts", token = token))
+      val acceptedBefore = countsBefore["accepted"].asLong()
+      val quarantinedBefore = countsBefore["quarantined"].asLong()
+
+      fun astmFrame(body: String): String {
+        val frame = 0x02.toChar() + body + 0x03.toChar()
+        return frame + (frame.sumOf { it.code } and 0xFF).toString(16).uppercase().padStart(2, '0')
+      }
+
+      // The contract sim (chunk-2 TESTS): 1,000 analyzer messages incl. malformed -
+      // zero silent drops, every malformed message quarantined + alerted.
+      val validHl7 = 790
+      val malformedHl7 = 110
+      val validAstm = 90
+      val malformedAstm = 10
+      for (i in 1..validHl7) {
+        val raw = "MSH|^~\\&|SIM|HOSP|SQUAMED|MIR|20260906120000||ORU^R01^ORU_R01|SIM-$s-$i|P|2.5\rOBX|1|NM|LOINC^WBC||5.0|10^9/L|4-10|||F"
+        val resp = api(HttpMethod.POST, "/api/v1/analyzer/messages", json("raw" to raw, "transport" to "HL7V2", "source" to "sim:cbc"), token)
+        assert2xx(resp, "analyzer intake hl7 valid $i")
+        val d = `data`(resp)
+        assertEquals("ACCEPTED", d["status"].asText(), "hl7 valid $i accepted")
+        assertEquals("AA", d["ackCode"].asText(), "hl7 valid $i ack")
+      }
+      for (i in 1..malformedHl7) {
+        val resp =
+          api(HttpMethod.POST, "/api/v1/analyzer/messages", json("raw" to "GARBAGE-NOT-HL7-$s-$i", "transport" to "HL7V2", "source" to "sim:cbc"), token)
+        assert2xx(resp, "analyzer intake hl7 malformed $i must still answer 2xx")
+        val d = `data`(resp)
+        assertEquals("QUARANTINED", d["status"].asText(), "hl7 malformed $i quarantined")
+        assertEquals("CE", d["ackCode"].asText(), "hl7 malformed $i ack CE")
+        assertTrue(d["reason"].asText().isNotBlank(), "hl7 malformed $i carries a reason")
+      }
+      for (i in 1..validAstm) {
+        val raw =
+          astmFrame("H|\\^&|||Sim^1.0||CBC-$s|P|$i||20261119090000\r\nP|1||MRN-$s-$i^1||Doe^Jane||19800101|F\r\nR|1|^^^K|4.9|mmol/L|3.5-5.1|N||F\r\nL|1|N")
+        val resp = api(HttpMethod.POST, "/api/v1/analyzer/messages", json("raw" to raw, "transport" to "ASTM", "source" to "sim:chem"), token)
+        assert2xx(resp, "analyzer intake astm valid $i")
+        assertEquals("ACCEPTED", `data`(resp)["status"].asText(), "astm valid $i accepted")
+      }
+      for (i in 1..malformedAstm) {
+        val resp =
+          api(
+            HttpMethod.POST,
+            "/api/v1/analyzer/messages",
+            json(
+              "raw" to "P|1||no-header-$s-$i\r\nR|1|x",
+              "transport" to "ASTM",
+              "source" to "sim:chem",
+            ),
+            token,
+          )
+        assert2xx(resp, "analyzer intake astm malformed $i must still answer 2xx")
+        assertEquals("QUARANTINED", `data`(resp)["status"].asText(), "astm malformed $i quarantined")
+      }
+
+      val countsAfter = `data`(api(HttpMethod.GET, "/api/v1/analyzer/counts", token = token))
+      assertEquals(acceptedBefore + validHl7 + validAstm, countsAfter["accepted"].asLong(), "accepted delta")
+      assertEquals(quarantinedBefore + malformedHl7 + malformedAstm, countsAfter["quarantined"].asLong(), "quarantined delta - zero silent drops")
+
+      val quarantined =
+        `data`(api(HttpMethod.GET, "/api/v1/analyzer/messages?status=QUARANTINED&limit=200", token = token))
+      assertTrue(quarantined.isArray && quarantined.size() >= malformedHl7 + malformedAstm, "quarantine lane populated")
+      assertTrue(
+        quarantined.all { it["reason"].asText().isNotBlank() },
+        "every quarantined row carries a reason",
+      )
+
+      // every quarantined payload surfaced on the integration error queue (00.09 DLQ + alert)
+      val dlq = `data`(api(HttpMethod.GET, "/api/v1/admin/events/errors?integration=analyzer&limit=200", token = token))
+      assertTrue(dlq.isArray && dlq.size() >= malformedHl7 + malformedAstm, "quarantined payloads alerted on the DLQ")
+      assertTrue(dlq.all { it["error"].asText().isNotBlank() }, "DLQ rows carry the quarantine reason")
+
+      // replay: a quarantined row re-runs (still quarantined for malformed), accepted rows are not replayable
+      val qRow = quarantined.first()
+      val replayResp = api(HttpMethod.POST, "/api/v1/analyzer/messages/${qRow["id"].asText()}:replay", json(), token)
+      assert2xx(replayResp, "replay quarantined row")
+      assertEquals("QUARANTINED", `data`(replayResp)["status"].asText(), "malformed row stays quarantined on replay")
+      val accRow =
+        `data`(api(HttpMethod.GET, "/api/v1/analyzer/messages?status=ACCEPTED&limit=1", token = token)).first()
+      val replayAccepted = api(HttpMethod.POST, "/api/v1/analyzer/messages/${accRow["id"].asText()}:replay", json(), token)
+      assertEquals(400, replayAccepted.status, "accepted rows are not replayable")
+    }
+
+    /** 02.02 lab workflow core: barcode/accession, custody, delta check, instrument entry, role-gated validation, recollect. */
+    @Test
+    fun labWorkflowCoreCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Lab",
+              "lastName" to "Workflow$s",
+              "gender" to "female",
+              "dateOfBirth" to "1990-01-01",
+              "phone" to "5512$s".take(12),
+              "qid" to "LW$s".take(11),
+              "nationality" to "India",
+              "city" to "Pune",
+            ),
+            token,
+          ),
+        )["patient"]["id"].asText()
+
+      fun labUser(
+        role: String,
+        email: String,
+      ): String {
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to role,
+              "lastName" to "User$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role $email",
+        )
+        val login = api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123"))
+        assert2xx(login, "login $role")
+        return `data`(login)["accessToken"].asText()
+      }
+
+      val tech = labUser("LAB_TECHNICIAN", "labtech-$s@test.local")
+      val pathologist = labUser("PATHOLOGIST", "path-$s@test.local")
+      val testCode = "K-$s"
+
+      fun createLabOrder(priority: String = "routine"): Pair<String, String> {
+        val created =
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/orders",
+            json(
+              "patientId" to patientId,
+              "tests" to listOf(mapOf("testCode" to testCode, "testName" to "Potassium $s")),
+              "priority" to priority,
+            ),
+            token,
+          )
+        assert2xx(created, "create lab order")
+        val order = `data`(created)["order"]
+        return order["id"].asText() to order["orderNumber"].asText()
+      }
+
+      fun runToProcessing(orderId: String): String {
+        val techDetail = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$orderId", token = tech))
+        val testRequestId = techDetail["tests"][0]["id"].asText()
+        assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/collect", json(), token = tech), "collect $orderId")
+        assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/receive", json(), token), "receive $orderId")
+        assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/start", json(), token), "start $orderId")
+        return testRequestId
+      }
+
+      fun enterResult(
+        orderId: String,
+        testRequestId: String,
+        value: String,
+        via: String = "MANUAL",
+      ) {
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/orders/$orderId/results",
+            json(
+              "enteredVia" to via,
+              "results" to
+                listOf(
+                  mapOf(
+                    "testRequestId" to testRequestId,
+                    "resultValue" to value,
+                    "unit" to "mmol/L",
+                    "referenceRange" to "3.5-5.1",
+                  ),
+                ),
+            ),
+            token = tech,
+          ),
+          "enter results $orderId",
+        )
+      }
+
+      // worklist shows uncollected orders, priority-ranked (seed hospital is shared: assert relative order)
+      val (_, emergencyNo) = createLabOrder("emergency")
+      val (_, urgentNo) = createLabOrder("urgent")
+      val (_, routineNo) = createLabOrder("routine")
+      val worklist = `data`(api(HttpMethod.GET, "/api/v1/lab/phlebotomy/worklist", token = tech))
+      assertTrue(worklist.isArray && worklist.size() >= 3, "phlebotomy worklist lists uncollected orders")
+      val numbers = worklist.map { it["orderNumber"].asText() }
+      val ranks = listOf(emergencyNo, urgentNo, routineNo).map { numbers.indexOf(it) }
+      assertTrue(ranks.all { it >= 0 }, "created orders present in worklist: $numbers")
+      assertTrue(ranks[0] < ranks[1] && ranks[1] < ranks[2], "worklist is priority-ranked: $numbers")
+
+      // order 1: full lifecycle with instrument-entered result
+      val (order1, orderNo1) = createLabOrder()
+      assertEquals("LO-", orderNo1.take(3), "order number format")
+      val req1 = runToProcessing(order1)
+      enterResult(order1, req1, "5.2", via = "INSTRUMENT")
+
+      val collected = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$order1", token = tech))
+      assertEquals(orderNo1, collected["order"]["barcodeId"].asText(), "barcode stamped at collect")
+      assertEquals("ACC-$orderNo1", collected["order"]["accessionId"].asText(), "accession stamped at receive")
+      assertEquals("INSTRUMENT", collected["tests"][0]["enteredVia"].asText(), "instrument result entry")
+
+      // role separation: tech cannot validate, pathologist can
+      assertEquals(403, api(HttpMethod.POST, "/api/v1/lab/orders/$order1/verify", json(), token = tech).status, "tech verify -> 403")
+      val verified = api(HttpMethod.POST, "/api/v1/lab/orders/$order1/verify", json(), token = pathologist)
+      assert2xx(verified, "pathologist verify")
+      assertEquals("verified", `data`(verified)["order"]["resultStatus"].asText())
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$order1/release", json(), token = pathologist), "pathologist release")
+
+      val custodyEvents =
+        `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$order1", token = tech))["custody"].map { it["event"].asText() }
+      assertEquals(
+        listOf("COLLECTED", "RECEIVED", "PROCESS_STARTED", "RESULTS_ENTERED", "VERIFIED", "RELEASED"),
+        custodyEvents,
+        "chain of custody records every status change",
+      )
+
+      // order 2: delta check against the prior K result
+      val (order2, _) = createLabOrder()
+      val req2 = runToProcessing(order2)
+      enterResult(order2, req2, "7.8")
+      val deltaRow = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$order2", token = tech))["tests"][0]
+      assertEquals("5.2", deltaRow["priorValue"].asText(), "delta check captures prior value")
+      assertTrue(deltaRow["deltaPercent"].asDouble() > 0.0, "delta percent computed")
+
+      // reject-and-recollect: successor order re-runs the same tests, original stays rejected
+      val (order3, orderNo3) = createLabOrder()
+      val recollected =
+        api(HttpMethod.POST, "/api/v1/lab/orders/$order3/reject", json("reason" to "hemolyzed sample", "recollect" to true), token)
+      assert2xx(recollected, "reject + recollect")
+      val successor = `data`(recollected)
+      assertEquals("ordered", successor["order"]["status"].asText(), "recollect creates a fresh successor")
+      assertEquals(order3, successor["order"]["recollectOf"].asText(), "successor links back to the rejected order")
+      assertEquals(1, successor["tests"].size(), "successor carries the same tests")
+      assertTrue(successor["order"]["orderNumber"].asText() != orderNo3, "successor gets a new order number")
+      val rejected = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$order3", token = tech))
+      assertEquals("rejected", rejected["order"]["status"].asText(), "original stays rejected")
+    }
+
+    @Test
     fun catalogValidationBranchesCoverage() {
       val token = adminToken()
       val s = suffix()

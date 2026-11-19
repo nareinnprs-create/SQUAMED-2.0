@@ -2740,6 +2740,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analyzer/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["history_1"];
+        put?: never;
+        post: operations["receive_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analyzer/messages/{id}:replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["replay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/anaesthesia/records": {
         parameters: {
             query?: never;
@@ -4100,6 +4132,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lab/phlebotomy/worklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["phlebotomyWorklist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lab/orders/{id}": {
         parameters: {
             query?: never;
@@ -4732,6 +4780,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analyzer/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["counts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7416,6 +7480,7 @@ export interface components {
         LabOrderDetailView: {
             order: components["schemas"]["LabOrderView"];
             tests: components["schemas"]["LabTestRequestView"][];
+            custody: components["schemas"]["SpecimenCustodyView"][];
         };
         LabOrderView: {
             /** Format: uuid */
@@ -7446,6 +7511,10 @@ export interface components {
             /** Format: date-time */
             completedAt?: string;
             rejectedReason?: string;
+            barcodeId?: string;
+            accessionId?: string;
+            /** Format: uuid */
+            recollectOf?: string;
             /** Format: date-time */
             verifiedAt?: string;
             /** Format: uuid */
@@ -7476,9 +7545,22 @@ export interface components {
             resultEnteredBy?: string;
             /** Format: date-time */
             resultEnteredAt?: string;
+            priorValue?: string;
+            /** Format: double */
+            deltaPercent?: number;
+            enteredVia: string;
+        };
+        SpecimenCustodyView: {
+            event: string;
+            /** Format: uuid */
+            actorId?: string;
+            note?: string;
+            /** Format: date-time */
+            occurredAt?: string;
         };
         EnterResultsDto: {
             results: components["schemas"]["LabTestResultInput"][];
+            enteredVia?: string;
         };
         LabTestResultInput: {
             /** Format: uuid */
@@ -7490,6 +7572,7 @@ export interface components {
         };
         RejectRequestDto: {
             reason: string;
+            recollect: boolean;
         };
         CollectRequestDto: {
             /** Format: uuid */
@@ -9080,6 +9163,11 @@ export interface components {
         RescheduleDto: {
             /** Format: uuid */
             slotId?: string;
+        };
+        AnalyzerIntakeRequest: {
+            raw: string;
+            transport: string;
+            source?: string;
         };
         AnaesthesiaRecordCreateDto: {
             /** Format: uuid */
@@ -17250,6 +17338,75 @@ export interface operations {
             };
         };
     };
+    history_1: {
+        parameters: {
+            query?: {
+                limit?: number;
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListMapStringObject"];
+                };
+            };
+        };
+    };
+    receive_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalyzerIntakeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    replay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
     createRecord: {
         parameters: {
             query?: never;
@@ -19531,6 +19688,26 @@ export interface operations {
             };
         };
     };
+    phlebotomyWorklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListLabOrderView"];
+                };
+            };
+        };
+    };
     getOrder: {
         parameters: {
             query?: never;
@@ -20380,6 +20557,26 @@ export interface operations {
             };
         };
     };
+    counts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
     queue: {
         parameters: {
             query?: never;
@@ -20877,4 +21074,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: e94d5949b7115c5b37d1bccb81bd1910381c09ad13a252cfb633470708b23b48
+// openapi snapshot sha256: e4cc52b290d8fa665ea7e6bf2991667dfb59e6afa4025c0ec25cca909129526b

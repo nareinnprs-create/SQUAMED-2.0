@@ -2,6 +2,7 @@ package com.squamed.core.laboratory.api
 
 import com.squamed.core.laboratory.domain.LabOrder
 import com.squamed.core.laboratory.domain.LabTestRequest
+import com.squamed.core.laboratory.domain.SpecimenCustody
 import java.time.Instant
 import java.util.UUID
 
@@ -30,6 +31,7 @@ data class LabTestResultInput(
 
 data class EnterResultsDto(
   val results: List<LabTestResultInput>,
+  val enteredVia: String? = null,
 )
 
 data class CollectRequestDto(
@@ -38,6 +40,7 @@ data class CollectRequestDto(
 
 data class RejectRequestDto(
   val reason: String,
+  val recollect: Boolean = false,
 )
 
 data class LabOrderView(
@@ -58,6 +61,9 @@ data class LabOrderView(
   val startedAt: Instant?,
   val completedAt: Instant?,
   val rejectedReason: String?,
+  val barcodeId: String?,
+  val accessionId: String?,
+  val recollectOf: UUID?,
   val verifiedAt: Instant?,
   val verifiedBy: UUID?,
   val releasedAt: Instant?,
@@ -85,6 +91,9 @@ data class LabOrderView(
         startedAt = entity.startedAt,
         completedAt = entity.completedAt,
         rejectedReason = entity.rejectedReason,
+        barcodeId = entity.barcodeId,
+        accessionId = entity.accessionId,
+        recollectOf = entity.recollectOf,
         verifiedAt = entity.verifiedAt,
         verifiedBy = entity.verifiedBy,
         releasedAt = entity.releasedAt,
@@ -108,6 +117,9 @@ data class LabTestRequestView(
   val notes: String?,
   val resultEnteredBy: UUID?,
   val resultEnteredAt: Instant?,
+  val priorValue: String?,
+  val deltaPercent: Double?,
+  val enteredVia: String,
 ) {
   companion object {
     fun from(entity: LabTestRequest) =
@@ -124,6 +136,26 @@ data class LabTestRequestView(
         notes = entity.notes,
         resultEnteredBy = entity.resultEnteredBy,
         resultEnteredAt = entity.resultEnteredAt,
+        priorValue = entity.priorValue,
+        deltaPercent = entity.deltaPercent,
+        enteredVia = entity.enteredVia,
+      )
+  }
+}
+
+data class SpecimenCustodyView(
+  val event: String,
+  val actorId: UUID?,
+  val note: String?,
+  val occurredAt: Instant?,
+) {
+  companion object {
+    fun from(entity: SpecimenCustody) =
+      SpecimenCustodyView(
+        event = entity.event,
+        actorId = entity.actorId,
+        note = entity.note,
+        occurredAt = entity.occurredAt,
       )
   }
 }
@@ -131,4 +163,5 @@ data class LabTestRequestView(
 data class LabOrderDetailView(
   val order: LabOrderView,
   val tests: List<LabTestRequestView> = emptyList(),
+  val custody: List<SpecimenCustodyView> = emptyList(),
 )

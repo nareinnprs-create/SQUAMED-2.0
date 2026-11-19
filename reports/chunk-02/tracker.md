@@ -17,6 +17,7 @@ Seed frame: 00.00. Keep one line per PIT.
 | 00.10  | bill eligibility | PASS | 43548016617 | Refund status enters delays queue; async cleanup avoids race |
 | 02.01 | analyzer_intake_zero_silent_drop_coverage | PASS | 44488415740 | COMPLETE | 1000 messages (790 hl7 valid, 110 malformed, 90 astm valid, 10 malformed); 0 silent drops; DLQ alert per quarantine; quotients match gate expectations |
 | 02.02 | labWorkflowCoreCoverage | PASS | 44488415740 | COMPLETE | worklist priority rank (emergency>urgent>routine); barcode=order no at collect, ACC- accession at receive; custody chain 6 events; delta priorValue+percent; INSTRUMENT enteredVia; tech verify 403 / pathologist verify+release 200; reject-and-recollect successor carries same tests + recollectOf link |
+| 02.06 | pharmacyFefoAndLedgerCoverage | PASS | 44538984201 | COMPLETE | FEFO earliest-expiry batch picked (B2 +60d over B1 +120d); NEAR_EXPIRY_BLOCK ≤30d; controlled dispense rejected without secondAuthorizerId → register row with both actor ids + batch; substitution reason mandatory + recorded; DRUG_INACTIVE gate on stock intake + formulary; wastage 50→43 with ledger note, over-wastage rejected; ledger deltas sum == on-hand (trigger-enforced balance); indent receive +100 via ledger; min-level alert row |
 
 ---
 

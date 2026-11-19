@@ -41,4 +41,14 @@ class Dispensation(
   var totalPrice: BigDecimal = BigDecimal.ZERO,
   @Column(name = "notes")
   var notes: String? = null,
+  @Column(name = "stock_id")
+  var stockId: UUID? = null,
+  @Column(name = "batch_number", length = 100)
+  var batchNumber: String? = null,
+  @Column(name = "substituted_drug_id")
+  var substitutedDrugId: UUID? = null,
+  @Column(name = "substituted_drug_name", length = 255)
+  var substitutedDrugName: String? = null,
+  @Column(name = "substitution_reason", length = 400)
+  var substitutionReason: String? = null,
 ) : BaseEntity()

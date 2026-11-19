@@ -1044,6 +1044,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/pharmacy/stock/{id}/wastage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["recordWastage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pharmacy/indents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listIndents"];
+        put?: never;
+        post: operations["createIndent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pharmacy/indents/{id}/receive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["receiveIndent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pharmacy/formulary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listFormulary"];
+        put?: never;
+        post: operations["addToFormulary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pharmacy/dispensations": {
         parameters: {
             query?: never;
@@ -1867,7 +1931,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["listAlerts"];
+        get: operations["listAlerts_1"];
         put?: never;
         post: operations["createAlert"];
         delete?: never;
@@ -4020,6 +4084,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/pharmacy/stock/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listLedger"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pharmacy/stock/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAlerts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pharmacy/controlled-register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listControlledRegister"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/patients/{id}/documents/{documentId}/download": {
         parameters: {
             query?: never;
@@ -5055,6 +5167,22 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["cancelWaitlistEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pharmacy/formulary/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["removeFromFormulary"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6809,6 +6937,79 @@ export interface components {
             location?: string;
             isActive?: boolean;
         };
+        WastageRequestDto: {
+            /** Format: int32 */
+            quantity: number;
+            reason?: string;
+        };
+        IndentRequestDto: {
+            /** Format: uuid */
+            drugId?: string;
+            drugName?: string;
+            /** Format: int32 */
+            quantityRequested: number;
+            note?: string;
+        };
+        ApiResponseIndentView: {
+            data?: components["schemas"]["IndentView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        IndentView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            drugId?: string;
+            drugName: string;
+            /** Format: int32 */
+            quantityRequested: number;
+            /** Format: int32 */
+            quantityReceived: number;
+            status: string;
+            note?: string;
+            /** Format: uuid */
+            requestedBy?: string;
+            /** Format: date-time */
+            receivedAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        IndentReceiveRequestDto: {
+            /** Format: int32 */
+            quantityReceived: number;
+        };
+        FormularyRequestDto: {
+            /** Format: uuid */
+            drugId: string;
+            notes?: string;
+        };
+        ApiResponseFormularyEntryView: {
+            data?: components["schemas"]["FormularyEntryView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        FormularyEntryView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            drugId: string;
+            drugName?: string;
+            drugCode?: string;
+            isActive: boolean;
+            notes?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
         DispenseRequestDto: {
             /** Format: uuid */
             prescriptionId?: string;
@@ -6825,6 +7026,12 @@ export interface components {
             quantity: number;
             unitPrice?: number;
             notes?: string;
+            /** Format: uuid */
+            substitutedDrugId?: string;
+            substitutedDrugName?: string;
+            substitutionReason?: string;
+            /** Format: uuid */
+            secondAuthorizerId?: string;
         };
         ApiResponseDispensationView: {
             data?: components["schemas"]["DispensationView"];
@@ -6861,6 +7068,13 @@ export interface components {
             unitPrice: number;
             totalPrice: number;
             notes?: string;
+            /** Format: uuid */
+            stockId?: string;
+            batchNumber?: string;
+            /** Format: uuid */
+            substitutedDrugId?: string;
+            substitutedDrugName?: string;
+            substitutionReason?: string;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -9951,12 +10165,85 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListStockLedgerView: {
+            data?: components["schemas"]["StockLedgerView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        StockLedgerView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            stockId: string;
+            movement: string;
+            /** Format: int32 */
+            quantityDelta: number;
+            /** Format: int32 */
+            balanceAfter: number;
+            referenceType?: string;
+            /** Format: uuid */
+            referenceId?: string;
+            /** Format: uuid */
+            actorId?: string;
+            note?: string;
+            /** Format: date-time */
+            occurredAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ApiResponseListIndentView: {
+            data?: components["schemas"]["IndentView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListFormularyEntryView: {
+            data?: components["schemas"]["FormularyEntryView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListDispensationView: {
             data?: components["schemas"]["DispensationView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseListControlledRegisterView: {
+            data?: components["schemas"]["ControlledRegisterView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ControlledRegisterView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            dispensationId?: string;
+            /** Format: uuid */
+            drugId?: string;
+            drugName: string;
+            batchNumber?: string;
+            /** Format: int32 */
+            quantity: number;
+            /** Format: uuid */
+            dispensedBy?: string;
+            /** Format: uuid */
+            secondAuthorizerId: string;
+            /** Format: date-time */
+            occurredAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
         };
         ApiResponseListPatientSummaryDto: {
             data?: components["schemas"]["PatientSummaryDto"][];
@@ -13263,6 +13550,146 @@ export interface operations {
             };
         };
     };
+    recordWastage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WastageRequestDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePharmacyStockView"];
+                };
+            };
+        };
+    };
+    listIndents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListIndentView"];
+                };
+            };
+        };
+    };
+    createIndent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IndentRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseIndentView"];
+                };
+            };
+        };
+    };
+    receiveIndent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IndentReceiveRequestDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseIndentView"];
+                };
+            };
+        };
+    };
+    listFormulary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListFormularyEntryView"];
+                };
+            };
+        };
+    };
+    addToFormulary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FormularyRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseFormularyEntryView"];
+                };
+            };
+        };
+    };
     listDispensations: {
         parameters: {
             query?: {
@@ -15260,7 +15687,7 @@ export interface operations {
             };
         };
     };
-    listAlerts: {
+    listAlerts_1: {
         parameters: {
             query?: {
                 patientId?: string;
@@ -19534,6 +19961,68 @@ export interface operations {
             };
         };
     };
+    listLedger: {
+        parameters: {
+            query?: {
+                stockId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListStockLedgerView"];
+                };
+            };
+        };
+    };
+    listAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPharmacyStockView"];
+                };
+            };
+        };
+    };
+    listControlledRegister: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListControlledRegisterView"];
+                };
+            };
+        };
+    };
     downloadDocument: {
         parameters: {
             query?: never;
@@ -20912,6 +21401,28 @@ export interface operations {
             };
         };
     };
+    removeFromFormulary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseFormularyEntryView"];
+                };
+            };
+        };
+    };
     deleteRelationship: {
         parameters: {
             query?: never;
@@ -21074,4 +21585,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: e4cc52b290d8fa665ea7e6bf2991667dfb59e6afa4025c0ec25cca909129526b
+// openapi snapshot sha256: f1339caf56a5d13bc1b0bf4653d6c554b5aa5f690b7b2df3ba70d6c35427a8d6

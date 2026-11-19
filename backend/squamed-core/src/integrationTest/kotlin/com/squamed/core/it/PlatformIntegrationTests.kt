@@ -4933,6 +4933,251 @@ class PlatformIntegrationTests {
       assertTrue(reject.status in 200..299 || reject.status == 409, "reject lab order -> ${reject.status}")
     }
 
+    // 02.06 pharmacy stock governance: FEFO + near-expiry BLOCK, drug-master activation,
+    // formulary, indents, audited substitution, trigger-enforced ledger, min-level alerts,
+    // controlled register (CS-04 pharmacist leg), wastage.
+    @Test
+    fun pharmacyFefoAndLedgerCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val adminId = adminUserId()
+      ensureSeed(token)
+
+      val drugAId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/drugs",
+            json("code" to "FEFO-A-$s", "name" to "Fefo Drug A", "category" to "General", "unit" to "tab"),
+            token,
+          ),
+        )["id"].asText()
+      val drugBId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/drugs",
+            json("code" to "FEFO-B-$s", "name" to "Fefo Drug B", "category" to "Controlled", "unit" to "tab", "isControlled" to true),
+            token,
+          ),
+        )["id"].asText()
+      val drugCId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/drugs",
+            json("code" to "FEFO-C-$s", "name" to "Fefo Drug C", "category" to "General", "unit" to "tab"),
+            token,
+          ),
+        )["id"].asText()
+      val drugDId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/drugs",
+            json("code" to "FEFO-D-$s", "name" to "Fefo Drug D", "category" to "General", "unit" to "tab"),
+            token,
+          ),
+        )["id"].asText()
+
+      fun addStock(
+        drugId: String,
+        name: String,
+        batch: String,
+        qty: Int,
+        reorder: Int,
+        expiryDays: Long? = null,
+      ): JsonNode =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/pharmacy/stock",
+            json(
+              "drugId" to drugId,
+              "drugName" to name,
+              "batchNumber" to batch,
+              "quantityOnHand" to qty,
+              "reorderLevel" to reorder,
+              "expiryDate" to expiryDays?.let { LocalDate.now().plusDays(it).toString() },
+            ),
+            token,
+          ),
+        )
+
+      val b1 = addStock(drugAId, "Fefo Drug A", "B1-$s", 50, 5, 120)
+      val b2 = addStock(drugAId, "Fefo Drug A", "B2-$s", 40, 5, 60)
+      addStock(drugDId, "Fefo Drug D", "BD-$s", 10, 5, 10) // near-expiry plain drug: FEFO would pick this one
+      val bB2 = addStock(drugBId, "Fefo Drug B", "BB2-$s", 10, 5, 90)
+      val bC = addStock(drugCId, "Fefo Drug C", "BC-$s", 3, 5) // below reorder level -> alert
+
+      // Formulary: add A + C, duplicate rejected, list resolves drug names.
+      assert2xx(api(HttpMethod.POST, "/api/v1/pharmacy/formulary", json("drugId" to drugAId), token), "add formulary A")
+      assert2xx(api(HttpMethod.POST, "/api/v1/pharmacy/formulary", json("drugId" to drugCId), token), "add formulary C")
+      assert4xx(api(HttpMethod.POST, "/api/v1/pharmacy/formulary", json("drugId" to drugAId), token), "duplicate formulary entry rejected")
+      val formulary = `data`(api(HttpMethod.GET, "/api/v1/pharmacy/formulary", token = token))
+      assertTrue(
+        formulary.any { it["drugName"].asText() == "Fefo Drug A" } && formulary.any { it["drugName"].asText() == "Fefo Drug C" },
+        "formulary lists drugs by name",
+      )
+
+      // FEFO: dispense A without stockId -> earliest-expiry batch (B2, +60d) is picked.
+      val fefo =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/pharmacy/dispensations",
+            json("patientId" to adminId, "drugId" to drugAId, "drugName" to "Fefo Drug A", "quantity" to 5),
+            token,
+          ),
+        )
+      assertEquals("B2-$s", fefo["batchNumber"].asText(), "FEFO picks earliest-expiry batch")
+      val b2Ledger = `data`(api(HttpMethod.GET, "/api/v1/pharmacy/stock/ledger?stockId=${b2["id"].asText()}", token = token))
+      assertEquals("DISPENSE", b2Ledger[0]["movement"].asText(), "dispense lands in ledger")
+      assertEquals(35, b2Ledger[0]["balanceAfter"].asInt(), "ledger balance after dispense")
+      assertEquals(-5, b2Ledger[0]["quantityDelta"].asInt(), "ledger delta negative on dispense")
+
+      // Near-expiry BLOCK: only near-expiry batch covers drug D via FEFO.
+      val blocked =
+        api(
+          HttpMethod.POST,
+          "/api/v1/pharmacy/dispensations",
+          json("patientId" to adminId, "drugId" to drugDId, "drugName" to "Fefo Drug D", "quantity" to 1),
+          token,
+        )
+      assert4xx(blocked, "near-expiry dispense blocked")
+      assertTrue(blocked.body.contains("NEAR_EXPIRY_BLOCK"), "near-expiry error code: ${blocked.body.take(200)}")
+
+      // Controlled drug (CS-04 pharmacist leg): second authorizer required + register row.
+      val noSecond =
+        api(
+          HttpMethod.POST,
+          "/api/v1/pharmacy/dispensations",
+          json("patientId" to adminId, "drugId" to drugBId, "stockId" to bB2["id"].asText(), "drugName" to "Fefo Drug B", "quantity" to 2),
+          token,
+        )
+      assert4xx(noSecond, "controlled dispense without second authorizer rejected")
+      assertTrue(noSecond.body.contains("SECOND_AUTHORIZER_REQUIRED"), "second-authorizer error code")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/pharmacy/dispensations",
+          json(
+            "patientId" to adminId,
+            "drugId" to drugBId,
+            "stockId" to bB2["id"].asText(),
+            "drugName" to "Fefo Drug B",
+            "quantity" to 2,
+            "secondAuthorizerId" to adminId,
+          ),
+          token,
+        ),
+        "controlled dispense with second authorizer",
+      )
+      val register = `data`(api(HttpMethod.GET, "/api/v1/pharmacy/controlled-register", token = token))
+      assertTrue(
+        register.any { it["drugName"].asText() == "Fefo Drug B" && it["secondAuthorizerId"].asText() == adminId && it["batchNumber"].asText() == "BB2-$s" },
+        "controlled register row with second authorizer",
+      )
+
+      // Substitution audited: reason required; recorded on the dispensation.
+      assert4xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/pharmacy/dispensations",
+          json(
+            "patientId" to adminId,
+            "drugId" to drugAId,
+            "stockId" to b1["id"].asText(),
+            "drugName" to "Fefo Drug A",
+            "quantity" to 1,
+            "substitutedDrugName" to "Fefo Generic",
+          ),
+          token,
+        ),
+        "substitution without reason rejected",
+      )
+      val subst =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/pharmacy/dispensations",
+            json(
+              "patientId" to adminId,
+              "drugId" to drugAId,
+              "stockId" to b1["id"].asText(),
+              "drugName" to "Fefo Drug A",
+              "quantity" to 2,
+              "substitutedDrugName" to "Fefo Generic",
+              "substitutionReason" to "brand out of stock",
+            ),
+            token,
+          ),
+        )
+      assertEquals("B1-$s", subst["batchNumber"].asText(), "batch snapshot on explicit dispense")
+      assertEquals("brand out of stock", subst["substitutionReason"].asText(), "substitution reason recorded")
+      assertEquals("Fefo Generic", subst["substitutedDrugName"].asText(), "substituted drug recorded")
+
+      // Drug-master activation gate: inactive drug cannot enter stock or formulary.
+      assert2xx(
+        api(HttpMethod.PATCH, "/api/v1/master-data/drugs/$drugCId/active", json("isActive" to false), token),
+        "deactivate drug C",
+      )
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/pharmacy/stock", json("drugId" to drugCId, "drugName" to "Fefo Drug C", "quantityOnHand" to 1), token),
+        "inactive drug rejected on stock intake",
+      )
+      assert4xx(api(HttpMethod.POST, "/api/v1/pharmacy/formulary", json("drugId" to drugCId), token), "inactive drug rejected on formulary add")
+      val cEntryId = formulary.first { it["drugName"].asText() == "Fefo Drug C" }["id"].asText()
+      assert2xx(api(HttpMethod.DELETE, "/api/v1/pharmacy/formulary/$cEntryId", token = token), "remove formulary entry")
+
+      // Wastage: quantity drops, ledger row carries the reason; over-wastage rejected.
+      val wasted =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/pharmacy/stock/${b1["id"].asText()}/wastage", json("quantity" to 5, "reason" to "damaged vial"), token),
+        )
+      assertEquals(43, wasted["quantityOnHand"].asInt(), "wastage reduces on-hand (50 - 2 dispensed - 5 wasted)")
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/pharmacy/stock/${b1["id"].asText()}/wastage", json("quantity" to 999, "reason" to "oops"), token),
+        "over-wastage rejected",
+      )
+
+      // Trigger-enforced ledger: running balance reconstructs on-hand exactly.
+      val b1Ledger = `data`(api(HttpMethod.GET, "/api/v1/pharmacy/stock/ledger?stockId=${b1["id"].asText()}", token = token))
+      assertEquals(43, b1Ledger.sumOf { it["quantityDelta"].asInt() }, "ledger deltas sum to on-hand")
+      assertEquals(43, b1Ledger[0]["balanceAfter"].asInt(), "latest balance_after matches stock")
+      val movements = b1Ledger.map { it["movement"].asText() }.toSet()
+      assertTrue(movements.containsAll(setOf("INTAKE", "DISPENSE", "WASTAGE")), "movements logged: $movements")
+      val wastageRow = b1Ledger.first { it["movement"].asText() == "WASTAGE" }
+      assertEquals("damaged vial", wastageRow["note"].asText(), "wastage reason in ledger note")
+
+      // Indents: create -> receive adds stock through the ledger.
+      val indent =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/pharmacy/indents", json("drugId" to drugAId, "quantityRequested" to 100, "note" to "ward restock"), token),
+        )
+      assertEquals("Fefo Drug A", indent["drugName"].asText(), "indent drug name resolved from master data")
+      val stockBefore =
+        `data`(api(HttpMethod.GET, "/api/v1/pharmacy/stock", token = token))
+          .filter { it["drugId"].asText() == drugAId }
+          .sumOf { it["quantityOnHand"].asInt() }
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/pharmacy/indents/${indent["id"].asText()}/receive", json("quantityReceived" to 100), token),
+        "receive indent",
+      )
+      val stockAfter =
+        `data`(api(HttpMethod.GET, "/api/v1/pharmacy/stock", token = token))
+          .filter { it["drugId"].asText() == drugAId }
+          .sumOf { it["quantityOnHand"].asInt() }
+      assertEquals(stockBefore + 100, stockAfter, "indent receive adds stock")
+      assert2xx(api(HttpMethod.GET, "/api/v1/pharmacy/indents", token = token), "list indents")
+      val indents = `data`(api(HttpMethod.GET, "/api/v1/pharmacy/indents", token = token))
+      assertTrue(indents.any { it["status"].asText() == "received" && it["quantityReceived"].asInt() == 100 }, "indent received")
+
+      // Min-level alerts: drug C stock (3 <= reorder 5) appears.
+      val alerts = `data`(api(HttpMethod.GET, "/api/v1/pharmacy/stock/alerts", token = token))
+      assertTrue(alerts.any { it["drugName"].asText() == "Fefo Drug C" }, "low-stock alert for drug C")
+    }
+
     @Test
     fun financialAndOperationsCoverage() {
       val token = adminToken()

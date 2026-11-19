@@ -5179,6 +5179,229 @@ class PlatformIntegrationTests {
     }
 
     @Test
+    fun criticalResultsQcCoverage() {
+      val token = adminToken()
+      val s = suffix()
+
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Cristina",
+              "lastName" to "Critical$s",
+              "gender" to "female",
+              "dateOfBirth" to "1988-03-03",
+              "phone" to "5555$s".take(11),
+              "qid" to "CR$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+            ),
+            token,
+          ),
+        )["patient"]["id"].asText()
+      val master =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/lab-tests",
+            json(
+              "code" to "CRIT-$s",
+              "name" to "Critical Potassium $s",
+              "unit" to "mmol/L",
+              "referenceRange" to "3.5-5.1",
+              "criticalLow" to 2.0,
+              "criticalHigh" to 10.0,
+              "criticalSlaMinutes" to 60,
+            ),
+            token,
+          ),
+        )
+      assertEquals(2.0, master["criticalLow"].asDouble(), "master critical low stored")
+      assertEquals(60, master["criticalSlaMinutes"].asInt(), "master critical SLA stored")
+      val testCode = "CRIT-$s"
+
+      fun createCriticalOrder(): Pair<String, String> {
+        val created =
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/orders",
+            json(
+              "patientId" to patientId,
+              "tests" to listOf(mapOf("testCode" to testCode, "testName" to "Critical Potassium $s")),
+            ),
+            token,
+          )
+        assert2xx(created, "create critical order")
+        val orderId = `data`(created)["order"]["id"].asText()
+        val testRequestId = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$orderId", token = token))["tests"][0]["id"].asText()
+        assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/collect", json(), token), "collect $orderId")
+        assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/receive", json(), token), "receive $orderId")
+        assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/start", json(), token), "start $orderId")
+        return orderId to testRequestId
+      }
+
+      fun enter(
+        orderId: String,
+        testRequestId: String,
+        value: String,
+      ) {
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/orders/$orderId/results",
+            json(
+              "results" to
+                listOf(
+                  mapOf(
+                    "testRequestId" to testRequestId,
+                    "resultValue" to value,
+                    "unit" to "mmol/L",
+                    "referenceRange" to "3.5-5.1",
+                  ),
+                ),
+            ),
+            token,
+          ),
+          "enter result $value on $orderId",
+        )
+      }
+
+      fun openCriticals(orderId: String) =
+        `data`(api(HttpMethod.GET, "/api/v1/lab/critical-results?status=OPEN", token = token))
+          .filter { it["labOrderId"].asText() == orderId }
+
+      // Order A: critically LOW result opens an unacknowledged critical result.
+      val (orderA, reqA) = createCriticalOrder()
+      enter(orderA, reqA, "1.0")
+      val criticalsA = openCriticals(orderA)
+      assertEquals(1, criticalsA.size, "exactly one open critical result for order A")
+      val criticalA = criticalsA.single()
+      assertEquals("CRITICAL_LOW", criticalA["criticality"].asText(), "criticality below critical_low")
+      assertEquals("1.0", criticalA["resultValue"].asText(), "critical result snapshots the triggering value")
+      assertEquals(0, criticalA["escalationLevel"].asInt(), "fresh critical result not yet escalated")
+      assertEquals("none", criticalA["escalationRole"].asText(), "fresh critical result role none")
+
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderA/verify", json(), token), "verify order A")
+      val blockedA = api(HttpMethod.POST, "/api/v1/lab/orders/$orderA/release", json(), token)
+      assert4xx(blockedA, "release blocked while critical result unacked")
+      assertTrue(blockedA.body.contains("CRITICAL_RESULT_UNACKED"), "unacked-critical error: ${blockedA.body.take(200)}")
+
+      val ackedA = api(HttpMethod.POST, "/api/v1/lab/critical-results/${criticalA["id"].asText()}/ack", json("note" to "called attending"), token)
+      assert2xx(ackedA, "ack critical result A")
+      assertEquals("ACKNOWLEDGED", `data`(ackedA)["status"].asText(), "ack flips status")
+      val ackTrailA = `data`(api(HttpMethod.GET, "/api/v1/lab/critical-results/${criticalA["id"].asText()}/acks", token = token))
+      assertEquals(1, ackTrailA.size(), "ack appends a trail row")
+      assertEquals("called attending", ackTrailA[0]["note"].asText(), "ack note recorded")
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/lab/critical-results/${criticalA["id"].asText()}/ack", json(), token),
+        "second ack rejected",
+      )
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderA/release", json(), token), "release after ack")
+
+      // Order B: critically HIGH + >=100% delta jump vs A blocks verify without an override note.
+      val (orderB, reqB) = createCriticalOrder()
+      enter(orderB, reqB, "12.0")
+      val verifyB = api(HttpMethod.POST, "/api/v1/lab/orders/$orderB/verify", json(), token)
+      assert4xx(verifyB, "delta-blocked verify without override")
+      assertTrue(verifyB.body.contains("DELTA_THRESHOLD_BLOCK"), "delta threshold error: ${verifyB.body.take(200)}")
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/lab/orders/$orderB/verify", json("overrideNote" to "clinically expected rise"), token),
+        "verify with delta override note",
+      )
+      val testRowB = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$orderB", token = token))["tests"][0]
+      assertEquals("1.0", testRowB["priorValue"].asText(), "delta prior captured from order A")
+      assertTrue(testRowB["deltaPercent"].asDouble() >= 100.0, "delta percent above threshold")
+      assertTrue(testRowB["isDeltaBlocked"].asBoolean(), "delta block flagged on the test request")
+      val criticalsB = openCriticals(orderB)
+      assertEquals(1, criticalsB.size, "order B critical HIGH open")
+      assertEquals("CRITICAL_HIGH", criticalsB.single()["criticality"].asText(), "criticality above critical_high")
+
+      // Order C: critical HIGH again, flat delta vs B; QC REJECTED hard-blocks release.
+      val (orderC, reqC) = createCriticalOrder()
+      enter(orderC, reqC, "12.0")
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderC/verify", json(), token), "verify order C (flat delta)")
+
+      // Westgard: z = (6.0 - 5.0) / 0.2 = 5.0 -> 1_3S REJECTED.
+      val qcRejected =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/qc-runs",
+            json(
+              "testCode" to testCode,
+              "level" to "NORMAL",
+              "observedValue" to 6.0,
+              "targetMean" to 5.0,
+              "targetSd" to 0.2,
+              "instrument" to "cobas-$s",
+            ),
+            token,
+          ),
+        )
+      assertEquals("REJECTED", qcRejected["status"].asText(), "z=5 triggers 1_3S reject")
+      assertEquals("1_3S", qcRejected["westgardRules"].asText(), "westgard rules recorded as CSV")
+      assertEquals(5.0, qcRejected["zValue"].asDouble(), "z-value exposed on the run")
+      val qcBlockedC = api(HttpMethod.POST, "/api/v1/lab/orders/$orderC/release", json(), token)
+      assert4xx(qcBlockedC, "QC REJECTED blocks release")
+      assertTrue(qcBlockedC.body.contains("QC_BLOCK"), "qc block error: ${qcBlockedC.body.take(200)}")
+
+      // Westgard: z = 0 -> ACCEPTED; release now blocked by the open critical result instead.
+      val qcAccepted =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/qc-runs",
+            json("testCode" to testCode, "level" to "NORMAL", "observedValue" to 5.0, "targetMean" to 5.0, "targetSd" to 0.2),
+            token,
+          ),
+        )
+      assertEquals("ACCEPTED", qcAccepted["status"].asText(), "z=0 accepted, no rules fired")
+      val critBlockedC = api(HttpMethod.POST, "/api/v1/lab/orders/$orderC/release", json(), token)
+      assert4xx(critBlockedC, "release blocked by open critical result after QC fix")
+      assertTrue(critBlockedC.body.contains("CRITICAL_RESULT_UNACKED"), "unacked error after QC fix: ${critBlockedC.body.take(200)}")
+      val criticalC = `data`(api(HttpMethod.GET, "/api/v1/lab/critical-results?status=OPEN", token = token)).first { it["labOrderId"].asText() == orderC }
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/lab/critical-results/${criticalC["id"].asText()}/ack", json(), token),
+        "ack order C critical result",
+      )
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderC/release", json(), token), "release after QC accepted + ack")
+
+      // Westgard: z = (5.5 - 5.0) / 0.2 = 2.5 -> 1_2S WARNING.
+      val qcWarning =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/qc-runs",
+            json("testCode" to testCode, "level" to "NORMAL", "observedValue" to 5.5, "targetMean" to 5.0, "targetSd" to 0.2),
+            token,
+          ),
+        )
+      assertEquals("WARNING", qcWarning["status"].asText(), "z=2.5 triggers 1_2S warning")
+
+      // Dashboard reads: qc run history + SLA escalation metadata on the critical-result line.
+      val qcList =
+        `data`(api(HttpMethod.GET, "/api/v1/lab/qc-runs", token = token)).filter { it["testCode"].asText() == testCode }
+      assertEquals(3, qcList.size, "qc run history for the test")
+      assertTrue(
+        qcList.map { it["status"].asText() }.containsAll(listOf("REJECTED", "ACCEPTED", "WARNING")),
+        "qc statuses recorded: ${qcList.map { it["status"].asText() }}",
+      )
+      assertEquals("WARNING", qcList[0]["status"].asText(), "latest qc run listed first")
+      val criticals =
+        `data`(api(HttpMethod.GET, "/api/v1/lab/critical-results", token = token))
+          .filter { setOf(orderA, orderB, orderC).contains(it["labOrderId"].asText()) }
+      assertEquals(3, criticals.size, "three critical results across the three orders")
+      assertTrue(
+        criticals.all { it.has("escalationLevel") && it.has("escalationRole") && it.has("slaMinutes") },
+        "dashboard line carries SLA escalation metadata",
+      )
+      assertEquals(60, criticals[0]["slaMinutes"].asInt(), "sla minutes propagated from master data")
+      assertEquals(2, criticals.count { it["status"].asText() == "ACKNOWLEDGED" }, "two acknowledged critical results")
+    }
+
+    @Test
     fun financialAndOperationsCoverage() {
       val token = adminToken()
       val s = suffix()

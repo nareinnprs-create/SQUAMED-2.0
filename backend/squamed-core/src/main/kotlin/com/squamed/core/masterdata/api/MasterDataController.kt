@@ -189,6 +189,9 @@ class MasterDataController(
           referenceRange = dto.referenceRange,
           isUrgent = dto.isUrgent ?: false,
           isActive = dto.isActive ?: true,
+          criticalLow = dto.criticalLow,
+          criticalHigh = dto.criticalHigh,
+          criticalSlaMinutes = dto.criticalSlaMinutes ?: 60,
         ),
       )
     return ApiResponse.ok(LabTestDto.from(labTest))
@@ -210,6 +213,9 @@ class MasterDataController(
     labTest.referenceRange = dto.referenceRange ?: labTest.referenceRange
     labTest.isUrgent = dto.isUrgent ?: labTest.isUrgent
     labTest.isActive = dto.isActive ?: labTest.isActive
+    if (dto.criticalLow != null) labTest.criticalLow = dto.criticalLow
+    if (dto.criticalHigh != null) labTest.criticalHigh = dto.criticalHigh
+    if (dto.criticalSlaMinutes != null) labTest.criticalSlaMinutes = dto.criticalSlaMinutes
     labTestRepository.save(labTest)
     return ApiResponse.ok(LabTestDto.from(labTest))
   }

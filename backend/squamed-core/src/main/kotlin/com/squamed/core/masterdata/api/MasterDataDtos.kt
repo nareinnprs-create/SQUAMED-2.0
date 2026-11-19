@@ -58,6 +58,9 @@ data class LabTestDto(
   val referenceRange: String?,
   val isUrgent: Boolean?,
   val isActive: Boolean?,
+  val criticalLow: Double? = null,
+  val criticalHigh: Double? = null,
+  val criticalSlaMinutes: Int? = null,
 ) {
   companion object {
     fun from(entity: LabTest) =
@@ -71,6 +74,9 @@ data class LabTestDto(
         referenceRange = entity.referenceRange,
         isUrgent = entity.isUrgent,
         isActive = entity.isActive,
+        criticalLow = entity.criticalLow,
+        criticalHigh = entity.criticalHigh,
+        criticalSlaMinutes = entity.criticalSlaMinutes,
       )
   }
 }

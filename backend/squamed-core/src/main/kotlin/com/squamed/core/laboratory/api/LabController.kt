@@ -107,8 +107,9 @@ class LabController(
   @Transactional
   fun verifyOrder(
     @PathVariable id: UUID,
+    @RequestBody(required = false) dto: VerifyLabOrderDto?,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.verifyOrder(id, principal.userId))
+  ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.verifyOrder(id, principal.userId, dto?.overrideNote))
 
   @PostMapping("/orders/{id}/release")
   @RequiresPermission("laboratory:verify:lab")
@@ -126,4 +127,45 @@ class LabController(
     @RequestBody dto: RejectRequestDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<LabOrderDetailView> = ApiResponse.ok(labService.rejectOrder(id, dto.reason, rejectedBy = principal.userId, recollect = dto.recollect))
+
+  @GetMapping("/critical-results")
+  @RequiresPermission("laboratory:read:lab")
+  @Transactional(readOnly = true)
+  fun listCriticalResults(
+    @RequestParam(required = false) status: String?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<CriticalResultView>> = ApiResponse.ok(labService.listCriticalResults(principal.hospitalId, status))
+
+  @GetMapping("/critical-results/{id}/acks")
+  @RequiresPermission("laboratory:read:lab")
+  @Transactional(readOnly = true)
+  fun listCriticalResultAcks(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<CriticalResultAckView>> = ApiResponse.ok(labService.listCriticalResultAcks(id, principal.hospitalId))
+
+  @PostMapping("/critical-results/{id}/ack")
+  @RequiresPermission("laboratory:verify:lab")
+  @Transactional
+  fun acknowledgeCriticalResult(
+    @PathVariable id: UUID,
+    @RequestBody(required = false) dto: AckCriticalResultDto?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<CriticalResultView> = ApiResponse.ok(labService.acknowledgeCriticalResult(id, principal.hospitalId, principal.userId, dto?.note))
+
+  @PostMapping("/qc-runs")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("laboratory:write:lab")
+  @Transactional
+  fun createQcRun(
+    @RequestBody dto: CreateQcRunDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<QcRunView> = ApiResponse.ok(labService.createQcRun(dto, tenantResolver.pinOrDefault(principal, null), principal.userId))
+
+  @GetMapping("/qc-runs")
+  @RequiresPermission("laboratory:read:lab")
+  @Transactional(readOnly = true)
+  fun listQcRuns(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<QcRunView>> = ApiResponse.ok(labService.listQcRuns(principal.hospitalId))
 }

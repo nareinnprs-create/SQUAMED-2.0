@@ -1,7 +1,11 @@
 package com.squamed.core.laboratory.api
 
+import com.fasterxml.jackson.annotation.JsonProperty
+import com.squamed.core.laboratory.domain.CriticalResult
+import com.squamed.core.laboratory.domain.CriticalResultAck
 import com.squamed.core.laboratory.domain.LabOrder
 import com.squamed.core.laboratory.domain.LabTestRequest
+import com.squamed.core.laboratory.domain.QcRun
 import com.squamed.core.laboratory.domain.SpecimenCustody
 import java.time.Instant
 import java.util.UUID
@@ -41,6 +45,24 @@ data class CollectRequestDto(
 data class RejectRequestDto(
   val reason: String,
   val recollect: Boolean = false,
+)
+
+data class VerifyLabOrderDto(
+  val overrideNote: String? = null,
+)
+
+data class AckCriticalResultDto(
+  val note: String? = null,
+)
+
+data class CreateQcRunDto(
+  val testCode: String,
+  val level: String,
+  val observedValue: Double,
+  val targetMean: Double,
+  val targetSd: Double,
+  val instrument: String? = null,
+  val note: String? = null,
 )
 
 data class LabOrderView(
@@ -119,6 +141,7 @@ data class LabTestRequestView(
   val resultEnteredAt: Instant?,
   val priorValue: String?,
   val deltaPercent: Double?,
+  val isDeltaBlocked: Boolean,
   val enteredVia: String,
 ) {
   companion object {
@@ -138,6 +161,7 @@ data class LabTestRequestView(
         resultEnteredAt = entity.resultEnteredAt,
         priorValue = entity.priorValue,
         deltaPercent = entity.deltaPercent,
+        isDeltaBlocked = entity.isDeltaBlocked,
         enteredVia = entity.enteredVia,
       )
   }
@@ -165,3 +189,121 @@ data class LabOrderDetailView(
   val tests: List<LabTestRequestView> = emptyList(),
   val custody: List<SpecimenCustodyView> = emptyList(),
 )
+
+data class CriticalResultView(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val labOrderId: UUID,
+  val labTestRequestId: UUID,
+  val patientId: UUID,
+  val testCode: String,
+  val testName: String,
+  val resultValue: String?,
+  val criticality: String,
+  val status: String,
+  val slaMinutes: Int,
+  val minutesOpen: Long,
+  val escalationLevel: Int,
+  val escalationRole: String,
+  val ackedBy: UUID?,
+  val ackedAt: Instant?,
+  val createdAt: Instant?,
+) {
+  companion object {
+    fun from(
+      entity: CriticalResult,
+      now: Instant = Instant.now(),
+    ): CriticalResultView {
+      val minutesOpen = entity.createdAt?.until(now, java.time.temporal.ChronoUnit.MINUTES) ?: 0
+      val level =
+        if (minutesOpen >= entity.slaMinutes * 2) {
+          2
+        } else if (minutesOpen >= entity.slaMinutes) {
+          1
+        } else {
+          0
+        }
+      return CriticalResultView(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        labOrderId = entity.labOrderId,
+        labTestRequestId = entity.labTestRequestId,
+        patientId = entity.patientId,
+        testCode = entity.testCode,
+        testName = entity.testName,
+        resultValue = entity.resultValue,
+        criticality = entity.criticality,
+        status = entity.status,
+        slaMinutes = entity.slaMinutes,
+        minutesOpen = minutesOpen,
+        escalationLevel = level,
+        escalationRole =
+          when (level) {
+            2 -> "cmo"
+            1 -> "dept_head"
+            else -> "none"
+          },
+        ackedBy = entity.ackedBy,
+        ackedAt = entity.ackedAt,
+        createdAt = entity.createdAt,
+      )
+    }
+  }
+}
+
+data class CriticalResultAckView(
+  val id: UUID?,
+  val criticalResultId: UUID,
+  val actorId: UUID?,
+  val note: String?,
+  val occurredAt: Instant?,
+) {
+  companion object {
+    fun from(entity: CriticalResultAck) =
+      CriticalResultAckView(
+        id = entity.id,
+        criticalResultId = entity.criticalResultId,
+        actorId = entity.actorId,
+        note = entity.note,
+        occurredAt = entity.occurredAt,
+      )
+  }
+}
+
+data class QcRunView(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val instrument: String?,
+  val testCode: String,
+  val level: String,
+  val observedValue: Double,
+  val targetMean: Double,
+  val targetSd: Double,
+  @get:JsonProperty("zValue")
+  val zValue: Double,
+  val westgardRules: String?,
+  val status: String,
+  val note: String?,
+  val runBy: UUID?,
+  val runAt: Instant?,
+) {
+  companion object {
+    fun from(entity: QcRun): QcRunView =
+      QcRunView(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        instrument = entity.instrument,
+        testCode = entity.testCode,
+        level = entity.level,
+        observedValue = entity.observedValue,
+        targetMean = entity.targetMean,
+        targetSd = entity.targetSd,
+        zValue = if (entity.targetSd > 0.0) (entity.observedValue - entity.targetMean) / entity.targetSd else 0.0,
+        westgardRules = entity.westgardRules,
+        status = entity.status,
+        note = entity.note,
+        runBy = entity.runBy,
+        runAt = entity.runAt,
+      )
+  }
+}

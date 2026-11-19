@@ -24,4 +24,10 @@ class LabTest(
   var isUrgent: Boolean = false,
   @Column(name = "is_active", nullable = false)
   var isActive: Boolean = true,
+  @Column(name = "critical_low")
+  var criticalLow: Double? = null,
+  @Column(name = "critical_high")
+  var criticalHigh: Double? = null,
+  @Column(name = "critical_sla_minutes", nullable = false)
+  var criticalSlaMinutes: Int = 60,
 ) : BaseEntity()

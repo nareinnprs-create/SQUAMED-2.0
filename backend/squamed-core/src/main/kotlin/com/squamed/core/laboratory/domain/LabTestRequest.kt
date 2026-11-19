@@ -38,4 +38,6 @@ class LabTestRequest(
   var deltaPercent: Double? = null,
   @Column(name = "entered_via", nullable = false, length = 20)
   var enteredVia: String = "MANUAL",
+  @Column(name = "is_delta_blocked", nullable = false)
+  var isDeltaBlocked: Boolean = false,
 ) : BaseEntity()

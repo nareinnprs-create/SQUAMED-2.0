@@ -1700,6 +1700,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lab/qc-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listQcRuns"];
+        put?: never;
+        post: operations["createQcRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lab/orders": {
         parameters: {
             query?: never;
@@ -1822,6 +1838,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["collectSpecimen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/critical-results/{id}/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["acknowledgeCriticalResult"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4276,6 +4308,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lab/critical-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCriticalResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/critical-results/{id}/acks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCriticalResultAcks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/interop/health": {
         parameters: {
             query?: never;
@@ -5729,6 +5793,12 @@ export interface components {
             referenceRange?: string;
             isUrgent?: boolean;
             isActive?: boolean;
+            /** Format: double */
+            criticalLow?: number;
+            /** Format: double */
+            criticalHigh?: number;
+            /** Format: int32 */
+            criticalSlaMinutes?: number;
         };
         ApiResponseLabTestDto: {
             data?: components["schemas"]["LabTestDto"];
@@ -7667,6 +7737,49 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        CreateQcRunDto: {
+            testCode: string;
+            level: string;
+            /** Format: double */
+            observedValue: number;
+            /** Format: double */
+            targetMean: number;
+            /** Format: double */
+            targetSd: number;
+            instrument?: string;
+            note?: string;
+        };
+        ApiResponseQcRunView: {
+            data?: components["schemas"]["QcRunView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        QcRunView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            instrument?: string;
+            testCode: string;
+            level: string;
+            /** Format: double */
+            observedValue: number;
+            /** Format: double */
+            targetMean: number;
+            /** Format: double */
+            targetSd: number;
+            /** Format: double */
+            zValue: number;
+            westgardRules?: string;
+            status: string;
+            note?: string;
+            /** Format: uuid */
+            runBy?: string;
+            /** Format: date-time */
+            runAt?: string;
+        };
         CreateLabOrderDto: {
             /** Format: uuid */
             patientId: string;
@@ -7762,6 +7875,7 @@ export interface components {
             priorValue?: string;
             /** Format: double */
             deltaPercent?: number;
+            isDeltaBlocked: boolean;
             enteredVia: string;
         };
         SpecimenCustodyView: {
@@ -7771,6 +7885,9 @@ export interface components {
             note?: string;
             /** Format: date-time */
             occurredAt?: string;
+        };
+        VerifyLabOrderDto: {
+            overrideNote?: string;
         };
         EnterResultsDto: {
             results: components["schemas"]["LabTestResultInput"][];
@@ -7791,6 +7908,46 @@ export interface components {
         CollectRequestDto: {
             /** Format: uuid */
             collectedBy?: string;
+        };
+        AckCriticalResultDto: {
+            note?: string;
+        };
+        ApiResponseCriticalResultView: {
+            data?: components["schemas"]["CriticalResultView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CriticalResultView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            labOrderId: string;
+            /** Format: uuid */
+            labTestRequestId: string;
+            /** Format: uuid */
+            patientId: string;
+            testCode: string;
+            testName: string;
+            resultValue?: string;
+            criticality: string;
+            status: string;
+            /** Format: int32 */
+            slaMinutes: number;
+            /** Format: int64 */
+            minutesOpen: number;
+            /** Format: int32 */
+            escalationLevel: number;
+            escalationRole: string;
+            /** Format: uuid */
+            ackedBy?: string;
+            /** Format: date-time */
+            ackedAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
         };
         KioskCheckInRequest: {
             identifierType: string;
@@ -10519,12 +10676,44 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListQcRunView: {
+            data?: components["schemas"]["QcRunView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListLabOrderView: {
             data?: components["schemas"]["LabOrderView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseListCriticalResultView: {
+            data?: components["schemas"]["CriticalResultView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListCriticalResultAckView: {
+            data?: components["schemas"]["CriticalResultAckView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CriticalResultAckView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            criticalResultId: string;
+            /** Format: uuid */
+            actorId?: string;
+            note?: string;
+            /** Format: date-time */
+            occurredAt?: string;
         };
         ApiResponseListRoleView: {
             data?: components["schemas"]["RoleView"][];
@@ -15221,6 +15410,50 @@ export interface operations {
             };
         };
     };
+    listQcRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListQcRunView"];
+                };
+            };
+        };
+    };
+    createQcRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateQcRunDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseQcRunView"];
+                };
+            };
+        };
+    };
     listOrders: {
         parameters: {
             query?: {
@@ -15278,7 +15511,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["VerifyLabOrderDto"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
@@ -15431,6 +15668,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseLabOrderDetailView"];
+                };
+            };
+        };
+    };
+    acknowledgeCriticalResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AckCriticalResultDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCriticalResultView"];
                 };
             };
         };
@@ -20219,6 +20482,50 @@ export interface operations {
             };
         };
     };
+    listCriticalResults: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCriticalResultView"];
+                };
+            };
+        };
+    };
+    listCriticalResultAcks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCriticalResultAckView"];
+                };
+            };
+        };
+    };
     health_1: {
         parameters: {
             query?: never;
@@ -21585,4 +21892,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: f1339caf56a5d13bc1b0bf4653d6c554b5aa5f690b7b2df3ba70d6c35427a8d6
+// openapi snapshot sha256: 659605bc221564fe86ec12eeda533638e05eb3da632e1b5c50dd592e33c369a3

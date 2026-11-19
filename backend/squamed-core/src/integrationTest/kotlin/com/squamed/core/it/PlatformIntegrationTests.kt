@@ -9998,10 +9998,9 @@ class PlatformIntegrationTests {
       appointment(pPhone)
 
       // ABHA check-in: slip carries the token, the appointment context and the wayfinding department.
-      val slipAbha =
-        `data`(
-          api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "abha", "identifier" to abhaNumber), kiosk),
-        )
+      val slipAbhaResp = api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "abha", "identifier" to abhaNumber), kiosk)
+      assert2xx(slipAbhaResp, "abha check-in")
+      val slipAbha = om.readTree(slipAbhaResp.body)["data"]
       assertEquals("C-01", slipAbha["token"]["tokenNumber"].asText(), "fresh hospital daily token sequence: $slipAbha")
       assertEquals(apptAbha, slipAbha["appointmentId"].asText(), "slip references today's appointment")
       assertEquals(deptName, slipAbha["departmentName"].asText(), "slip wayfinding department name")

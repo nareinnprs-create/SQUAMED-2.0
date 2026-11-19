@@ -3,33 +3,52 @@ package com.squamed.core.laboratory.service
 import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
+import com.squamed.core.hospitalconfig.repository.HospitalRepository
+import com.squamed.core.laboratory.api.AmendResultDto
 import com.squamed.core.laboratory.api.CreateLabOrderDto
 import com.squamed.core.laboratory.api.CreateQcRunDto
+import com.squamed.core.laboratory.api.CreateReferenceRangeDto
 import com.squamed.core.laboratory.api.CriticalResultAckView
 import com.squamed.core.laboratory.api.CriticalResultView
+import com.squamed.core.laboratory.api.DeliverReportDto
 import com.squamed.core.laboratory.api.LabOrderDetailView
 import com.squamed.core.laboratory.api.LabOrderView
+import com.squamed.core.laboratory.api.LabReportDownload
+import com.squamed.core.laboratory.api.LabReportView
+import com.squamed.core.laboratory.api.LabResultAmendmentView
 import com.squamed.core.laboratory.api.LabTestRequestView
 import com.squamed.core.laboratory.api.LabTestResultInput
 import com.squamed.core.laboratory.api.QcRunView
+import com.squamed.core.laboratory.api.ReferenceRangeView
 import com.squamed.core.laboratory.api.SpecimenCustodyView
+import com.squamed.core.laboratory.api.TatRowView
 import com.squamed.core.laboratory.domain.CriticalResult
 import com.squamed.core.laboratory.domain.CriticalResultAck
 import com.squamed.core.laboratory.domain.LabOrder
+import com.squamed.core.laboratory.domain.LabReferenceRange
+import com.squamed.core.laboratory.domain.LabReport
+import com.squamed.core.laboratory.domain.LabResultAmendment
 import com.squamed.core.laboratory.domain.LabTestRequest
 import com.squamed.core.laboratory.domain.QcRun
 import com.squamed.core.laboratory.domain.SpecimenCustody
 import com.squamed.core.laboratory.repository.CriticalResultAckRepository
 import com.squamed.core.laboratory.repository.CriticalResultRepository
 import com.squamed.core.laboratory.repository.LabOrderRepository
+import com.squamed.core.laboratory.repository.LabReferenceRangeRepository
+import com.squamed.core.laboratory.repository.LabReportRepository
+import com.squamed.core.laboratory.repository.LabResultAmendmentRepository
 import com.squamed.core.laboratory.repository.LabTestRequestRepository
 import com.squamed.core.laboratory.repository.QcRunRepository
 import com.squamed.core.laboratory.repository.SpecimenCustodyRepository
 import com.squamed.core.masterdata.repository.LabTestRepository
+import com.squamed.core.patient.repository.PatientRecordRepository
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
+import java.time.Period
 import java.time.Year
 import java.util.UUID
 
@@ -42,6 +61,12 @@ class LabService(
   private val criticalResultRepository: CriticalResultRepository,
   private val criticalResultAckRepository: CriticalResultAckRepository,
   private val qcRunRepository: QcRunRepository,
+  private val labReferenceRangeRepository: LabReferenceRangeRepository,
+  private val labReportRepository: LabReportRepository,
+  private val labResultAmendmentRepository: LabResultAmendmentRepository,
+  private val labReportStorage: LabReportStorage,
+  private val patientRecordRepository: PatientRecordRepository,
+  private val hospitalRepository: HospitalRepository,
   private val eventPublisher: DomainEventPublisher,
 ) {
   /** Delta % change that blocks verification without an explicit override note (02.02 deviation closed in 02.03). */
@@ -184,8 +209,10 @@ class LabService(
       if (request.labOrderId != orderId) throw IllegalArgumentException("LAB_TEST_REQUEST_NOT_FOUND")
       request.resultValue = result.resultValue
       if (result.unit != null) request.unit = result.unit
-      if (result.referenceRange != null) request.referenceRange = result.referenceRange
-      request.isAbnormal = computeIsAbnormal(request.resultValue, request.referenceRange, result.isAbnormal)
+      // 02.04 age/sex reference range: manual entry wins, then structured range, then prior string.
+      val effectiveRange = result.referenceRange ?: resolveStructuredRange(labOrder, request.testCode)?.rangeText
+      if (effectiveRange != null) request.referenceRange = effectiveRange
+      request.isAbnormal = computeIsAbnormal(request.resultValue, effectiveRange ?: request.referenceRange, result.isAbnormal)
       request.enteredVia = enteredVia
       applyDeltaCheck(labOrder, request, result.resultValue)
       detectCriticalResult(labOrder, request)
@@ -537,5 +564,266 @@ class LabService(
       }
     }
     return fallback ?: false
+  }
+
+  /**
+   * Structured age/sex reference range (02.04): active ranges for the hospital + test code,
+   * filtered to the patient's age window and sex (exact sex preferred, then ANY; most specific
+   * age span wins). No patient, unmapped gender, or no matching row → null (string fallback).
+   */
+  private fun resolveStructuredRange(
+    labOrder: LabOrder,
+    testCode: String,
+  ): LabReferenceRange? {
+    val hospitalId = labOrder.hospitalId ?: return null
+    val patient = patientRecordRepository.findById(labOrder.patientId).orElse(null) ?: return null
+    val age = Period.between(patient.dateOfBirth, LocalDate.now()).years
+    val sex =
+      when (patient.gender.lowercase()) {
+        "male" -> "M"
+        "female" -> "F"
+        else -> return null
+      }
+    return labReferenceRangeRepository
+      .findByHospitalIdAndTestCodeAndIsActiveTrue(hospitalId, testCode)
+      .filter { age >= it.ageMinYears && age <= it.ageMaxYears && (it.sex == sex || it.sex == "ANY") }
+      .minWithOrNull(compareBy({ it.sex != sex }, { it.ageMaxYears - it.ageMinYears }))
+  }
+
+  /**
+   * Publish a branded PDF report version (02.04): renders the current released state, stores it
+   * in object storage and records the version. Amendments afterwards require a re-publish (v+1).
+   */
+  @Transactional
+  fun publishReport(
+    orderId: UUID,
+    publishedBy: UUID?,
+  ): LabReportView {
+    val labOrder = findOrder(orderId)
+    if (labOrder.resultStatus != "released") throw IllegalArgumentException("LAB_ORDER_NOT_RELEASED")
+    val hospitalId = labOrder.hospitalId ?: throw IllegalStateException("LAB_ORDER_HOSPITAL_REQUIRED")
+    val nextVersion = (labReportRepository.findTopByLabOrderIdOrderByReportVersionDesc(orderId)?.reportVersion ?: 0) + 1
+    val patient = patientRecordRepository.findById(labOrder.patientId).orElse(null)
+    val hospitalName = hospitalRepository.findById(hospitalId).orElse(null)?.name ?: ""
+    val tests = labTestRequestRepository.findByLabOrderId(orderId)
+    val amendments = labResultAmendmentRepository.findByLabOrderIdOrderByAmendedAtAsc(orderId)
+    val patientLines =
+      listOf(
+        "Patient: ${patient?.let { "${it.firstName} ${it.lastName}" } ?: labOrder.patientId}",
+        "MRN: ${patient?.mrn ?: "-"}   DOB: ${patient?.dateOfBirth ?: "-"}   Sex: ${patient?.gender ?: "-"}",
+        "Ordered: ${labOrder.orderedAt}   Released: ${labOrder.releasedAt}",
+      )
+    val rows =
+      tests.map {
+        LabReportRow(
+          test = it.testName,
+          result = it.resultValue ?: "-",
+          unit = it.unit ?: "",
+          reference = it.referenceRange ?: "",
+          flag = if (it.isAbnormal) "ABNORMAL" else "",
+        )
+      }
+    val amendmentLines = amendments.map { "AMENDED ${it.amendedAt}: ${it.oldValue ?: "-"} -> ${it.newValue} (${it.reason})" }
+    val pdf =
+      LabReportPdf.render(
+        hospitalName = hospitalName,
+        orderNumber = labOrder.orderNumber,
+        reportVersion = nextVersion,
+        patientLines = patientLines,
+        rows = rows,
+        amendmentLines = amendmentLines,
+        footer = "Report v$nextVersion - ${labOrder.orderNumber} - Squamed LIS",
+      )
+    val report =
+      labReportRepository.save(
+        LabReport(
+          hospitalId = hospitalId,
+          labOrderId = orderId,
+          reportVersion = nextVersion,
+          storageKey = labReportStorage.upload(hospitalId, orderId, nextVersion, pdf),
+          publishedBy = publishedBy,
+        ),
+      )
+    custody(labOrder, "REPORT_PUBLISHED", publishedBy, "v$nextVersion")
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "lab.report.published",
+        occurredAt = Instant.now(),
+        source = "lab-service",
+        entityType = "lab-report",
+        entityId = report.id,
+        hospitalId = hospitalId,
+        payload =
+          mapOf(
+            "orderNumber" to labOrder.orderNumber,
+            "reportVersion" to nextVersion,
+          ),
+        // Notification fan-out (counter/app delivery) stays with the chunk-00 notifier (00.12).
+        recipientIds = listOfNotNull(labOrder.orderedBy),
+      ),
+    )
+    return LabReportView.from(report)
+  }
+
+  /** Latest report bytes for download (02.04). */
+  @Transactional(readOnly = true)
+  fun getReportBytes(
+    orderId: UUID,
+    hospitalId: UUID?,
+  ): LabReportDownload {
+    val labOrder = findOrder(orderId)
+    requireSameHospital(hospitalId, labOrder.hospitalId)
+    val report =
+      labReportRepository.findTopByLabOrderIdOrderByReportVersionDesc(orderId)
+        ?: throw IllegalArgumentException("LAB_REPORT_NOT_FOUND")
+    return LabReportDownload(
+      orderNumber = labOrder.orderNumber,
+      reportVersion = report.reportVersion,
+      bytes = labReportStorage.download(report.storageKey).first,
+    )
+  }
+
+  /** Report version history for an order (02.04). */
+  @Transactional(readOnly = true)
+  fun listReports(
+    orderId: UUID,
+    hospitalId: UUID?,
+  ): List<LabReportView> {
+    val labOrder = findOrder(orderId)
+    requireSameHospital(hospitalId, labOrder.hospitalId)
+    return labReportRepository.findAllByLabOrderIdOrderByReportVersionDesc(orderId).map { LabReportView.from(it) }
+  }
+
+  /** Stamp one delivery (counter pickup or app) on a report — a report delivers once (02.04). */
+  @Transactional
+  fun deliverReport(
+    reportId: UUID,
+    dto: DeliverReportDto,
+    deliveredBy: UUID?,
+    hospitalId: UUID?,
+  ): LabReportView {
+    if (dto.via !in setOf("COUNTER", "APP")) throw IllegalArgumentException("DELIVERY_VIA_INVALID")
+    val report = labReportRepository.findById(reportId).orElseThrow { IllegalArgumentException("LAB_REPORT_NOT_FOUND") }
+    requireSameHospital(hospitalId, report.hospitalId)
+    if (report.deliveredVia != null) throw IllegalArgumentException("REPORT_ALREADY_DELIVERED")
+    report.deliveredVia = dto.via
+    report.deliveredTo = dto.deliveredTo
+    report.deliveredAt = Instant.now()
+    val labOrder = findOrder(report.labOrderId)
+    custody(labOrder, "REPORT_DELIVERED", deliveredBy, "via ${dto.via}")
+    return LabReportView.from(report)
+  }
+
+  /** Amend a released result (02.04): the old value is preserved in a versioned amendment row. */
+  @Transactional
+  fun amendResult(
+    orderId: UUID,
+    testRequestId: UUID,
+    dto: AmendResultDto,
+    amendedBy: UUID?,
+  ): LabOrderDetailView {
+    if (dto.reason.isBlank()) throw IllegalArgumentException("AMENDMENT_REASON_REQUIRED")
+    val labOrder = findOrder(orderId)
+    if (labOrder.resultStatus != "released") throw IllegalArgumentException("LAB_ORDER_NOT_RELEASED")
+    val request =
+      labTestRequestRepository.findById(testRequestId).orElseThrow { IllegalArgumentException("LAB_TEST_REQUEST_NOT_FOUND") }
+    if (request.labOrderId != orderId) throw IllegalArgumentException("LAB_TEST_REQUEST_NOT_FOUND")
+    labResultAmendmentRepository.save(
+      LabResultAmendment(
+        hospitalId = labOrder.hospitalId ?: throw IllegalStateException("LAB_ORDER_HOSPITAL_REQUIRED"),
+        labOrderId = orderId,
+        labTestRequestId = testRequestId,
+        oldValue = request.resultValue,
+        newValue = dto.newValue,
+        reason = dto.reason.take(400),
+        amendedBy = amendedBy,
+      ),
+    )
+    request.resultValue = dto.newValue
+    request.isAbnormal = computeIsAbnormal(dto.newValue, request.referenceRange, null)
+    // The amended value may open (or close) a critical result — re-run detection.
+    detectCriticalResult(labOrder, request)
+    custody(labOrder, "AMENDED", amendedBy, dto.reason.take(400))
+    return getOrderDetail(orderId)
+  }
+
+  @Transactional(readOnly = true)
+  fun listAmendments(
+    orderId: UUID,
+    hospitalId: UUID?,
+  ): List<LabResultAmendmentView> {
+    val labOrder = findOrder(orderId)
+    requireSameHospital(hospitalId, labOrder.hospitalId)
+    return labResultAmendmentRepository.findByLabOrderIdOrderByAmendedAtAsc(orderId).map { LabResultAmendmentView.from(it) }
+  }
+
+  @Transactional
+  fun createReferenceRange(
+    dto: CreateReferenceRangeDto,
+    hospitalId: UUID,
+  ): ReferenceRangeView {
+    if (dto.sex !in setOf("M", "F", "ANY")) throw IllegalArgumentException("REFERENCE_RANGE_SEX_INVALID")
+    if (dto.ageMinYears > dto.ageMaxYears) throw IllegalArgumentException("REFERENCE_RANGE_AGE_INVALID")
+    if (dto.rangeText.isBlank()) throw IllegalArgumentException("REFERENCE_RANGE_TEXT_REQUIRED")
+    val saved =
+      labReferenceRangeRepository.save(
+        LabReferenceRange(
+          hospitalId = hospitalId,
+          testCode = dto.testCode,
+          sex = dto.sex,
+          ageMinYears = dto.ageMinYears,
+          ageMaxYears = dto.ageMaxYears,
+          rangeText = dto.rangeText,
+        ),
+      )
+    return ReferenceRangeView.from(saved)
+  }
+
+  @Transactional(readOnly = true)
+  fun listReferenceRanges(
+    testCode: String?,
+    hospitalId: UUID?,
+  ): List<ReferenceRangeView> {
+    var ranges = labReferenceRangeRepository.findAllForHospital(hospitalId)
+    if (testCode != null) ranges = ranges.filter { it.testCode == testCode }
+    return ranges.sortedBy { it.testCode }.map { ReferenceRangeView.from(it) }
+  }
+
+  /** TAT analytics (02.04): turn-around minutes (orderedAt -> releasedAt) per test code over a window. */
+  @Transactional(readOnly = true)
+  fun tatAnalytics(
+    hospitalId: UUID?,
+    days: Int = 30,
+  ): List<TatRowView> {
+    val since = Instant.now().minus(Duration.ofDays(days.toLong()))
+    val released =
+      labOrderRepository
+        .findAllForHospital(hospitalId)
+        .filter { it.resultStatus == "released" && it.releasedAt?.isAfter(since) == true }
+    val requestsByOrder = labTestRequestRepository.findByLabOrderIdIn(released.map { it.id!! }).groupBy { it.labOrderId }
+
+    fun tat(labOrder: LabOrder): Long = Duration.between(labOrder.orderedAt ?: Instant.EPOCH, labOrder.releasedAt ?: Instant.now()).toMinutes()
+
+    fun row(
+      testCode: String,
+      minutes: List<Long>,
+    ): TatRowView =
+      TatRowView(
+        testCode = testCode,
+        count = minutes.size,
+        avgMinutes = if (minutes.isEmpty()) 0.0 else minutes.sum().toDouble() / minutes.size,
+        minMinutes = minutes.minOrNull() ?: 0,
+        maxMinutes = minutes.maxOrNull() ?: 0,
+      )
+    val rows = mutableListOf(row("ALL", released.map { tat(it) }))
+    val byTest = mutableMapOf<String, MutableList<Long>>()
+    released.forEach { order ->
+      requestsByOrder[order.id!!].orEmpty().forEach { request ->
+        byTest.getOrPut(request.testCode) { mutableListOf() }.add(tat(order))
+      }
+    }
+    byTest.toSortedMap().forEach { (testCode, minutes) -> rows.add(row(testCode, minutes)) }
+    return rows
   }
 }

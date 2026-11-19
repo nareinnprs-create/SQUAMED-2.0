@@ -4,6 +4,9 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.squamed.core.laboratory.domain.CriticalResult
 import com.squamed.core.laboratory.domain.CriticalResultAck
 import com.squamed.core.laboratory.domain.LabOrder
+import com.squamed.core.laboratory.domain.LabReferenceRange
+import com.squamed.core.laboratory.domain.LabReport
+import com.squamed.core.laboratory.domain.LabResultAmendment
 import com.squamed.core.laboratory.domain.LabTestRequest
 import com.squamed.core.laboratory.domain.QcRun
 import com.squamed.core.laboratory.domain.SpecimenCustody
@@ -53,6 +56,121 @@ data class VerifyLabOrderDto(
 
 data class AckCriticalResultDto(
   val note: String? = null,
+)
+
+data class CreateReferenceRangeDto(
+  val testCode: String,
+  /** M | F | ANY */
+  val sex: String,
+  val ageMinYears: Int = 0,
+  val ageMaxYears: Int = 200,
+  val rangeText: String,
+  val hospitalId: UUID? = null,
+)
+
+data class ReferenceRangeView(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val testCode: String,
+  val sex: String,
+  val ageMinYears: Int,
+  val ageMaxYears: Int,
+  val rangeText: String,
+  val isActive: Boolean,
+) {
+  companion object {
+    fun from(entity: LabReferenceRange) =
+      ReferenceRangeView(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        testCode = entity.testCode,
+        sex = entity.sex,
+        ageMinYears = entity.ageMinYears,
+        ageMaxYears = entity.ageMaxYears,
+        rangeText = entity.rangeText,
+        isActive = entity.isActive,
+      )
+  }
+}
+
+data class AmendResultDto(
+  val newValue: String,
+  val reason: String,
+)
+
+data class DeliverReportDto(
+  /** COUNTER | APP */
+  val via: String,
+  val deliveredTo: UUID? = null,
+)
+
+data class LabReportView(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val labOrderId: UUID,
+  val reportVersion: Int,
+  val storageKey: String,
+  val publishedBy: UUID?,
+  val publishedAt: Instant?,
+  val deliveredVia: String?,
+  val deliveredTo: UUID?,
+  val deliveredAt: Instant?,
+) {
+  companion object {
+    fun from(entity: LabReport) =
+      LabReportView(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        labOrderId = entity.labOrderId,
+        reportVersion = entity.reportVersion,
+        storageKey = entity.storageKey,
+        publishedBy = entity.publishedBy,
+        publishedAt = entity.publishedAt,
+        deliveredVia = entity.deliveredVia,
+        deliveredTo = entity.deliveredTo,
+        deliveredAt = entity.deliveredAt,
+      )
+  }
+}
+
+/** Latest published report download (02.04) — orderNumber drives the Content-Disposition filename. */
+class LabReportDownload(
+  val orderNumber: String,
+  val reportVersion: Int,
+  val bytes: ByteArray,
+)
+
+data class LabResultAmendmentView(
+  val id: UUID?,
+  val labOrderId: UUID,
+  val labTestRequestId: UUID,
+  val oldValue: String?,
+  val newValue: String,
+  val reason: String,
+  val amendedBy: UUID?,
+  val amendedAt: Instant?,
+) {
+  companion object {
+    fun from(entity: LabResultAmendment) =
+      LabResultAmendmentView(
+        id = entity.id,
+        labOrderId = entity.labOrderId,
+        labTestRequestId = entity.labTestRequestId,
+        oldValue = entity.oldValue,
+        newValue = entity.newValue,
+        reason = entity.reason,
+        amendedBy = entity.amendedBy,
+        amendedAt = entity.amendedAt,
+      )
+  }
+}
+
+data class TatRowView(
+  val testCode: String,
+  val count: Int,
+  val avgMinutes: Double,
+  val minMinutes: Long,
+  val maxMinutes: Long,
 )
 
 data class CreateQcRunDto(

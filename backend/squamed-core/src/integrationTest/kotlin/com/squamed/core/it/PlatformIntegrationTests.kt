@@ -9977,15 +9977,21 @@ class PlatformIntegrationTests {
               "departmentId" to departmentId,
               "doctorId" to adminId,
               "appointmentType" to "OPD",
+              // Fixed local noon: now+1h crosses local midnight for runs starting 23:00-00:00 and
+              // kiosk's findTodayAppointment then misses it (KIOSK_NO_APPOINTMENT, CI 44633955177).
               "scheduledStart" to
-                java.time.Instant
+                java.time.LocalDate
                   .now()
-                  .plusSeconds(3600)
+                  .atTime(12, 0)
+                  .atZone(java.time.ZoneId.systemDefault())
+                  .toInstant()
                   .toString(),
               "scheduledEnd" to
-                java.time.Instant
+                java.time.LocalDate
                   .now()
-                  .plusSeconds(7200)
+                  .atTime(12, 30)
+                  .atZone(java.time.ZoneId.systemDefault())
+                  .toInstant()
                   .toString(),
               "durationMinutes" to 30,
               "reason" to "kiosk journey",

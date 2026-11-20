@@ -6772,6 +6772,247 @@ class PlatformIntegrationTests {
       assertNotNull(entry, "catalog lists ChargeablePerformed")
       assertEquals("EMITTED", entry!!["status"].asText(), "catalog status EMITTED")
     }
+
+    @Test
+    fun radiologyRisLiteCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+
+      // Hospital-scoped radiologist + a doctor (no sign permission) for the RBAC leg.
+      fun scopedUser(
+        role: String,
+        tag: String,
+      ): String {
+        val email = "$tag.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "Rad$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      }
+      val rad = scopedUser("RADIOLOGIST", "rad")
+      val doc = scopedUser("DOCTOR", "raddoc")
+
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Imaging",
+              "lastName" to "Coverage$s",
+              "gender" to "male",
+              "dateOfBirth" to "1975-05-05",
+              "phone" to "75$s".take(11),
+              "qid" to "IM$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+            ),
+            token,
+          ),
+        )["patient"]
+      val patientId = patient["id"].asText()
+      val enc =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters",
+            json("patientId" to patientId, "chiefComplaint" to "chest pain", "reason" to "02.05 coverage"),
+            token,
+          ),
+        )["id"].asText()
+
+      // Order -> accession on the modality worklist feed.
+      val order =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/radiology/orders",
+            json(
+              "patientId" to patientId,
+              "encounterId" to enc,
+              "hospitalId" to hospitalId,
+              "modality" to "ct",
+              "bodyPart" to "CHEST",
+              "priority" to "urgent",
+              "clinicalNote" to "rule out PE",
+            ),
+            token,
+          ),
+        )
+      val orderId = order["id"].asText()
+      val accession = order["accession"].asText()
+      assertTrue(accession.startsWith("RAD-"), "accession generated: $accession")
+      assertEquals("CT", order["modality"].asText(), "modality normalized")
+      val mwl = `data`(api(HttpMethod.GET, "/api/v1/radiology/mwl?modality=CT", token = rad))
+      val mwlRow = mwl.firstOrNull { it["accession"].asText() == accession }
+      assertNotNull(mwlRow, "MWL feed carries the order: $mwl")
+      assertTrue(mwlRow!!["patientName"].asText().contains("Coverage$s"), "MWL patient name")
+      assertEquals("urgent", mwlRow["priority"].asText(), "MWL priority carried")
+
+      // Study completion with Orthanc refs -> StudyCompleted + imaging charge event.
+      val uid = "1.2.840.113619.$s"
+      val completed =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/radiology/orders/$orderId/study:complete",
+            json("studyInstanceUid" to uid, "orthancStudyId" to "orth-$s", "seriesCount" to 3),
+            rad,
+          ),
+        )
+      assertEquals("completed", completed["status"].asText(), "order completed")
+      assertEquals(uid, completed["study"]["studyInstanceUid"].asText(), "study uid stored")
+      assertEquals(3, completed["study"]["seriesCount"].asInt(), "series count stored")
+      val studyId = completed["study"]["id"].asText()
+
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      val studyEvent = outbox.firstOrNull { it["eventType"].asText() == "radiology.study_completed" && it["envelope"].asText().contains(uid) }
+      assertNotNull(studyEvent, "StudyCompleted emitted: ${outbox.map { it["eventType"].asText() }.distinct()}")
+      val imagingCharge =
+        outbox.firstOrNull { it["eventType"].asText() == "billing.chargeable_performed" && it["envelope"].asText().contains(accession) }
+      assertNotNull(imagingCharge, "imaging charge event emitted")
+      assertEquals(
+        "IMAGING",
+        om.readTree(imagingCharge!!["envelope"].asText())["payload"]["chargeCategory"].asText(),
+        "imaging charge category",
+      )
+
+      val worklist = `data`(api(HttpMethod.GET, "/api/v1/radiology/worklist?status=completed", token = rad))
+      assertTrue(worklist.any { it["id"].asText() == orderId }, "radiologist worklist shows the completed study")
+
+      // Structured draft (ICD + SNOMED) -> doctor cannot sign -> radiologist signs.
+      val draft =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/radiology/orders/$orderId/reports",
+            json(
+              "templateCode" to "CT-CHEST",
+              "findings" to "No pulmonary embolism. Mild bibasal atelectasis.",
+              "impression" to "No PE; mild bibasal atelectasis.",
+              "icdCodes" to listOf("R05"),
+              "snomedCodes" to listOf("267036007"),
+            ),
+            rad,
+          ),
+        )
+      assertEquals("draft", draft["status"].asText(), "report starts draft")
+      assertEquals(listOf("R05"), draft["icdCodes"].map { it.asText() }, "ICD code recorded")
+      assertEquals(listOf("267036007"), draft["snomedCodes"].map { it.asText() }, "SNOMED code recorded")
+      val reportId = draft["id"].asText()
+      val dupDraft =
+        api(
+          HttpMethod.POST,
+          "/api/v1/radiology/orders/$orderId/reports",
+          json("findings" to "second draft", "impression" to "second draft"),
+          rad,
+        )
+      assert4xx(dupDraft, "second open draft rejected")
+      assertTrue(dupDraft.body.contains("RAD_REPORT_DRAFT_EXISTS"), "draft guard code: ${dupDraft.body.take(200)}")
+      assertEquals(403, api(HttpMethod.POST, "/api/v1/radiology/reports/$reportId/sign", json(), doc).status, "DOCTOR cannot sign imaging reports")
+      val signed = `data`(api(HttpMethod.POST, "/api/v1/radiology/reports/$reportId/sign", json(), rad))
+      assertEquals("signed", signed["status"].asText(), "radiologist signs")
+      assertEquals(1, signed["reportVersion"].asInt(), "first version")
+      assertFalse(signed["signedBy"].isNull, "signer recorded")
+      val signedEvent =
+        `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+          .firstOrNull { it["eventType"].asText() == "radiology.report_signed" && it["envelope"].asText().contains(reportId) }
+      assertNotNull(signedEvent, "RadiologyReportSigned emitted")
+
+      // Amendments are new signed versions with a mandatory reason.
+      val blankAmend =
+        api(
+          HttpMethod.POST,
+          "/api/v1/radiology/reports/$reportId/amendments",
+          json("findings" to "Corrected findings", "impression" to "Corrected impression", "reason" to "  "),
+          rad,
+        )
+      assert4xx(blankAmend, "amendment without a reason")
+      assertTrue(blankAmend.body.contains("AMENDMENT_REASON_REQUIRED"), "amendment guard code: ${blankAmend.body.take(200)}")
+      val amended =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/radiology/reports/$reportId/amendments",
+            json(
+              "findings" to "Small left lower lobe PE confirmed on re-read.",
+              "impression" to "Small left lower lobe PE.",
+              "icdCodes" to listOf("I26.99"),
+              "reason" to "re-read after clinical query",
+            ),
+            rad,
+          ),
+        )
+      assertEquals(2, amended["reportVersion"].asInt(), "amendment is version 2")
+      assertEquals(reportId, amended["amendsReportId"].asText(), "amendment points at the original")
+      assertEquals("re-read after clinical query", amended["amendmentReason"].asText(), "amendment reason recorded")
+
+      // Critical finding: SLA clock + ack trail.
+      val critical =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/radiology/reports/${amended["id"].asText()}/critical-findings",
+            json("severity" to "critical", "finding" to "Left lower lobe PE", "slaMinutes" to 30),
+            rad,
+          ),
+        )
+      assertEquals("OPEN", critical["status"].asText(), "critical finding opens")
+      assertEquals(0, critical["escalationLevel"].asInt(), "fresh finding not escalated")
+      val acked =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/radiology/critical-findings/${critical["id"].asText()}/ack",
+            json("note" to "called treating physician"),
+            rad,
+          ),
+        )
+      assertEquals("ACKNOWLEDGED", acked["status"].asText(), "acknowledged")
+      assertEquals("called treating physician", acked["ackNote"].asText(), "ack note recorded")
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/radiology/critical-findings/${critical["id"].asText()}/ack", json(), rad),
+        "double acknowledgement rejected",
+      )
+
+      // OHIF embedding: study-scoped short-lived viewer token.
+      val viewer = `data`(api(HttpMethod.POST, "/api/v1/radiology/studies/$studyId/viewer-token", json(), rad))
+      val payload =
+        String(
+          java.util.Base64
+            .getUrlDecoder()
+            .decode(viewer["token"].asText().split(".")[1]),
+        )
+      val claims = om.readTree(payload)
+      assertEquals("viewer", claims["typ"].asText(), "viewer token type")
+      assertEquals(uid, claims["studyUid"].asText(), "token scoped to the study")
+      assertEquals(300, claims["exp"].asLong() - claims["iat"].asLong(), "5-minute viewer token")
+      assertEquals(300, viewer["expiresInSeconds"].asLong(), "ttl reported")
+
+      // Patient 360 attach: imaging history with the latest signed report summary.
+      val p360 = `data`(api(HttpMethod.GET, "/api/v1/patient360/$patientId", token = token))
+      val imagingRow = p360["imaging"].firstOrNull { it["accession"].asText() == accession }
+      assertNotNull(imagingRow, "Patient 360 lists the imaging order: ${p360["imaging"]}")
+      assertEquals(2, imagingRow!!["signedReportVersion"].asInt(), "latest signed version surfaced")
+      assertEquals(uid, imagingRow["studyInstanceUid"].asText(), "study uid surfaced")
+
+      val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog", token = token))
+      assertTrue(catalog.any { it["name"].asText() == "StudyCompleted" && it["status"].asText() == "EMITTED" }, "StudyCompleted cataloged")
+      assertTrue(catalog.any { it["name"].asText() == "RadiologyReportSigned" && it["status"].asText() == "EMITTED" }, "RadiologyReportSigned cataloged")
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */
@@ -6911,12 +7152,12 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable (24 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging (26 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        24,
+        26,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable events: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging events: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
@@ -7539,12 +7780,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        24,
+        26,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")

@@ -27,6 +27,7 @@ const navItems: SidebarItem[] = [
   { id: 'consult', label: 'Consultation', href: '/consult' },
   { id: 'orders', label: 'Orders', href: '/orders' },
   { id: 'laboratory', label: 'Laboratory', href: '/laboratory' },
+  { id: 'radiology', label: 'Radiology', href: '/radiology' },
   { id: 'pharmacy', label: 'Pharmacy', href: '/pharmacy' },
   { id: 'billing', label: 'Billing', href: '/billing' },
   { id: 'communication', label: 'Communication', href: '/communication' },

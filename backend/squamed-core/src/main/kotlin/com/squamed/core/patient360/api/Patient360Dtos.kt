@@ -79,4 +79,6 @@ data class Patient360View(
   val taskSummary: TaskSummaryView = TaskSummaryView(open = 0, completed = 0),
   val consents: List<ConsentView> = emptyList(),
   val documents: List<PatientDocumentDto> = emptyList(),
+  // 02.05: imaging orders + latest signed report summary.
+  val imaging: List<com.squamed.core.radiology.api.ImagingSummaryView> = emptyList(),
 )

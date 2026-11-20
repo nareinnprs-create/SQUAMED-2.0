@@ -73,12 +73,33 @@ class JwtService(
   fun parseAccessToken(token: String): TokenClaims? =
     parse(token)?.let { claims ->
       val typ = claims["typ"] as? String
-      if (typ == "refresh" || typ == "mfa") {
+      // 02.05: viewer tokens are study-scoped and must never authenticate general API calls.
+      if (typ == "refresh" || typ == "mfa" || typ == "viewer") {
         null
       } else {
         TokenClaims.from(claims)
       }
     }
+
+  // 02.05 OHIF embedding: short-lived token scoped to one study (typ=viewer).
+  fun generateStudyViewerToken(
+    studyId: UUID,
+    studyInstanceUid: String,
+    userId: UUID,
+    hospitalId: UUID?,
+    ttlMinutes: Long = 5,
+  ): String =
+    generateToken(
+      subject = studyId.toString(),
+      claims =
+        mapOf(
+          "typ" to "viewer",
+          "studyUid" to studyInstanceUid,
+          "uid" to userId.toString(),
+          "hp" to hospitalId?.toString(),
+        ),
+      ttl = Duration.ofMinutes(ttlMinutes),
+    )
 
   fun parseRefreshToken(token: String): TokenClaims? =
     parse(token)?.let { claims ->

@@ -36,6 +36,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/radiology/reports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateDraft"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pharmacy/stock/{id}": {
         parameters: {
             query?: never;
@@ -765,7 +781,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["updateDraft"];
+        post: operations["updateDraft_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -878,6 +894,134 @@ export interface paths {
         get: operations["listPasses"];
         put?: never;
         post: operations["issuePass"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/radiology/studies/{id}/viewer-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["viewerToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/radiology/reports/{id}/sign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["signReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/radiology/reports/{id}/critical-findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["raiseCriticalFinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/radiology/reports/{id}/amendments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["amendReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/radiology/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/radiology/orders/{id}/study:complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeStudy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/radiology/orders/{id}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["draftReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/radiology/critical-findings/{id}/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["acknowledgeCriticalFinding"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1837,7 +1981,7 @@ export interface paths {
         };
         get: operations["listOrders"];
         put?: never;
-        post: operations["createOrder"];
+        post: operations["createOrder_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4180,6 +4324,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/radiology/worklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["worklist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/radiology/mwl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["mwl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/radiology/critical-findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCriticalFindings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/queue/statistics": {
         parameters: {
             query?: never;
@@ -5707,6 +5899,43 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
+        RadiologyReportDto: {
+            templateCode?: string;
+            findings: string;
+            impression: string;
+            icdCodes: string[];
+            snomedCodes: string[];
+        };
+        ApiResponseRadiologyReportView: {
+            data?: components["schemas"]["RadiologyReportView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        RadiologyReportView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            orderId: string;
+            /** Format: int32 */
+            reportVersion: number;
+            templateCode?: string;
+            findings: string;
+            impression: string;
+            icdCodes: string[];
+            snomedCodes: string[];
+            status: string;
+            /** Format: uuid */
+            signedBy?: string;
+            /** Format: date-time */
+            signedAt?: string;
+            /** Format: uuid */
+            amendsReportId?: string;
+            amendmentReason?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
         StockUpdateDto: {
             /** Format: uuid */
             drugId?: string;
@@ -7046,6 +7275,118 @@ export interface components {
             issuedAt: string;
             /** Format: date-time */
             returnedAt?: string;
+        };
+        ApiResponseStudyViewerTokenView: {
+            data?: components["schemas"]["StudyViewerTokenView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        StudyViewerTokenView: {
+            token: string;
+            /** Format: int64 */
+            expiresInSeconds: number;
+            viewerUrl?: string;
+        };
+        CriticalFindingRequestDto: {
+            severity: string;
+            finding: string;
+            /** Format: int32 */
+            slaMinutes?: number;
+        };
+        ApiResponseCriticalFindingView: {
+            data?: components["schemas"]["CriticalFindingView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CriticalFindingView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            reportId: string;
+            severity: string;
+            finding: string;
+            /** Format: int32 */
+            slaMinutes: number;
+            status: string;
+            /** Format: date-time */
+            raisedAt?: string;
+            /** Format: uuid */
+            acknowledgedBy?: string;
+            /** Format: date-time */
+            acknowledgedAt?: string;
+            ackNote?: string;
+            /** Format: int32 */
+            escalationLevel: number;
+            escalationRole: string;
+        };
+        ReportAmendmentDto: {
+            findings: string;
+            impression: string;
+            icdCodes: string[];
+            snomedCodes: string[];
+            reason: string;
+        };
+        RadOrderRequestDto: {
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            encounterId?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            modality: string;
+            bodyPart: string;
+            priority?: string;
+            clinicalNote?: string;
+        };
+        ApiResponseRadOrderView: {
+            data?: components["schemas"]["RadOrderView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        RadOrderView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            encounterId?: string;
+            accession: string;
+            modality: string;
+            bodyPart: string;
+            priority: string;
+            status: string;
+            clinicalNote?: string;
+            /** Format: date-time */
+            orderedAt?: string;
+            study?: components["schemas"]["RadiologyStudyView"];
+            reports: components["schemas"]["RadiologyReportView"][];
+        };
+        RadiologyStudyView: {
+            /** Format: uuid */
+            id?: string;
+            studyInstanceUid: string;
+            orthancStudyId?: string;
+            /** Format: int32 */
+            seriesCount?: number;
+            /** Format: date-time */
+            completedAt?: string;
+        };
+        StudyCompleteDto: {
+            studyInstanceUid: string;
+            orthancStudyId?: string;
+            /** Format: int32 */
+            seriesCount?: number;
+        };
+        CriticalAckDto: {
+            note?: string;
         };
         DisplayZoneCreateDto: {
             /** Format: uuid */
@@ -10642,6 +10983,37 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListRadOrderView: {
+            data?: components["schemas"]["RadOrderView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListMwlRowView: {
+            data?: components["schemas"]["MwlRowView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        MwlRowView: {
+            accession: string;
+            modality: string;
+            bodyPart: string;
+            priority: string;
+            /** Format: uuid */
+            patientId: string;
+            patientName: string;
+            status: string;
+        };
+        ApiResponseListCriticalFindingView: {
+            data?: components["schemas"]["CriticalFindingView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListDisplayZoneDto: {
             data?: components["schemas"]["DisplayZoneDto"][];
             success: boolean;
@@ -10906,6 +11278,20 @@ export interface components {
             /** Format: int32 */
             noteCount: number;
         };
+        ImagingSummaryView: {
+            /** Format: uuid */
+            orderId?: string;
+            accession: string;
+            modality: string;
+            bodyPart: string;
+            status: string;
+            studyInstanceUid?: string;
+            /** Format: int32 */
+            signedReportVersion?: number;
+            impression?: string;
+            /** Format: date-time */
+            orderedAt?: string;
+        };
         Patient360View: {
             demographics: components["schemas"]["PatientDetailDto"];
             latestVitals?: components["schemas"]["VitalSignView"];
@@ -10930,6 +11316,7 @@ export interface components {
             taskSummary: components["schemas"]["TaskSummaryView"];
             consents: components["schemas"]["ConsentView"][];
             documents: components["schemas"]["PatientDocumentDto"][];
+            imaging: components["schemas"]["ImagingSummaryView"][];
         };
         TaskSummaryView: {
             /** Format: int32 */
@@ -12006,6 +12393,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseScheduleTemplateView"];
+                };
+            };
+        };
+    };
+    updateDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RadiologyReportDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRadiologyReportView"];
                 };
             };
         };
@@ -13558,7 +13971,7 @@ export interface operations {
             };
         };
     };
-    updateDraft: {
+    updateDraft_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -13873,6 +14286,204 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseVisitPassDto"];
+                };
+            };
+        };
+    };
+    viewerToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseStudyViewerTokenView"];
+                };
+            };
+        };
+    };
+    signReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRadiologyReportView"];
+                };
+            };
+        };
+    };
+    raiseCriticalFinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CriticalFindingRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCriticalFindingView"];
+                };
+            };
+        };
+    };
+    amendReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportAmendmentDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRadiologyReportView"];
+                };
+            };
+        };
+    };
+    createOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RadOrderRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRadOrderView"];
+                };
+            };
+        };
+    };
+    completeStudy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudyCompleteDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRadOrderView"];
+                };
+            };
+        };
+    };
+    draftReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RadiologyReportDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRadiologyReportView"];
+                };
+            };
+        };
+    };
+    acknowledgeCriticalFinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CriticalAckDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCriticalFindingView"];
                 };
             };
         };
@@ -16138,7 +16749,7 @@ export interface operations {
             };
         };
     };
-    createOrder: {
+    createOrder_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -20845,6 +21456,72 @@ export interface operations {
             };
         };
     };
+    worklist: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListRadOrderView"];
+                };
+            };
+        };
+    };
+    mwl: {
+        parameters: {
+            query: {
+                modality: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListMwlRowView"];
+                };
+            };
+        };
+    };
+    listCriticalFindings: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCriticalFindingView"];
+                };
+            };
+        };
+    };
     statistics: {
         parameters: {
             query: {
@@ -22733,4 +23410,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 37cc172ab42f8ef86230f44fb14f964344e93287e98b51faddac87423930ceb4
+// openapi snapshot sha256: a408b879edd0c2f939b27167bf6c87b056c1eb95888ab9de7ec5be1e4b753dcb

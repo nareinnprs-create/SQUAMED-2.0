@@ -64,7 +64,19 @@ object EventCatalog {
         "ChargeablePerformed",
         "billing.chargeable_performed",
         Status.EMITTED,
-        "A billable service was performed (lab order released, 02.08); chunk-3 charge capture consumes it.",
+        "A billable service was performed (lab order released 02.08, imaging study completed 02.05); chunk-3 charge capture consumes it.",
+      ),
+      Entry(
+        "StudyCompleted",
+        "radiology.study_completed",
+        Status.EMITTED,
+        "Imaging study acquired and completed in PACS with its Orthanc refs (02.05).",
+      ),
+      Entry(
+        "RadiologyReportSigned",
+        "radiology.report_signed",
+        Status.EMITTED,
+        "Radiologist signed a structured imaging report (02.05).",
       ),
     )
 

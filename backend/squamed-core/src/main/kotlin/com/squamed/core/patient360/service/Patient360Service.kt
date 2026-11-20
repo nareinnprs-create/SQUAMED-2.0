@@ -58,6 +58,7 @@ class Patient360Service(
   private val consentRepository: ConsentRepository,
   private val consentOptInRepository: ConsentChannelOptInRepository,
   private val documentRepository: PatientDocumentRepository,
+  private val radiologyService: com.squamed.core.radiology.service.RadiologyService, // 02.05 imaging attach
 ) {
   @Transactional(readOnly = true)
   fun getPatient360(
@@ -155,6 +156,7 @@ class Patient360Service(
         ),
       consents = consents,
       documents = documentRepository.findByPatientIdOrderByCreatedAtDesc(patientId).map { PatientDocumentDto.from(it) },
+      imaging = radiologyService.imagingForPatient(patientId),
     )
   }
 }

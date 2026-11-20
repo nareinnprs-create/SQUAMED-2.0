@@ -1,6 +1,6 @@
 # Section 02.09 — Chunk exit (chunk 2)
 
-**Gate-run assessment of the CURRENT tree** @ PR #80 (all chunk-2 feature PRs merged: #66, #68, #70, #72, #74, #76, #78). Verdict: **SECTION REVIEW** (never COMPLETE — same precedent as 01.12). CI evidence: **run 44704820743 — all 7 gates green**. Exit demo live: **41/41**, transcript `reports/demo-02.09-live.log`.
+**Gate-run assessment of the CURRENT tree** @ PR #80 (all chunk-2 feature PRs merged: #66, #68, #70, #72, #74, #76, #78). Verdict: **SECTION REVIEW** (never COMPLETE — same precedent as 01.12). CI evidence: **run 44705287265 — all 7 gates green**. Exit demo live: **41/41**, transcript `reports/demo-02.09-live.log`.
 
 ## 1. Scope
 Per `15-CHUNK2-SECTIONS.md` 02.09: demo scenario, analyzer sim, critical-result drill timed vs SLA, interaction eval gate, FEFO test, lab parallel-run prep — all chunk-2 sections as the dependency. Zero feature code by design; the only code change is an exit-review permission fix (V71) found by the live demo.
@@ -20,12 +20,12 @@ Script bugs fixed during the run: lab-tech role for collect, critical value 12.0
 | Gate | Result | Evidence |
 |---|---|---|
 | 1 Functional completeness | PASS (chunk) | Every chunk-2 section report + named PIT; demo 41/41 |
-| 2 Zero-stub | PASS | CI run 44704820743 |
-| 3 Types | PASS | CI run 44704820743 |
-| 4 Lint + format | PASS | CI run 44704820743 |
-| 5 Tests | PASS | CI run 44704820743; named chunk tests table in FINAL §5 |
-| 6 Accessibility | PASS | CI run 44704820743 |
-| 7 Design system | PASS | CI run 44704820743 |
+| 2 Zero-stub | PASS | CI run 44705287265 |
+| 3 Types | PASS | CI run 44705287265 |
+| 4 Lint + format | PASS | CI run 44705287265 |
+| 5 Tests | PASS | CI run 44705287265; named chunk tests table in FINAL §5 |
+| 6 Accessibility | PASS | CI run 44705287265 |
+| 7 Design system | PASS | CI run 44705287265 |
 | 8 Contracts | PASS | OpenAPI snapshot current (a408b879…, no API change in V71/demo) |
 | 9 Data | PASS | V71 additive + rollback note |
 | 10 Audit | PASS | Demo exercises audited trails (custody, critical ack, controlled register, overrides, ledger) |

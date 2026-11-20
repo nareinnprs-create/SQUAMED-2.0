@@ -45,6 +45,9 @@ class Dispensation(
   var stockId: UUID? = null,
   @Column(name = "batch_number", length = 100)
   var batchNumber: String? = null,
+  // 02.08 eMAR groundwork: expiry snapshot of the dispensed batch.
+  @Column(name = "expiry_date")
+  var expiryDate: java.time.LocalDate? = null,
   @Column(name = "substituted_drug_id")
   var substitutedDrugId: UUID? = null,
   @Column(name = "substituted_drug_name", length = 255)

@@ -60,6 +60,12 @@ object EventCatalog {
         Status.EMITTED,
         "OPD order placed from a consultation; the task engine consumes it in chunk 2 (01.04).",
       ),
+      Entry(
+        "ChargeablePerformed",
+        "billing.chargeable_performed",
+        Status.EMITTED,
+        "A billable service was performed (lab order released, 02.08); chunk-3 charge capture consumes it.",
+      ),
     )
 
   fun all(): List<Entry> = entries

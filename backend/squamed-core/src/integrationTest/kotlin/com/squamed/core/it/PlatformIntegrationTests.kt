@@ -6530,6 +6530,248 @@ class PlatformIntegrationTests {
       }
       assertTrue(sawInteractionKpi, "interaction override KPI row present")
     }
+
+    @Test
+    fun chargeEventsAndInventoryCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+      val dr = msDrugRepository
+
+      // Hospital-scoped pharmacist for the reorder-proposal surface (admin principal has no hospital pin).
+      val pharmEmail = "pharm.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to pharmEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Phar",
+            "lastName" to "Stock$s",
+            "roles" to listOf("PHARMACIST"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register pharmacist",
+      )
+      val pharm =
+        `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to pharmEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Charge",
+              "lastName" to "Coverage$s",
+              "gender" to "female",
+              "dateOfBirth" to "1990-01-01",
+              "phone" to "76$s".take(11),
+              "qid" to "CH$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+            ),
+            token,
+          ),
+        )["patient"]
+      val patientId = patient["id"].asText()
+      val mrn = patient["mrn"].asText()
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/patients/$patientId/allergies", json("allergen" to "NKA", "severity" to "none"), token),
+        "document NKA allergy status",
+      )
+      val enc =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters",
+            json("patientId" to patientId, "chiefComplaint" to "charge coverage", "reason" to "02.08 coverage"),
+            token,
+          ),
+        )["id"].asText()
+
+      fun drug(tag: String): String =
+        dr
+          .save(
+            com.squamed.core.masterdata.domain.Drug(
+              code = "CHG$tag-$s",
+              name = "Charge$tag",
+              genericName = "charge$tag",
+              category = "General",
+              unit = "tab",
+            ),
+          ).id!!
+          .toString()
+      val drugA = drug("A")
+      val expiry =
+        java.time.LocalDate
+          .now()
+          .plusDays(120)
+
+      fun stock(
+        drugId: String,
+        drugName: String,
+        qty: Int,
+        reorder: Int,
+      ) = `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/pharmacy/stock",
+          json(
+            "drugId" to drugId,
+            "drugName" to drugName,
+            "batchNumber" to "CHG-$s",
+            "expiryDate" to expiry.toString(),
+            "quantityOnHand" to qty,
+            "reorderLevel" to reorder,
+            "unitPrice" to 12.5,
+            "location" to "B-1",
+          ),
+          token,
+        ),
+      )
+      val stockA = stock(drugA, "ChargeA", 50, 5)
+      val stockAId = stockA["id"].asText()
+      assertEquals(expiry.toString(), stockA["expiryDate"].asText(), "stock expiry seeded")
+
+      // Prescribe 10, dispense 4 (partial) -> eMAR-ready dispensation with batch + expiry snapshot.
+      val rxResp =
+        api(
+          HttpMethod.POST,
+          "/api/v1/encounters/$enc/prescriptions",
+          json("drugId" to drugA, "drugName" to "ChargeA", "quantity" to 10, "patientMrn" to mrn),
+          token,
+        )
+      assert2xx(rxResp, "prescribe ChargeA")
+      val rx = om.readTree(rxResp.body)["data"]["id"].asText()
+
+      fun dispense(qty: Int) =
+        api(
+          HttpMethod.POST,
+          "/api/v1/pharmacy/dispensations",
+          json(
+            "prescriptionId" to rx,
+            "patientId" to patientId,
+            "encounterId" to enc,
+            "drugId" to drugA,
+            "stockId" to stockAId,
+            "drugName" to "ChargeA",
+            "quantity" to qty,
+            "unitPrice" to 12.5,
+          ),
+          token,
+        )
+      val disp4 = `data`(dispense(4))
+      assertEquals(expiry.toString(), disp4["expiryDate"].asText(), "dispensation snapshots batch expiry for eMAR")
+      assertEquals("CHG-$s", disp4["batchNumber"].asText(), "dispensation carries the batch")
+      val dispId = disp4["id"].asText()
+
+      // Consumption -> stock ledger: DISPENSE -4 referencing the dispensation, balance 46.
+      val ledger = `data`(api(HttpMethod.GET, "/api/v1/pharmacy/stock/ledger?stockId=$stockAId", token = token))
+      val consume = ledger.firstOrNull { it["movement"].asText() == "DISPENSE" && it["referenceId"].asText() == dispId }
+      assertNotNull(consume, "DISPENSE ledger row references the dispensation: $ledger")
+      assertEquals(-4, consume!!["quantityDelta"].asInt(), "consumption delta")
+      assertEquals(46, consume["balanceAfter"].asInt(), "ledger balance after dispense")
+
+      // Over-dispense guard: partial dispenses sum to the prescribed quantity; one more is rejected.
+      val over = dispense(7)
+      assert4xx(over, "dispense past the prescribed quantity")
+      assertTrue(over.body.contains("DISPENSE_EXCEEDS_PRESCRIBED"), "over-dispense guard code: ${over.body.take(200)}")
+      assert2xx(dispense(6), "final partial dispense tops up to the prescribed quantity")
+      val past = dispense(1)
+      assert4xx(past, "dispense beyond a fully dispensed prescription")
+      assertTrue(past.body.contains("DISPENSE_EXCEEDS_PRESCRIBED"), "fully-dispensed guard code: ${past.body.take(200)}")
+
+      // Reorder proposals: min-level stock -> PROPOSED draft, no duplicates, human approve/reject.
+      val stockB = stock(drug("B"), "ChargeB", 3, 10)
+      val stockBId = stockB["id"].asText()
+      val generated = `data`(api(HttpMethod.POST, "/api/v1/pharmacy/reorder-proposals/generate", json(), pharm))
+      val propB = generated.firstOrNull { it["stockId"].asText() == stockBId }
+      assertNotNull(propB, "min-level stock generates a proposal: $generated")
+      assertEquals("PROPOSED", propB!!["status"].asText(), "proposal starts PROPOSED")
+      assertEquals(17, propB["requestedQuantity"].asInt(), "top-up = 2 x reorder level - on hand")
+      val again = `data`(api(HttpMethod.POST, "/api/v1/pharmacy/reorder-proposals/generate", json(), pharm))
+      assertTrue(again.none { it["stockId"].asText() == stockBId }, "no duplicate proposal while one is open: $again")
+      val approved =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/pharmacy/reorder-proposals/${propB["id"].asText()}/approve",
+            json("quantity" to 25, "note" to "approved for PO draft"),
+            pharm,
+          ),
+        )
+      assertEquals("APPROVED", approved["status"].asText(), "human approval")
+      assertEquals(25, approved["requestedQuantity"].asInt(), "approved quantity recorded")
+      assertFalse(approved["decidedBy"].isNull, "approver recorded")
+      val redecide =
+        api(HttpMethod.POST, "/api/v1/pharmacy/reorder-proposals/${propB["id"].asText()}/approve", json("quantity" to 30), pharm)
+      assert4xx(redecide, "decided proposal cannot be re-decided")
+      assertTrue(redecide.body.contains("REORDER_PROPOSAL_ALREADY_DECIDED"), "re-decision guard code: ${redecide.body.take(200)}")
+
+      val stockC = stock(drug("C"), "ChargeC", 0, 5)
+      val stockCId = stockC["id"].asText()
+      val generatedC = `data`(api(HttpMethod.POST, "/api/v1/pharmacy/reorder-proposals/generate", json(), pharm))
+      val propC = generatedC.firstOrNull { it["stockId"].asText() == stockCId }
+      assertNotNull(propC, "zero stock generates a proposal")
+      val blankReject =
+        api(HttpMethod.POST, "/api/v1/pharmacy/reorder-proposals/${propC!!["id"].asText()}/reject", json("note" to "  "), pharm)
+      assert4xx(blankReject, "rejection without a reason")
+      assertTrue(blankReject.body.contains("REORDER_REJECTION_REASON_REQUIRED"), "rejection reason guard code: ${blankReject.body.take(200)}")
+      val rejected =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/pharmacy/reorder-proposals/${propC["id"].asText()}/reject",
+            json("note" to "supplier on backorder"),
+            pharm,
+          ),
+        )
+      assertEquals("REJECTED", rejected["status"].asText(), "human rejection")
+      assertEquals("supplier on backorder", rejected["note"].asText(), "rejection reason recorded")
+
+      // ChargeablePerformed: a released lab order is a performed billable service (chunk-3 consumes).
+      val order =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/orders",
+            json("patientId" to patientId, "encounterId" to enc, "tests" to listOf(mapOf("testCode" to "CHG-$s", "testName" to "Charge Panel $s"))),
+            token,
+          ),
+        )
+      val orderId = order["order"]["id"].asText()
+      val orderNumber = order["order"]["orderNumber"].asText()
+      val testReqId = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$orderId", token = token))["tests"][0]["id"].asText()
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/collect", json(), token), "collect charge panel")
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/receive", json(), token), "receive charge panel")
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/start", json(), token), "start charge panel")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/lab/orders/$orderId/results",
+          json("results" to listOf(mapOf("testRequestId" to testReqId, "resultValue" to "5.4"))),
+          token,
+        ),
+        "enter charge panel",
+      )
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/verify", json(), token), "verify charge panel")
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$orderId/release", json(), token), "release charge panel")
+
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      val charge =
+        outbox.firstOrNull { it["eventType"].asText() == "billing.chargeable_performed" && it["envelope"].asText().contains(orderNumber) }
+      assertNotNull(charge, "released lab order emits ChargeablePerformed: ${outbox.map { it["eventType"].asText() }.distinct()}")
+      val chargeEnvelope = om.readTree(charge!!["envelope"].asText())
+      assertEquals("LAB", chargeEnvelope["payload"]["chargeCategory"].asText(), "charge category stamped")
+      assertEquals("CHG-$s", chargeEnvelope["payload"]["tests"][0]["testCode"].asText(), "performed tests carried")
+      val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog", token = token))
+      val entry = catalog.firstOrNull { it["name"].asText() == "ChargeablePerformed" }
+      assertNotNull(entry, "catalog lists ChargeablePerformed")
+      assertEquals("EMITTED", entry!!["status"].asText(), "catalog status EMITTED")
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */
@@ -6669,12 +6911,12 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival (23 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable (24 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        23,
+        24,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival events: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable events: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
@@ -7297,12 +7539,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        23,
+        24,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")

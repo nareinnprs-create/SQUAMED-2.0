@@ -198,6 +198,9 @@ class RadiologyService(
   ): RadiologyReportView {
     val order = radOrderRepository.findById(orderId).orElseThrow { IllegalArgumentException("RAD_ORDER_NOT_FOUND") }
     val study = studyRepository.findByOrderId(orderId) ?: throw IllegalArgumentException("RAD_STUDY_NOT_COMPLETED")
+    if (reportRepository.findByOrderIdOrderByReportVersionDesc(orderId).any { it.status == "draft" }) {
+      throw IllegalArgumentException("RAD_REPORT_DRAFT_EXISTS")
+    }
     if (dto.findings.isBlank()) throw IllegalArgumentException("REPORT_FINDINGS_REQUIRED")
     if (dto.impression.isBlank()) throw IllegalArgumentException("REPORT_IMPRESSION_REQUIRED")
     val report =

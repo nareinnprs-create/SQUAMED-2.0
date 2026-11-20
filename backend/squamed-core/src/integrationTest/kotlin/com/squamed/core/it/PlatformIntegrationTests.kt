@@ -6913,6 +6913,15 @@ class PlatformIntegrationTests {
       assertEquals(listOf("R05"), draft["icdCodes"].map { it.asText() }, "ICD code recorded")
       assertEquals(listOf("267036007"), draft["snomedCodes"].map { it.asText() }, "SNOMED code recorded")
       val reportId = draft["id"].asText()
+      val dupDraft =
+        api(
+          HttpMethod.POST,
+          "/api/v1/radiology/orders/$orderId/reports",
+          json("findings" to "second draft", "impression" to "second draft"),
+          rad,
+        )
+      assert4xx(dupDraft, "second open draft rejected")
+      assertTrue(dupDraft.body.contains("RAD_REPORT_DRAFT_EXISTS"), "draft guard code: ${dupDraft.body.take(200)}")
       assertEquals(403, api(HttpMethod.POST, "/api/v1/radiology/reports/$reportId/sign", json(), doc).status, "DOCTOR cannot sign imaging reports")
       val signed = `data`(api(HttpMethod.POST, "/api/v1/radiology/reports/$reportId/sign", json(), rad))
       assertEquals("signed", signed["status"].asText(), "radiologist signs")

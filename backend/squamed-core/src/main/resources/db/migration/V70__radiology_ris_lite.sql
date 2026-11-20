@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS radiology.report (
 );
 
 CREATE INDEX IF NOT EXISTS idx_rad_report_order ON radiology.report (order_id);
+-- Version numbers are unique per order: concurrent amendments cannot mint the same version twice.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_rad_report_order_version ON radiology.report (order_id, report_version);
 
 CREATE TABLE IF NOT EXISTS radiology.critical_finding (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

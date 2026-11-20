@@ -1524,6 +1524,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/medication-safety/overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["recordOverride"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/medication-safety/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/master-data/vendors": {
         parameters: {
             query?: never;
@@ -4332,6 +4364,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/medication-safety/override-kpis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["overrideKpis"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7214,6 +7262,7 @@ export interface components {
             substitutionReason?: string;
             /** Format: uuid */
             secondAuthorizerId?: string;
+            safetyOverrideReason?: string;
         };
         ApiResponseDispensationView: {
             data?: components["schemas"]["DispensationView"];
@@ -7831,6 +7880,67 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        MedSafetyOverrideDto: {
+            /** Format: uuid */
+            patientId: string;
+            drugCode?: string;
+            findingType: string;
+            severity: string;
+            reason: string;
+        };
+        ApiResponseMedSafetyOverrideView: {
+            data?: components["schemas"]["MedSafetyOverrideView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        MedSafetyOverrideView: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            patientId: string;
+            drugCode?: string;
+            findingType: string;
+            severity: string;
+            reason: string;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        MedSafetyCheckDto: {
+            /** Format: uuid */
+            patientId: string;
+            drugIds: string[];
+            /** Format: double */
+            doseMgPerDay?: number;
+            /** Format: uuid */
+            excludePrescriptionId?: string;
+        };
+        ApiResponseMedSafetyResultView: {
+            data?: components["schemas"]["MedSafetyResultView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        MedSafetyFindingView: {
+            type: string;
+            severity: string;
+            drugA?: string;
+            drugB?: string;
+            message: string;
+            source?: string;
+            /** Format: double */
+            confidence?: number;
+            /** Format: uuid */
+            ruleId?: string;
+        };
+        MedSafetyResultView: {
+            /** Format: uuid */
+            patientId: string;
+            findings: components["schemas"]["MedSafetyFindingView"][];
+            highestSeverity: string;
         };
         PriceListItemDto: {
             /** Format: uuid */
@@ -10778,6 +10888,19 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseListOverrideKpiRowView: {
+            data?: components["schemas"]["OverrideKpiRowView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        OverrideKpiRowView: {
+            findingType: string;
+            reason: string;
+            /** Format: int64 */
+            count: number;
         };
         ApiResponseListVendorDto: {
             data?: components["schemas"]["VendorDto"][];
@@ -15098,6 +15221,54 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseLong"];
+                };
+            };
+        };
+    };
+    recordOverride: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MedSafetyOverrideDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMedSafetyOverrideView"];
+                };
+            };
+        };
+    };
+    check: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MedSafetyCheckDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMedSafetyResultView"];
                 };
             };
         };
@@ -20817,6 +20988,28 @@ export interface operations {
             };
         };
     };
+    overrideKpis: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListOverrideKpiRowView"];
+                };
+            };
+        };
+    };
     tatAnalytics: {
         parameters: {
             query?: {
@@ -22335,4 +22528,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: f06855bc77507cde61fcbdeedbd587ec69d580c7fefbfbe301bd90f7a1999ccd
+// openapi snapshot sha256: 640d46a6ca0c8d698722804663b2191b3cb69d3f233aa7d02fa7d19a2d3ff93a

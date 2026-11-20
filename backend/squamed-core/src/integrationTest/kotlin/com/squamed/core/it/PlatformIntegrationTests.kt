@@ -6106,6 +6106,430 @@ class PlatformIntegrationTests {
         assertFalse(anonSession.isOpen, "anonymous ws must be closed with policy violation")
       }
     }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var msDrugRepository: com.squamed.core.masterdata.repository.DrugRepository
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var msInteractionRuleRepository: com.squamed.core.medsafety.repository.InteractionRuleRepository
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var msDoseRuleRepository: com.squamed.core.medsafety.repository.DoseRuleRepository
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var msAllergenMapRepository: com.squamed.core.medsafety.repository.AllergenClassMapRepository
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var msVitalSignRepository: com.squamed.core.encounter.repository.VitalSignRepository
+
+    @Test
+    fun medicationSafetyEvalCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+      val dr = msDrugRepository
+      val irr = msInteractionRuleRepository
+      val drr = msDoseRuleRepository
+      val amr = msAllergenMapRepository
+      val vsr = msVitalSignRepository
+
+      // 26 Indian brand-name drugs (one molecule family each); eval samples the first 200 of C(26,2).
+      data class Brand(
+        val code: String,
+        val name: String,
+        val generic: String,
+        val ingredients: String?,
+      )
+
+      val brands =
+        listOf(
+          Brand("CRO", "Crocin", "paracetamol", "paracetamol"),
+          Brand("BRUF", "Brufen", "ibuprofen", "ibuprofen"),
+          Brand("VOV", "Voveran", "diclofenac", "diclofenac"),
+          Brand("ECOSP", "Ecosprin", "aspirin", "aspirin"),
+          Brand("WARF", "Warf", "warfarin", "warfarin"),
+          Brand("DEPL", "Deplatt", "clopidogrel", "clopidogrel"),
+          Brand("LOS", "Losec", "omeprazole", "omeprazole"),
+          Brand("PAN", "Pantocid", "pantoprazole", "pantoprazole"),
+          Brand("METL", "Metlong", "metformin", "metformin"),
+          Brand("AMAR", "Amaryl", "glimepiride", "glimepiride"),
+          Brand("GEM", "Gemer", "metformin + glimepiride", "metformin, glimepiride"),
+          Brand("SEP", "Septran", "sulfamethoxazole + trimethoprim", "sulfamethoxazole, trimethoprim"),
+          Brand("AUG", "Augmentin", "amoxicillin + clavulanic acid", "amoxicillin, clavulanic acid"),
+          Brand("MONO", "Monocef", "ceftriaxone", "ceftriaxone"),
+          Brand("AZEE", "Azee", "azithromycin", "azithromycin"),
+          Brand("CETZ", "Cetzin", "cetirizine", "cetirizine"),
+          Brand("TEL", "Telma", "telmisartan", "telmisartan"),
+          Brand("AMLO", "Amlopres", "amlodipine", "amlodipine"),
+          Brand("METO", "Metolar", "metoprolol", "metoprolol"),
+          Brand("LAS", "Lasix", "furosemide", "furosemide"),
+          Brand("ATOR", "Atorva", "atorvastatin", "atorvastatin"),
+          Brand("THYRO", "Thyronorm", "levothyroxine", "levothyroxine"),
+          Brand("ALPR", "Alprax", "alprazolam", "alprazolam"),
+          Brand("DOM", "Domstal", "domperidone", "domperidone"),
+          Brand("EMES", "Emeset", "ondansetron", "ondansetron"),
+        )
+      val idByCode = HashMap<String, String>()
+      for (b in brands) {
+        val d =
+          dr.save(
+            com.squamed.core.masterdata.domain.Drug(
+              code = "${b.code}-$s",
+              name = b.name,
+              genericName = b.generic,
+              brandName = b.name,
+              category = "General",
+              unit = "tab",
+              ingredients = b.ingredients,
+            ),
+          )
+        idByCode["${b.code}-$s"] = d.id!!.toString()
+      }
+
+      fun code(b: String) = "$b-$s"
+
+      // Dual-source interaction rules with provenance + confidence (§5 risk 2).
+      data class IRule(
+        val a: String,
+        val b: String,
+        val sev: String,
+        val conf: Double,
+        val src: String,
+        val desc: String,
+      )
+
+      val rules =
+        listOf(
+          IRule("WARF", "ECOSP", "BLOCK", 0.98, "DATASET", "Warfarin + aspirin: major bleeding risk"),
+          IRule("WARF", "ECOSP", "BLOCK", 0.95, "RULE", "Warfarin + aspirin rule-engine flag"),
+          IRule("WARF", "BRUF", "BLOCK", 0.80, "RULE", "Warfarin + NSAID bleeding risk (low confidence)"),
+          IRule("LOS", "DEPL", "BLOCK", 0.96, "DATASET", "Omeprazole reduces clopidogrel activation"),
+          IRule("ECOSP", "BRUF", "WARN", 0.95, "RULE", "NSAID blunts aspirin antiplatelet effect"),
+          IRule("METL", "AMAR", "WARN", 0.90, "RULE", "Sulfonylurea + biguanide hypoglycemia risk"),
+          IRule("CRO", "WARF", "INFO", 0.99, "DATASET", "Paracetamol + warfarin: minor, INR monitoring"),
+          IRule("SEP", "WARF", "WARN", 0.97, "DATASET", "Sulfamethoxazole potentiates warfarin"),
+          IRule("SEP", "WARF", "WARN", 0.92, "RULE", "CYP2C9 inhibition rule"),
+          IRule("ECOSP", "DEPL", "WARN", 0.98, "DATASET", "Dual antiplatelet bleeding risk"),
+          IRule("BRUF", "TEL", "WARN", 0.90, "RULE", "NSAID reduces ARB effect"),
+          IRule("VOV", "WARF", "BLOCK", 0.85, "DATASET", "Diclofenac + warfarin GI bleed risk"),
+        )
+      for (r in rules) {
+        irr.save(
+          com.squamed.core.medsafety.domain.InteractionRule(
+            drugACode = code(r.a),
+            drugBCode = code(r.b),
+            severity = r.sev,
+            confidence = r.conf,
+            source = r.src,
+            description = r.desc,
+          ),
+        )
+      }
+      drr.save(
+        com.squamed.core.medsafety.domain.DoseRule(
+          drugCode = code("CRO"),
+          maxDailyMgPerKg = 50.0,
+          adultMaxDailyMg = 4000.0,
+        ),
+      )
+      drr.save(
+        com.squamed.core.medsafety.domain.DoseRule(
+          drugCode = code("METL"),
+          adultMaxDailyMg = 2550.0,
+          renalFlag = true,
+          renalEgfrThreshold = 30.0,
+        ),
+      )
+      amr.save(
+        com.squamed.core.medsafety.domain
+          .AllergenClassMap("penicillin", "amoxicillin"),
+      )
+      amr.save(
+        com.squamed.core.medsafety.domain
+          .AllergenClassMap("penicillin", "ampicillin"),
+      )
+      amr.save(
+        com.squamed.core.medsafety.domain
+          .AllergenClassMap("penicillin", "cloxacillin"),
+      )
+      amr.save(
+        com.squamed.core.medsafety.domain
+          .AllergenClassMap("sulfa", "sulfamethoxazole"),
+      )
+
+      fun newPatient(
+        first: String,
+        tag: String,
+        dob: String,
+      ): Pair<String, String> {
+        val p =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/patients",
+              json(
+                "firstName" to first,
+                "lastName" to "Safety$s",
+                "gender" to "female",
+                "dateOfBirth" to dob,
+                "phone" to "77$tag$s".take(11),
+                "qid" to "MS$tag$s".take(11),
+                "nationality" to "QA",
+                "city" to "Doha",
+              ),
+              token,
+            ),
+          )["patient"]
+        return p["id"].asText() to p["mrn"].asText()
+      }
+
+      fun attest(
+        id: String,
+        allergen: String,
+        severity: String,
+      ) {
+        assert2xx(api(HttpMethod.POST, "/api/v1/patients/$id/allergies", json("allergen" to allergen, "severity" to severity), token), "allergy $allergen")
+      }
+
+      val pairId = newPatient("Pair", "1", "1990-01-01").first
+      val pedsId = newPatient("Ped", "2", "2019-05-01").first
+      val (dupId, dupMrn) = newPatient("Dup", "3", "1980-02-02")
+      attest(pairId, "NO KNOWN ALLERGIES", "none")
+      attest(pairId, "penicillin", "block")
+      attest(pairId, "sulfa drugs", "warn")
+      attest(pedsId, "NO KNOWN ALLERGIES", "none")
+      attest(dupId, "NO KNOWN ALLERGIES", "none")
+
+      fun check(
+        patientId: String,
+        drugIds: List<String>,
+        doseMgPerDay: Double? = null,
+      ): JsonNode =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/medication-safety/check",
+            json("patientId" to patientId, "drugIds" to drugIds, "doseMgPerDay" to doseMgPerDay),
+            token,
+          ),
+        )
+
+      fun sevRank(v: String) = mapOf("NONE" to 0, "INFO" to 1, "WARN" to 2, "BLOCK" to 3).getValue(v)
+
+      fun maxInteraction(node: JsonNode): String {
+        val fs = node["findings"]
+        var best = "NONE"
+        for (k in 0 until fs.size()) {
+          val f = fs[k]
+          if (f["type"].asText() == "INTERACTION" && sevRank(f["severity"].asText()) > sevRank(best)) best = f["severity"].asText()
+        }
+        return best
+      }
+
+      fun hasFinding(
+        node: JsonNode,
+        type: String,
+        severity: String,
+      ): Boolean {
+        val fs = node["findings"]
+        for (k in 0 until fs.size()) {
+          if (fs[k]["type"].asText() == type && fs[k]["severity"].asText() == severity) return true
+        }
+        return false
+      }
+      // EVAL: first 200 of the row-major pairs over sorted codes; expected severity from the
+      // authored truth map (BLOCK only >= 0.90 confidence, else WARN).
+      val sortedCodes = brands.map { code(it.code) }.sorted()
+      val allPairs = ArrayList<Pair<String, String>>()
+      for (i in sortedCodes.indices) for (j in i + 1 until sortedCodes.size) allPairs.add(sortedCodes[i] to sortedCodes[j])
+      val evalPairs = allPairs.take(200)
+      val truth =
+        mapOf(
+          listOf(code("WARF"), code("ECOSP")).sorted().joinToString("|") to "BLOCK",
+          listOf(code("WARF"), code("BRUF")).sorted().joinToString("|") to "WARN", // BLOCK 0.80 < 0.90 -> WARN
+          listOf(code("LOS"), code("DEPL")).sorted().joinToString("|") to "BLOCK",
+          listOf(code("ECOSP"), code("BRUF")).sorted().joinToString("|") to "WARN",
+          listOf(code("METL"), code("AMAR")).sorted().joinToString("|") to "WARN",
+          listOf(code("CRO"), code("WARF")).sorted().joinToString("|") to "INFO",
+          listOf(code("SEP"), code("WARF")).sorted().joinToString("|") to "WARN",
+          listOf(code("ECOSP"), code("DEPL")).sorted().joinToString("|") to "WARN",
+          listOf(code("BRUF"), code("TEL")).sorted().joinToString("|") to "WARN",
+          listOf(code("VOV"), code("WARF")).sorted().joinToString("|") to "WARN", // BLOCK 0.85 -> WARN
+        )
+      var matches = 0
+      var falseBlocks = 0
+      for ((a, b) in evalPairs) {
+        val expected = truth[listOf(a, b).sorted().joinToString("|")] ?: "NONE"
+        val actual = maxInteraction(check(pairId, listOf(idByCode[a]!!, idByCode[b]!!)))
+        if (actual == expected) matches++
+        if (actual == "BLOCK" && expected != "BLOCK") falseBlocks++
+      }
+      assertEquals(200, evalPairs.size, "eval pair count")
+      assertTrue(matches >= 196, "eval accuracy $matches/200 must be >= 98%")
+      assertEquals(0, falseBlocks, "0 false-BLOCK required; got $falseBlocks")
+
+      // Provenance + confidence: dual-source merge keeps max confidence and joins sources.
+      val dual = check(pairId, listOf(idByCode[code("WARF")]!!, idByCode[code("ECOSP")]!!))["findings"]
+      var sawDual = false
+      for (k in 0 until dual.size()) {
+        val f = dual[k]
+        if (f["type"].asText() == "INTERACTION") {
+          sawDual = true
+          assertEquals("BLOCK", f["severity"].asText(), "high-confidence dual-source stays BLOCK")
+          assertEquals("DATASET+RULE", f["source"].asText(), "sources merged with provenance")
+          assertEquals(0.98, f["confidence"].asDouble(), 1e-9, "confidence = max across sources")
+        }
+      }
+      assertTrue(sawDual, "warfarin+aspirin interaction present")
+      // Threshold downgrade: BLOCK 0.80 fires as WARN, never as BLOCK.
+      val downgraded = check(pairId, listOf(idByCode[code("WARF")]!!, idByCode[code("BRUF")]!!))["findings"]
+      var sawDowngraded = false
+      for (k in 0 until downgraded.size()) {
+        val f = downgraded[k]
+        if (f["type"].asText() == "INTERACTION") {
+          sawDowngraded = true
+          assertEquals("WARN", f["severity"].asText(), "low-confidence BLOCK downgraded: ${f["severity"].asText()}")
+          assertEquals(0.80, f["confidence"].asDouble(), 1e-9, "confidence preserved")
+        }
+      }
+      assertTrue(sawDowngraded, "downgrade case present")
+      // Allergy: class-map expansion + severity arbitration (block -> BLOCK, warn -> WARN).
+      assertTrue(hasFinding(check(pairId, listOf(idByCode[code("AUG")]!!)), "ALLERGY", "BLOCK"), "penicillin class map catches Augmentin as BLOCK")
+      assertTrue(hasFinding(check(pairId, listOf(idByCode[code("SEP")]!!)), "ALLERGY", "WARN"), "sulfa warn catches Septran as WARN")
+      assertEquals(0, check(pairId, listOf(idByCode[code("CRO")]!!))["findings"].size(), "no findings for a clean drug")
+
+      // Max dose: peds weight-based cap (20 kg x 50 mg/kg = 1000) and adult fallback cap.
+      vsr.save(
+        com.squamed.core.encounter.domain.VitalSign(
+          patientId = java.util.UUID.fromString(pedsId),
+          recordedAt = Instant.now(),
+          weightKg = java.math.BigDecimal("20.0"),
+        ),
+      )
+      assertTrue(hasFinding(check(pedsId, listOf(idByCode[code("CRO")]!!), 1500.0), "MAX_DOSE", "WARN"), "1500 mg/day exceeds 1000 mg peds cap")
+      assertFalse(hasFinding(check(pedsId, listOf(idByCode[code("CRO")]!!), 800.0), "MAX_DOSE", "WARN"), "800 mg/day within peds cap")
+      assertTrue(hasFinding(check(pairId, listOf(idByCode[code("CRO")]!!), 5000.0), "MAX_DOSE", "WARN"), "5000 mg/day exceeds 4000 mg adult cap")
+
+      // Renal: released eGFR below the drug's threshold flags renal dose adjustment.
+      val labOrder =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/orders",
+            json("patientId" to pedsId, "tests" to listOf(mapOf("testCode" to "eGFR", "testName" to "eGFR $s"))),
+            token,
+          ),
+        )
+      val labOrderId = labOrder["order"]["id"].asText()
+      val labReqId = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$labOrderId", token = token))["tests"][0]["id"].asText()
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$labOrderId/collect", json(), token), "collect eGFR")
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$labOrderId/receive", json(), token), "receive eGFR")
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$labOrderId/start", json(), token), "start eGFR")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/lab/orders/$labOrderId/results",
+          json("results" to listOf(mapOf("testRequestId" to labReqId, "resultValue" to "28", "unit" to "mL/min/1.73m2"))),
+          token,
+        ),
+        "enter eGFR",
+      )
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$labOrderId/verify", json(), token), "verify eGFR")
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$labOrderId/release", json(), token), "release eGFR")
+      assertTrue(hasFinding(check(pedsId, listOf(idByCode[code("METL")]!!)), "RENAL", "WARN"), "eGFR 28 < 30 triggers renal flag")
+      // Duplicate therapy: Metlong (metformin) active -> Gemer shares the ingredient.
+      val dupEnc =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters",
+            json("patientId" to dupId, "chiefComplaint" to "polypharmacy review", "reason" to "02.07 safety coverage"),
+            token,
+          ),
+        )["id"].asText()
+
+      fun prescribeRx(extra: List<Pair<String, Any?>>) =
+        api(
+          HttpMethod.POST,
+          "/api/v1/encounters/$dupEnc/prescriptions",
+          json(*(listOf("patientMrn" to dupMrn) + extra).toTypedArray()),
+          token,
+        )
+      assert2xx(prescribeRx(listOf("drugId" to idByCode[code("METL")], "drugName" to "Metlong")), "prescribe Metlong")
+      assertTrue(hasFinding(check(dupId, listOf(idByCode[code("GEM")]!!)), "DUPLICATE", "WARN"), "Gemer duplicates active Metlong")
+
+      // Prescribe gate: warfarin vs the active Ecosprin rx is a BLOCK and needs a typed reason.
+      assert2xx(prescribeRx(listOf("drugId" to idByCode[code("ECOSP")], "drugName" to "Ecosprin")), "prescribe Ecosprin")
+      val warfBlocked = prescribeRx(listOf("drugId" to idByCode[code("WARF")], "drugName" to "Warf"))
+      assert4xx(warfBlocked, "prescribe warfarin blocked without reason")
+      assertTrue(warfBlocked.body.contains("MEDICATION_SAFETY_BLOCK"), "prescribe guard code: ${warfBlocked.body.take(200)}")
+      val warfRx =
+        `data`(
+          prescribeRx(
+            listOf("drugId" to idByCode[code("WARF")], "drugName" to "Warf", "overrideReason" to "Cardiologist-directed dual therapy"),
+          ),
+        )["id"].asText()
+
+      // Dispense gate: FEFO picks the seeded Warf batch; BLOCK needs an audited override reason.
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/pharmacy/stock",
+          json(
+            "drugId" to idByCode[code("WARF")],
+            "drugName" to "Warf",
+            "batchNumber" to "W-$s",
+            "quantityOnHand" to 50,
+            "reorderLevel" to 5,
+            "unitPrice" to 12.5,
+            "location" to "B-1",
+          ),
+          token,
+        ),
+        "seed Warf stock",
+      )
+
+      fun dispenseWarf(reason: String?) =
+        api(
+          HttpMethod.POST,
+          "/api/v1/pharmacy/dispensations",
+          json(
+            "prescriptionId" to warfRx,
+            "patientId" to dupId,
+            "drugId" to idByCode[code("WARF")],
+            "drugName" to "Warf",
+            "quantity" to 10,
+            "safetyOverrideReason" to reason,
+          ),
+          token,
+        )
+      val dNoReason = dispenseWarf(null)
+      assert4xx(dNoReason, "dispense blocked without reason")
+      assertTrue(dNoReason.body.contains("MEDICATION_SAFETY_BLOCK"), "dispense guard code: ${dNoReason.body.take(200)}")
+      val dBlank = dispenseWarf("   ")
+      assert4xx(dBlank, "dispense blocked with blank reason")
+      assertTrue(dBlank.body.contains("MEDICATION_SAFETY_BLOCK"), "blank-reason guard code: ${dBlank.body.take(200)}")
+      assert2xx(dispenseWarf("Cardiologist-directed dual therapy"), "dispense warfarin with audited override")
+
+      // Override API: blank reason rejected outright; KPIs group overrides by type+reason.
+      val overrideBlank =
+        api(
+          HttpMethod.POST,
+          "/api/v1/medication-safety/overrides",
+          json("patientId" to dupId, "drugCode" to code("WARF"), "findingType" to "INTERACTION", "severity" to "WARN", "reason" to "  "),
+          token,
+        )
+      assert4xx(overrideBlank, "override without reason rejected")
+      assertTrue(overrideBlank.body.contains("OVERRIDE_REASON_REQUIRED"), "override guard code: ${overrideBlank.body.take(200)}")
+      val kpis = `data`(api(HttpMethod.GET, "/api/v1/medication-safety/override-kpis?days=30", token = token))
+      assertTrue(kpis.size() > 0, "override KPI rows present")
+      var sawInteractionKpi = false
+      for (k in 0 until kpis.size()) {
+        val row = kpis[k]
+        if (row["findingType"].asText() == "INTERACTION" && row["count"].asLong() >= 1) sawInteractionKpi = true
+      }
+      assertTrue(sawInteractionKpi, "interaction override KPI row present")
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */
@@ -9553,15 +9977,21 @@ class PlatformIntegrationTests {
               "departmentId" to departmentId,
               "doctorId" to adminId,
               "appointmentType" to "OPD",
+              // Fixed local noon: now+1h crosses local midnight for runs starting 23:00-00:00 and
+              // kiosk's findTodayAppointment then misses it (KIOSK_NO_APPOINTMENT, CI 44633955177).
               "scheduledStart" to
-                java.time.Instant
+                java.time.LocalDate
                   .now()
-                  .plusSeconds(3600)
+                  .atTime(12, 0)
+                  .atZone(java.time.ZoneId.systemDefault())
+                  .toInstant()
                   .toString(),
               "scheduledEnd" to
-                java.time.Instant
+                java.time.LocalDate
                   .now()
-                  .plusSeconds(7200)
+                  .atTime(12, 30)
+                  .atZone(java.time.ZoneId.systemDefault())
+                  .toInstant()
                   .toString(),
               "durationMinutes" to 30,
               "reason" to "kiosk journey",
@@ -9574,10 +10004,9 @@ class PlatformIntegrationTests {
       appointment(pPhone)
 
       // ABHA check-in: slip carries the token, the appointment context and the wayfinding department.
-      val slipAbha =
-        `data`(
-          api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "abha", "identifier" to abhaNumber), kiosk),
-        )
+      val slipAbhaResp = api(HttpMethod.POST, "/api/v1/kiosk/check-in", json("identifierType" to "abha", "identifier" to abhaNumber), kiosk)
+      assert2xx(slipAbhaResp, "abha check-in")
+      val slipAbha = om.readTree(slipAbhaResp.body)["data"]
       assertEquals("C-01", slipAbha["token"]["tokenNumber"].asText(), "fresh hospital daily token sequence: $slipAbha")
       assertEquals(apptAbha, slipAbha["appointmentId"].asText(), "slip references today's appointment")
       assertEquals(deptName, slipAbha["departmentName"].asText(), "slip wayfinding department name")

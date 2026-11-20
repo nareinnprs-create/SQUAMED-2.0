@@ -55,6 +55,8 @@ data class DispenseRequestDto(
   val substitutionReason: String? = null,
   // 02.06 / CS-04 pharmacist leg: required for controlled drugs.
   val secondAuthorizerId: UUID? = null,
+  // 02.07 safety gate: mandatory when dispensing past a BLOCK finding; audited override.
+  val safetyOverrideReason: String? = null,
 )
 
 data class FormularyRequestDto(

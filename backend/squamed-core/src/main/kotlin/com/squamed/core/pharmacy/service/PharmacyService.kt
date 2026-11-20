@@ -7,6 +7,8 @@ import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.masterdata.domain.Drug
 import com.squamed.core.masterdata.repository.DrugRepository
+import com.squamed.core.medsafety.api.MedSafetyOverrideDto
+import com.squamed.core.medsafety.service.MedicationSafetyService
 import com.squamed.core.pharmacy.api.ControlledRegisterView
 import com.squamed.core.pharmacy.api.DispensationView
 import com.squamed.core.pharmacy.api.DispenseRequestDto
@@ -50,6 +52,7 @@ class PharmacyService(
   private val drugRepository: DrugRepository,
   private val eventPublisher: DomainEventPublisher,
   private val tenantResolver: TenantResolver,
+  private val medicationSafetyService: MedicationSafetyService, // 02.07 safety gate
 ) {
   // 02.06: near-expiry BLOCK window for dispensing (days).
   private val nearExpiryDays = 30L
@@ -234,6 +237,24 @@ class PharmacyService(
     // 02.06 / CS-04 pharmacist leg: controlled drugs need a second authorized user.
     if (drug?.isControlled == true && dto.secondAuthorizerId == null) {
       throw IllegalArgumentException("SECOND_AUTHORIZER_REQUIRED")
+    }
+    // 02.07 medication safety gate: BLOCK hard-fails unless an audited override reason is recorded.
+    if (drug != null) {
+      val screen = medicationSafetyService.screenForDispense(dto.patientId, drug.id!!, dto.prescriptionId)
+      val reason = dto.safetyOverrideReason?.trim()
+      val blocking = screen.findings.any { it.severity == "BLOCK" }
+      if (blocking && reason.isNullOrEmpty()) throw IllegalStateException("MEDICATION_SAFETY_BLOCK")
+      val top =
+        screen.findings
+          .filter { it.severity == "BLOCK" || it.severity == "WARN" }
+          .maxByOrNull { if (it.severity == "BLOCK") 2 else 1 }
+      if (top != null && (blocking || !reason.isNullOrEmpty())) {
+        medicationSafetyService.recordOverride(
+          MedSafetyOverrideDto(dto.patientId, drug.code, top.type, top.severity, reason ?: top.message),
+          dispensedBy,
+          hospitalId,
+        )
+      }
     }
     val stock =
       if (dto.stockId != null) {

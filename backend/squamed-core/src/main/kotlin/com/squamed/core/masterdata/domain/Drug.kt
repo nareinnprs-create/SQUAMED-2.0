@@ -36,4 +36,9 @@ class Drug(
   var requiresPrescription: Boolean = true,
   @Column(name = "is_active", nullable = false)
   var isActive: Boolean = true,
+  // 02.07 medication safety: ATC class + ingredient tokens (CSV) for allergy/interaction matching.
+  @Column(name = "atc_code", length = 20)
+  var atcCode: String? = null,
+  @Column(name = "ingredients")
+  var ingredients: String? = null,
 ) : BaseEntity()

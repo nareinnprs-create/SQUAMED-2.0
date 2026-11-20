@@ -1060,6 +1060,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/pharmacy/reorder-proposals/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rejectReorderProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pharmacy/reorder-proposals/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["approveReorderProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pharmacy/reorder-proposals/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["generateReorderProposals"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pharmacy/indents": {
         parameters: {
             query?: never;
@@ -4244,6 +4292,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/pharmacy/reorder-proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listReorderProposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pharmacy/controlled-register": {
         parameters: {
             query?: never;
@@ -7172,6 +7236,51 @@ export interface components {
             quantity: number;
             reason?: string;
         };
+        ReorderRejectDto: {
+            note: string;
+        };
+        ApiResponseReorderProposalView: {
+            data?: components["schemas"]["ReorderProposalView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ReorderProposalView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            drugId?: string;
+            drugName: string;
+            /** Format: uuid */
+            stockId?: string;
+            /** Format: int32 */
+            requestedQuantity: number;
+            status: string;
+            note?: string;
+            /** Format: uuid */
+            proposedBy?: string;
+            /** Format: uuid */
+            decidedBy?: string;
+            /** Format: date-time */
+            decidedAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ReorderApproveDto: {
+            /** Format: int32 */
+            quantity?: number;
+            note?: string;
+        };
+        ApiResponseListReorderProposalView: {
+            data?: components["schemas"]["ReorderProposalView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         IndentRequestDto: {
             /** Format: uuid */
             drugId?: string;
@@ -7302,6 +7411,8 @@ export interface components {
             /** Format: uuid */
             stockId?: string;
             batchNumber?: string;
+            /** Format: date */
+            expiryDate?: string;
             /** Format: uuid */
             substitutedDrugId?: string;
             substitutedDrugName?: string;
@@ -14122,6 +14233,78 @@ export interface operations {
             };
         };
     };
+    rejectReorderProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderRejectDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReorderProposalView"];
+                };
+            };
+        };
+    };
+    approveReorderProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderApproveDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReorderProposalView"];
+                };
+            };
+        };
+    };
+    generateReorderProposals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListReorderProposalView"];
+                };
+            };
+        };
+    };
     listIndents: {
         parameters: {
             query?: never;
@@ -20814,6 +20997,28 @@ export interface operations {
             };
         };
     };
+    listReorderProposals: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListReorderProposalView"];
+                };
+            };
+        };
+    };
     listControlledRegister: {
         parameters: {
             query?: never;
@@ -22528,4 +22733,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 640d46a6ca0c8d698722804663b2191b3cb69d3f233aa7d02fa7d19a2d3ff93a
+// openapi snapshot sha256: 37cc172ab42f8ef86230f44fb14f964344e93287e98b51faddac87423930ceb4

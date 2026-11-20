@@ -2,6 +2,7 @@ package com.squamed.core.pharmacy.service
 
 import com.squamed.core.common.tenant.TenantResolver
 import com.squamed.core.common.tenant.requireSameHospital
+import com.squamed.core.encounter.repository.PrescriptionRepository
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.identity.security.SquamedPrincipal
@@ -18,6 +19,9 @@ import com.squamed.core.pharmacy.api.IndentReceiveRequestDto
 import com.squamed.core.pharmacy.api.IndentRequestDto
 import com.squamed.core.pharmacy.api.IndentView
 import com.squamed.core.pharmacy.api.PharmacyStockView
+import com.squamed.core.pharmacy.api.ReorderApproveDto
+import com.squamed.core.pharmacy.api.ReorderProposalView
+import com.squamed.core.pharmacy.api.ReorderRejectDto
 import com.squamed.core.pharmacy.api.StockLedgerView
 import com.squamed.core.pharmacy.api.StockRequestDto
 import com.squamed.core.pharmacy.api.StockUpdateDto
@@ -27,12 +31,14 @@ import com.squamed.core.pharmacy.domain.Dispensation
 import com.squamed.core.pharmacy.domain.FormularyEntry
 import com.squamed.core.pharmacy.domain.Indent
 import com.squamed.core.pharmacy.domain.PharmacyStock
+import com.squamed.core.pharmacy.domain.ReorderProposal
 import com.squamed.core.pharmacy.domain.StockLedger
 import com.squamed.core.pharmacy.repository.ControlledRegisterRepository
 import com.squamed.core.pharmacy.repository.DispensationRepository
 import com.squamed.core.pharmacy.repository.FormularyEntryRepository
 import com.squamed.core.pharmacy.repository.IndentRepository
 import com.squamed.core.pharmacy.repository.PharmacyStockRepository
+import com.squamed.core.pharmacy.repository.ReorderProposalRepository
 import com.squamed.core.pharmacy.repository.StockLedgerRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -49,6 +55,8 @@ class PharmacyService(
   private val formularyEntryRepository: FormularyEntryRepository,
   private val indentRepository: IndentRepository,
   private val controlledRegisterRepository: ControlledRegisterRepository,
+  private val reorderProposalRepository: ReorderProposalRepository,
+  private val prescriptionRepository: PrescriptionRepository,
   private val drugRepository: DrugRepository,
   private val eventPublisher: DomainEventPublisher,
   private val tenantResolver: TenantResolver,
@@ -256,6 +264,20 @@ class PharmacyService(
         )
       }
     }
+    // 02.08 eMAR groundwork: never dispense past the prescribed quantity (partial dispenses sum up).
+    // The rx row is locked so two concurrent dispenses cannot both pass the remaining-quantity check.
+    if (dto.prescriptionId != null) {
+      val rx = prescriptionRepository.findByIdForUpdate(dto.prescriptionId).orElseThrow { IllegalArgumentException("PRESCRIPTION_NOT_FOUND") }
+      val prescribed = rx.quantity
+      if (prescribed != null) {
+        val already =
+          dispensationRepository
+            .findByPrescriptionId(dto.prescriptionId)
+            .filter { it.status != "returned" && it.status != "cancelled" }
+            .sumOf { it.quantity }
+        if (already + dto.quantity > prescribed) throw IllegalArgumentException("DISPENSE_EXCEEDS_PRESCRIBED")
+      }
+    }
     val stock =
       if (dto.stockId != null) {
         val s =
@@ -293,6 +315,7 @@ class PharmacyService(
           notes = dto.notes,
           stockId = stock?.id,
           batchNumber = stock?.batchNumber, // 02.06 batch/expiry traceability on dispense
+          expiryDate = stock?.expiryDate, // 02.08 eMAR groundwork: expiry snapshot
           substitutedDrugId = dto.substitutedDrugId,
           substitutedDrugName = dto.substitutedDrugName,
           substitutionReason = dto.substitutionReason,
@@ -580,4 +603,78 @@ class PharmacyService(
   @Transactional(readOnly = true)
   fun listControlledRegister(hospitalId: UUID?): List<ControlledRegisterView> =
     controlledRegisterRepository.findAllForHospital(hospitalId).map { ControlledRegisterView.from(it) }
+
+  // 02.08 reorder proposals: min-level rows become PROPOSED stubs; an open proposal per stock is not
+  // duplicated (a partial unique index backs this up). Quantity tops the batch back up to twice its
+  // reorder level, never below one reorder level. Writes require a hospital-scoped caller.
+  @Transactional
+  fun generateReorderProposals(
+    hospitalId: UUID?,
+    principal: SquamedPrincipal,
+  ): List<ReorderProposalView> {
+    val hid = hospitalId ?: throw IllegalArgumentException("HOSPITAL_REQUIRED")
+    val created = mutableListOf<ReorderProposal>()
+    pharmacyStockRepository
+      .findAllForHospital(hid)
+      .filter { it.isActive && it.quantityOnHand <= it.reorderLevel }
+      .forEach { stock ->
+        if (reorderProposalRepository.findByStockIdAndStatus(stock.id!!, "PROPOSED").isEmpty()) {
+          val topUp = maxOf(stock.reorderLevel * 2 - stock.quantityOnHand, stock.reorderLevel)
+          created +=
+            reorderProposalRepository.save(
+              ReorderProposal(
+                hospitalId = stock.hospitalId,
+                drugId = stock.drugId,
+                drugName = stock.drugName,
+                stockId = stock.id,
+                requestedQuantity = topUp,
+                proposedBy = principal.userId,
+              ),
+            )
+        }
+      }
+    return created.map { ReorderProposalView.from(it) }
+  }
+
+  @Transactional(readOnly = true)
+  fun listReorderProposals(
+    hospitalId: UUID?,
+    status: String?,
+  ): List<ReorderProposalView> = reorderProposalRepository.findAllForHospital(hospitalId, status).map { ReorderProposalView.from(it) }
+
+  // Human approval is the PO stub: nothing is ordered automatically (procurement is chunk 6).
+  @Transactional
+  fun approveReorderProposal(
+    id: UUID,
+    dto: ReorderApproveDto,
+    principal: SquamedPrincipal,
+  ): ReorderProposalView {
+    val proposal = reorderProposalRepository.findById(id).orElseThrow { IllegalArgumentException("REORDER_PROPOSAL_NOT_FOUND") }
+    if (proposal.status != "PROPOSED") throw IllegalArgumentException("REORDER_PROPOSAL_ALREADY_DECIDED")
+    if (dto.quantity != null) {
+      if (dto.quantity <= 0) throw IllegalArgumentException("REORDER_QUANTITY_INVALID")
+      proposal.requestedQuantity = dto.quantity
+    }
+    proposal.status = "APPROVED"
+    proposal.note = dto.note
+    proposal.decidedBy = principal.userId
+    proposal.decidedAt = Instant.now()
+    return ReorderProposalView.from(reorderProposalRepository.save(proposal))
+  }
+
+  @Transactional
+  fun rejectReorderProposal(
+    id: UUID,
+    dto: ReorderRejectDto,
+    principal: SquamedPrincipal,
+  ): ReorderProposalView {
+    val proposal = reorderProposalRepository.findById(id).orElseThrow { IllegalArgumentException("REORDER_PROPOSAL_NOT_FOUND") }
+    if (proposal.status != "PROPOSED") throw IllegalArgumentException("REORDER_PROPOSAL_ALREADY_DECIDED")
+    if (dto.note.isBlank()) throw IllegalArgumentException("REORDER_REJECTION_REASON_REQUIRED")
+    proposal.status = "REJECTED"
+    proposal.note = dto.note.trim()
+    proposal.decidedBy = principal.userId
+    proposal.decidedAt = Instant.now()
+    return ReorderProposalView.from(reorderProposalRepository.save(proposal))
+  }
 }

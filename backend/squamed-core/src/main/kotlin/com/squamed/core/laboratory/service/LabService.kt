@@ -301,6 +301,29 @@ class LabService(
         recipientIds = emptyList(),
       ),
     )
+    // 02.08: the released order is a performed billable service; chunk-3 charge capture consumes it.
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "billing.chargeable_performed",
+        occurredAt = Instant.now(),
+        source = "lab-service",
+        entityType = "lab-order",
+        entityId = orderId,
+        hospitalId = labOrder.hospitalId,
+        payload =
+          mapOf(
+            "orderNumber" to labOrder.orderNumber,
+            "patientId" to labOrder.patientId.toString(),
+            "chargeCategory" to "LAB",
+            "tests" to
+              labTestRequestRepository.findByLabOrderId(orderId).map {
+                mapOf("testCode" to it.testCode, "testName" to it.testName, "quantity" to 1)
+              },
+          ),
+        recipientIds = emptyList(),
+      ),
+    )
     return getOrderDetail(orderId)
   }
 

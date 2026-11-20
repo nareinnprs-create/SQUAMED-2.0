@@ -140,6 +140,8 @@ data class DispensationView(
   val notes: String?,
   val stockId: UUID?,
   val batchNumber: String?,
+  // 02.08 eMAR groundwork: batch expiry snapshot at dispense time.
+  val expiryDate: java.time.LocalDate?,
   val substitutedDrugId: UUID?,
   val substitutedDrugName: String?,
   val substitutionReason: String?,
@@ -167,6 +169,7 @@ data class DispensationView(
         notes = entity.notes,
         stockId = entity.stockId,
         batchNumber = entity.batchNumber,
+        expiryDate = entity.expiryDate,
         substitutedDrugId = entity.substitutedDrugId,
         substitutedDrugName = entity.substitutedDrugName,
         substitutionReason = entity.substitutionReason,
@@ -299,3 +302,46 @@ data class ControlledRegisterView(
       )
   }
 }
+
+// 02.08 reorder proposals: human-approved PO stubs generated from min-level stock alerts.
+data class ReorderProposalView(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val drugId: UUID?,
+  val drugName: String,
+  val stockId: UUID?,
+  val requestedQuantity: Int,
+  val status: String,
+  val note: String?,
+  val proposedBy: UUID?,
+  val decidedBy: UUID?,
+  val decidedAt: Instant?,
+  val createdAt: Instant?,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.pharmacy.domain.ReorderProposal) =
+      ReorderProposalView(
+        id = entity.id,
+        hospitalId = entity.hospitalId,
+        drugId = entity.drugId,
+        drugName = entity.drugName,
+        stockId = entity.stockId,
+        requestedQuantity = entity.requestedQuantity,
+        status = entity.status,
+        note = entity.note,
+        proposedBy = entity.proposedBy,
+        decidedBy = entity.decidedBy,
+        decidedAt = entity.decidedAt,
+        createdAt = entity.createdAt,
+      )
+  }
+}
+
+data class ReorderApproveDto(
+  val quantity: Int? = null,
+  val note: String? = null,
+)
+
+data class ReorderRejectDto(
+  val note: String,
+)

@@ -169,4 +169,38 @@ class PharmacyController(
   fun listControlledRegister(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<List<ControlledRegisterView>> = ApiResponse.ok(pharmacyService.listControlledRegister(principal.hospitalId))
+
+  // 02.08 reorder proposals: generated from min-level alerts, then human-approved or rejected.
+  @PostMapping("/reorder-proposals/generate")
+  @RequiresPermission("pharmacy:write:stock")
+  @Transactional
+  fun generateReorderProposals(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ReorderProposalView>> = ApiResponse.ok(pharmacyService.generateReorderProposals(principal.hospitalId, principal))
+
+  @GetMapping("/reorder-proposals")
+  @RequiresPermission("pharmacy:read:stock")
+  @Transactional(readOnly = true)
+  fun listReorderProposals(
+    @RequestParam(name = "status", required = false) status: String?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ReorderProposalView>> = ApiResponse.ok(pharmacyService.listReorderProposals(principal.hospitalId, status))
+
+  @PostMapping("/reorder-proposals/{id}/approve")
+  @RequiresPermission("pharmacy:write:stock")
+  @Transactional
+  fun approveReorderProposal(
+    @PathVariable id: UUID,
+    @RequestBody dto: ReorderApproveDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<ReorderProposalView> = ApiResponse.ok(pharmacyService.approveReorderProposal(id, dto, principal))
+
+  @PostMapping("/reorder-proposals/{id}/reject")
+  @RequiresPermission("pharmacy:write:stock")
+  @Transactional
+  fun rejectReorderProposal(
+    @PathVariable id: UUID,
+    @RequestBody dto: ReorderRejectDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<ReorderProposalView> = ApiResponse.ok(pharmacyService.rejectReorderProposal(id, dto, principal))
 }

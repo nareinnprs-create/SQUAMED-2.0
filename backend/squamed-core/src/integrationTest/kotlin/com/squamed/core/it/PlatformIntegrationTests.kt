@@ -6684,7 +6684,7 @@ class PlatformIntegrationTests {
       assert4xx(past, "dispense beyond a fully dispensed prescription")
       assertTrue(past.body.contains("DISPENSE_EXCEEDS_PRESCRIBED"), "fully-dispensed guard code: ${past.body.take(200)}")
 
-      // Reorder proposals: min-level stock -> PROPOSED stub, no duplicates, human approve/reject.
+      // Reorder proposals: min-level stock -> PROPOSED draft, no duplicates, human approve/reject.
       val stockB = stock(drug("B"), "ChargeB", 3, 10)
       val stockBId = stockB["id"].asText()
       val generated = `data`(api(HttpMethod.POST, "/api/v1/pharmacy/reorder-proposals/generate", json(), pharm))
@@ -6699,7 +6699,7 @@ class PlatformIntegrationTests {
           api(
             HttpMethod.POST,
             "/api/v1/pharmacy/reorder-proposals/${propB["id"].asText()}/approve",
-            json("quantity" to 25, "note" to "approved for PO stub"),
+            json("quantity" to 25, "note" to "approved for PO draft"),
             pharm,
           ),
         )
@@ -7539,12 +7539,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        23,
+        24,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")

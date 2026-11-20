@@ -7,7 +7,7 @@ import jakarta.persistence.Table
 import java.time.Instant
 import java.util.UUID
 
-// 02.08 reorder proposals: min-level alerts become human-approved PO stubs (procurement is chunk 6).
+// 02.08 reorder proposals: min-level alerts become human-approved PO drafts (procurement is chunk 6).
 @Entity
 @Table(name = "reorder_proposal", schema = "pharmacy")
 class ReorderProposal(

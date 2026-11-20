@@ -303,7 +303,7 @@ data class ControlledRegisterView(
   }
 }
 
-// 02.08 reorder proposals: human-approved PO stubs generated from min-level stock alerts.
+// 02.08 reorder proposals: human-approved PO drafts generated from min-level stock alerts.
 data class ReorderProposalView(
   val id: UUID?,
   val hospitalId: UUID,

@@ -604,7 +604,7 @@ class PharmacyService(
   fun listControlledRegister(hospitalId: UUID?): List<ControlledRegisterView> =
     controlledRegisterRepository.findAllForHospital(hospitalId).map { ControlledRegisterView.from(it) }
 
-  // 02.08 reorder proposals: min-level rows become PROPOSED stubs; an open proposal per stock is not
+  // 02.08 reorder proposals: min-level rows become PROPOSED drafts; an open proposal per stock is not
   // duplicated (a partial unique index backs this up). Quantity tops the batch back up to twice its
   // reorder level, never below one reorder level. Writes require a hospital-scoped caller.
   @Transactional
@@ -642,7 +642,7 @@ class PharmacyService(
     status: String?,
   ): List<ReorderProposalView> = reorderProposalRepository.findAllForHospital(hospitalId, status).map { ReorderProposalView.from(it) }
 
-  // Human approval is the PO stub: nothing is ordered automatically (procurement is chunk 6).
+  // Human approval is the PO draft: nothing is ordered automatically (procurement is chunk 6).
   @Transactional
   fun approveReorderProposal(
     id: UUID,

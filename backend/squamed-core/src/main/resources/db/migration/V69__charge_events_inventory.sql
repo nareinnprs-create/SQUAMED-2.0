@@ -1,5 +1,5 @@
 -- V69: Charge events + inventory linkage + eMAR groundwork (chunk-02 section 02.08)
--- Reorder proposals: min-level stock alerts become human-approved purchase-order stubs
+-- Reorder proposals: min-level stock alerts become human-approved purchase-order drafts
 -- (full procurement is chunk 6). Nothing is auto-ordered — a pharmacist approves or rejects.
 -- eMAR groundwork: the dispensation snapshots the batch expiry so chunk-4 administration
 -- can verify what was dispensed against a live prescription (no expiry editing in place).

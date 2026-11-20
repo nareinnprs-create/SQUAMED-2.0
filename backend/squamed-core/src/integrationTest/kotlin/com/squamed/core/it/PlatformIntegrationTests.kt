@@ -703,6 +703,7 @@ class PlatformIntegrationTests {
             "quantity" to 1,
             "unitPriceQar" to 200,
             "insuranceClaimable" to false,
+            "reason" to "journey consult fee",
           ),
           token,
         ),
@@ -5680,6 +5681,7 @@ class PlatformIntegrationTests {
             "chargeName" to "Fin Charge",
             "quantity" to 1,
             "unitPriceQar" to 150.0,
+            "reason" to "financial coverage fixture",
           ),
           token,
         ),
@@ -6121,6 +6123,9 @@ class PlatformIntegrationTests {
 
     @org.springframework.beans.factory.annotation.Autowired
     private lateinit var msVitalSignRepository: com.squamed.core.encounter.repository.VitalSignRepository
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var chargeCaptureService: com.squamed.core.billing.service.ChargeCaptureService
 
     @Test
     fun medicationSafetyEvalCoverage() {
@@ -7012,6 +7017,186 @@ class PlatformIntegrationTests {
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog", token = token))
       assertTrue(catalog.any { it["name"].asText() == "StudyCompleted" && it["status"].asText() == "EMITTED" }, "StudyCompleted cataloged")
       assertTrue(catalog.any { it["name"].asText() == "RadiologyReportSigned" && it["status"].asText() == "EMITTED" }, "RadiologyReportSigned cataloged")
+    }
+
+    @Test
+    fun chargeCaptureLedgerCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+
+      // Event-driven pricing: the active tariff row matching the performed code.
+      val testCode = "CAP-$s"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/tariffs",
+          json("hospitalId" to hospitalId, "code" to testCode, "name" to "Capture Panel $s", "category" to "lab", "priceQar" to 75.0),
+          token,
+        ),
+        "tariff for the performed lab code",
+      )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/tariffs",
+          json("hospitalId" to hospitalId, "code" to "CT", "name" to "CT study", "category" to "imaging", "priceQar" to 250.0),
+          token,
+        ),
+        "tariff for the imaging modality",
+      )
+
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Ledger",
+              "lastName" to "Coverage$s",
+              "gender" to "male",
+              "dateOfBirth" to "1979-09-09",
+              "phone" to "74$s".take(11),
+              "qid" to "LC$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+            ),
+            token,
+          ),
+        )["patient"]
+      val patientId = patient["id"].asText()
+
+      fun chargesFor(patient: String) = `data`(api(HttpMethod.GET, "/api/v1/billing/charges?patientId=$patient", token = token))
+
+      // Lab release -> ChargeablePerformed -> one ledger row priced from the tariff.
+      val labOrder =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/orders",
+            json("patientId" to patientId, "tests" to listOf(mapOf("testCode" to testCode, "testName" to "Capture Panel $s"))),
+            token,
+          ),
+        )["order"]["id"].asText()
+      val labReqId = `data`(api(HttpMethod.GET, "/api/v1/lab/orders/$labOrder", token = token))["tests"][0]["id"].asText()
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$labOrder/collect", json(), token), "collect capture panel")
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$labOrder/receive", json(), token), "receive capture panel")
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$labOrder/start", json(), token), "start capture panel")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/lab/orders/$labOrder/results",
+          json("results" to listOf(mapOf("testRequestId" to labReqId, "resultValue" to "4.2"))),
+          token,
+        ),
+        "enter capture panel",
+      )
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$labOrder/verify", json(), token), "verify capture panel")
+      assert2xx(api(HttpMethod.POST, "/api/v1/lab/orders/$labOrder/release", json(), token), "release capture panel")
+
+      var labCharge: JsonNode? = null
+      val labDeadline = System.currentTimeMillis() + 45_000
+      while (System.currentTimeMillis() < labDeadline) {
+        labCharge = chargesFor(patientId).firstOrNull { it["referenceType"].asText() == "lab-order" && it["referenceId"].asText() == labOrder }
+        if (labCharge != null) break
+        Thread.sleep(500)
+      }
+      assertNotNull(labCharge, "lab release captured into the charge ledger: ${chargesFor(patientId)}")
+      assertEquals("EVENT", labCharge!!["entryMode"].asText(), "event-driven ledger entry")
+      assertFalse(labCharge["sourceEventId"].isNull, "source event id recorded for idempotency")
+      assertEquals(testCode, labCharge["chargeCode"].asText(), "performed test code carried")
+      assertEquals("LAB", labCharge["category"].asText(), "charge category")
+      assertEquals(75.0, labCharge["unitPriceQar"].asDouble(), 1e-9, "priced from the matching tariff")
+      assertEquals(75.0, labCharge["totalQar"].asDouble(), 1e-9, "line total")
+      assertEquals("posted", labCharge["status"].asText(), "posted, invoiceable")
+
+      // Imaging study completion -> IMAGING ledger row priced from the modality tariff.
+      val radOrder =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/radiology/orders",
+            json("patientId" to patientId, "hospitalId" to hospitalId, "modality" to "CT", "bodyPart" to "HEAD"),
+            token,
+          ),
+        )["id"].asText()
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/radiology/orders/$radOrder/study:complete",
+          json("studyInstanceUid" to "1.2.840.113619.cap.$s"),
+          token,
+        ),
+        "complete capture study",
+      )
+      var imagingCharge: JsonNode? = null
+      val imgDeadline = System.currentTimeMillis() + 45_000
+      while (System.currentTimeMillis() < imgDeadline) {
+        imagingCharge = chargesFor(patientId).firstOrNull { it["referenceType"].asText() == "radiology-study" }
+        if (imagingCharge != null) break
+        Thread.sleep(500)
+      }
+      assertNotNull(imagingCharge, "imaging completion captured into the charge ledger")
+      assertEquals("IMAGING", imagingCharge!!["category"].asText(), "imaging category")
+      assertEquals(250.0, imagingCharge["unitPriceQar"].asDouble(), 1e-9, "priced from the modality tariff")
+
+      // Idempotency: replaying the same event never double-charges.
+      val replayEvent =
+        com.squamed.core.events.DomainEvent(
+          eventId = java.util.UUID.fromString(labCharge["sourceEventId"].asText()),
+          eventType = "billing.chargeable_performed",
+          occurredAt = Instant.now(),
+          source = "test-replay",
+          entityType = "lab-order",
+          entityId = java.util.UUID.fromString(labOrder),
+          hospitalId = java.util.UUID.fromString(hospitalId),
+          payload =
+            mapOf(
+              "patientId" to patientId,
+              "chargeCategory" to "LAB",
+              "tests" to listOf(mapOf("testCode" to testCode, "testName" to "Capture Panel $s", "quantity" to 1)),
+            ),
+          recipientIds = emptyList(),
+        )
+      val first = chargeCaptureService.capture(replayEvent)
+      val second = chargeCaptureService.capture(replayEvent)
+      assertEquals(first?.id, second?.id, "replayed event resolves to the same ledger row")
+      assertEquals(2, chargesFor(patientId).size(), "no duplicate row from the replay")
+
+      // Manual entry: reason mandatory, audited, never event-driven.
+      val noReason =
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/charges",
+          json("patientId" to patientId, "chargeCode" to "MAN-$s", "chargeName" to "Manual dressing", "quantity" to 1, "unitPriceQar" to 20.0),
+          token,
+        )
+      assert4xx(noReason, "manual charge without a reason")
+      assertTrue(noReason.body.contains("CHARGE_REASON_REQUIRED"), "manual reason guard code: ${noReason.body.take(200)}")
+      val manual =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/charges",
+            json(
+              "patientId" to patientId,
+              "chargeCode" to "MAN-$s",
+              "chargeName" to "Manual dressing",
+              "quantity" to 2,
+              "unitPriceQar" to 20.0,
+              "reason" to "dressing performed but order not entered",
+            ),
+            token,
+          ),
+        )
+      assertEquals("MANUAL", manual["entryMode"].asText(), "manual entry mode")
+      assertEquals("dressing performed but order not entered", manual["entryReason"].asText(), "manual reason recorded")
+      assertFalse(manual["postedBy"].isNull, "manual entry audited with the poster")
+      assertTrue(manual["sourceEventId"].isNull, "manual entry has no source event")
+
+      // Consumer cursor tracks the ledger's independent offset.
+      val cursors = `data`(api(HttpMethod.GET, "/api/v1/admin/events/cursors", token = token))
+      assertTrue(cursors.any { it["consumer"].asText() == "billing-ledger" }, "billing-ledger cursor tracked: $cursors")
     }
   }
 

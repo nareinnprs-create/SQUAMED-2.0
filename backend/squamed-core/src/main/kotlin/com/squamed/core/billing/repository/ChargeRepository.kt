@@ -7,6 +7,9 @@ import org.springframework.data.repository.query.Param
 import java.util.UUID
 
 interface ChargeRepository : JpaRepository<Charge, UUID> {
+  // 03.01 ledger idempotency: one row per source event.
+  fun findBySourceEventId(sourceEventId: UUID): Charge?
+
   // 00.04 tenant sweep: null-safe hospital scope (U7/D9) — admin callers pass null.
   @Query("select c from Charge c where (:hid is null or c.hospitalId = :hid) and c.patientId = :patientId")
   fun findByPatientId(

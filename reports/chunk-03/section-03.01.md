@@ -1,56 +1,71 @@
-# Section 03.01 — Charge capture ledger — gate-run report
+# Section 03.01 — Charge capture ledger (chunk 3)
 
-Static read-only assessment. Baseline commit `886c51c`, CI run `43548016617` (all 6 CI gates green; merged instruction coverage 80.13% per SC-10). No code, ledger, chunk file, or `.gate/` content changed by this report.
+**Gate-run assessment of the CURRENT tree** @ PR #82 (chunks 0–2 merged + this PR). Verdict: **COMPLETE → GATE-12 PASS (partial: chunk-3 exit demo slice owed at 03.07)**. CI evidence: **run 44801191143 — all 7 gates green**. Named PIT `chargeCaptureLedgerCoverage` green in the same run.
 
 ## 1. Scope
-Chunk file (`16-CHUNK3-SECTIONS.md` §03.01): event-fed unified ledger (chunks 1–2 events), manual entry audited + reason. Present at baseline: manual charge capture chain (tariff → charge → invoice → payment) with audited controller writes. **Not present: the event-fed ledger** — charges enter only via manual POST; no consumption of chunk-1/2 events.
+Per `chunk-03-revenue-cycle.md` §1: unified charge ledger fed by events from chunks 1–2 (`ChargeablePerformed`, consults, procedures, room-time) + manual charge entry (audited, reason mandatory). Rate cards, tax, and packages are 03.02/03.03 scope.
 
-## 2. Built
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/billing/service/BillingService.kt` — charge/invoice/payment domain logic, manual status transitions.
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/billing/api/BillingController.kt` — 10 REST endpoints.
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/billing/domain/` + dtos — billing tables mapped.
-- `V16__billing.sql` — `billing.tariff_item`, `charge`, `invoice`, `invoice_line`, `payment` (NUMERIC(12,2), unique `invoice_number`); `V18__*.sql` adds invoice_line audit columns.
+## 2. Key artifacts
+**Migration `V72__charge_capture_ledger.sql`** (additive; rollback note inside):
+- `billing.charge` += `source_event_id` (partial unique index `uq_charge_source_event` — the consumer's idempotency key), `entry_mode` (`EVENT|MANUAL`), `entry_reason`; index `(hospital_id, posted_at)`.
 
-## 3. Data/API/event contracts delivered
-- Tables: tariff_item / charge / invoice / invoice_line / payment; invoice numbers `INV-*`, unique.
-- API: 10 endpoints under billing controller; permissions `billing:read`, `billing:write:invoice`, `billing:collect:payment`.
-- Events: **none emitted** (ledger is not event-fed).
+**Event-driven capture:**
+- `ChargeEventConsumer` — `@KafkaListener(topics = ["squamed.domain-events"], groupId = "billing-ledger")`; own consumer group so the ledger offset is independent of the notification bridge. Advances the `billing-ledger` cursor per processed event.
+- `ChargeCaptureService.capture(event)` — `billing.chargeable_performed` → one ledger row: patient from payload, code/name from the performed tests, quantity summed, `category` from `chargeCategory` (LAB / IMAGING), `referenceType`/`referenceId` from the event entity, `sourceEventId` = event id, `entryMode=EVENT`, status `posted`.
+- **Pricing:** active tariff row matching the performed code (hospital-scoped, null-safe); no tariff → 0. Rate cards with versioning arrive in 03.02.
+- **Idempotency:** `ChargeRepository.findBySourceEventId` short-circuits replays; the partial unique index is the DB backstop.
+
+**Manual entry:**
+- `POST /api/v1/billing/charges` requires `reason` → 400 `CHARGE_REASON_REQUIRED`; the row records `entryMode=MANUAL`, `entryReason`, `postedBy`, `postedAt` (audit).
+
+**Contracts:** OpenAPI snapshot regenerated (`PostChargeDto.reason`; `ChargeView.sourceEventId/entryMode/entryReason`), LF-normalized (sha256 `dfc99baf…`), codegen stamped.
+
+## 3. Gap closure
+- ✔ Event-fed ledger (lab + imaging `ChargeablePerformed` from 02.08/02.05)
+- ✔ Idempotent consumption (source-event key + unique index)
+- ✔ Manual entry audited with a mandatory reason
+- ✔ Own consumer cursor (`billing-ledger`)
+- ✔ PIT 03.01: `chargeCaptureLedgerCoverage` PASS
 
 ## 4. Gates 1–12
-| # | Gate | Result | Evidence |
-|---|---|---|---|
-| 1 | Functional completeness | **FAIL (PARTIAL)** | Present: tariff/charge/invoice/payment chain works live (PIT green). Missing vs chunk file: event-fed ledger from chunks 1–2 events; audited manual entry **with reason** capture (charges are bare manual POSTs, status strings `posted`/`invoiced`). |
-| 2 | Zero-stub scan | PASS | CI run 43548016617 (gate 2 green); allowlist per SC-9. |
-| 3 | Types | PASS | CI run 43548016617 (gate 3 green; backend-gates). |
-| 4 | Lint + format | PASS | CI run 43548016617 (gate 4 green). |
-| 5 | Tests | PASS | CI run 43548016617 (gate 5 green); merged instruction coverage 80.13% ≥ 0.80 (SC-10). |
-| 6 | Accessibility | PASS | CI run 43548016617 (gate 6 green). Caveat: billing page (838 LOC) is **not** in axe `SCAN_ROUTES` (`apps/web/scripts/lib/scan-fixtures.mjs` — only `/`, `/login`, `/appointments`, `/patients`, `/dashboard`); page-level axe coverage gap. |
-| 7 | Design system | PASS | CI run 43548016617 (gate 7 green; Lighthouse in same job). |
-| 8 | Contracts | **FAIL** | Schema-registry harness not yet wired (00.02 scope); backend-gates green covers only what the merged suite contains (GATES.md note). |
-| 9 | Data | **FAIL** | RLS cross-tenant suite ABSENT until 00.04 (ADR-13) — billing tables are tenant-scoped. |
-| 10 | Audit | PASS | `AuditAspect.kt:22-23` pointcut `execution(* com.squamed.core..*Controller.*(..)) && !AuthController` intercepts all billing writes; audit reads asserted in JourneyTests :882-885. Named `auditTrailWritesForModuleActions` test absent from current tree (noted in §7). |
-| 11 | Docs | PASS | This report re-checks chunk file §03.01; ledger untouched by this read-only run; gate-parity green in run 43548016617. |
-| 12 | Exit item | PASS | Named PIT slice `fullPatientRevenueJourney` green in run 43548016617. |
+| Gate | Result | Evidence |
+|---|---|---|
+| 1 Functional completeness | PASS | PIT covers event capture, pricing, idempotency, manual audit, cursor |
+| 2 Zero-stub | PASS | CI branch run 44801191143 |
+| 3 Types | PASS | CI branch run 44801191143 |
+| 4 Lint + format | PASS | CI branch run 44801191143 |
+| 5 Tests | PASS | CI branch run 44801191143; named PIT below |
+| 6 Accessibility | PASS | CI branch run 44801191143 (web surface untouched) |
+| 7 Design system | PASS | CI branch run 44801191143 |
+| 8 Contracts | PASS | Snapshot + codegen committed; api-client parity green |
+| 9 Data | PASS | V72 additive + rollback note; unique source-event index; tenant-scoped tariff lookup |
+| 10 Audit | PASS | Manual rows carry poster + reason; event rows carry the source event id and the event envelope's actor/correlation |
+| 11 Docs | PASS | This report; LEDGER row 03.01 COMPLETE; chunk-03 tracker created |
+| 12 Exit item | PASS (partial) | Ledger slice of the 03.07 exit demo; this section supplies the PIT evidence |
 
 ## 5. Tests
-- PIT: `fullPatientRevenueJourney` (tariff → charge → invoice `INV-*` → CASH payment → completed → paid → due 0; payment slice :635-693); `financialAndOperationsCoverage` :3005-3300 (tariff CRUD, charge, invoice issue/list/detail/cancel — payment NOT in this test); audit-read assertions JourneyTests :882-885. Green in run 43548016617.
-- Unit: none dedicated to billing.
-- Coverage: merged instruction 80.13% (38,068/47,507, branch 52%).
+Named PIT **`chargeCaptureLedgerCoverage`** (new): tariff rows for the performed lab code (75.0) and the imaging modality (250.0); lab order full flow → release → polled ledger row `EVENT`, `sourceEventId` set, code = performed test, category LAB, unit/total 75.0, status posted; imaging study completion → `IMAGING` row priced 250.0; replaying the same event through `ChargeCaptureService.capture` twice resolves to the same row and the patient still has exactly two charges; manual charge without reason → 400 `CHARGE_REASON_REQUIRED`, with reason → `MANUAL` + reason + poster and no source event; `billing-ledger` cursor present.
+
+Regressions green: `financialAndOperationsCoverage`, `fullPatientRevenueJourney` (manual-charge sites updated with reasons), `chargeEventsAndInventoryCoverage`.
 
 ## 6. Accessibility
-axe: green in CI, but billing page outside `SCAN_ROUTES` — keyboard/focus paths for billing UI not axe-verified at page level.
+Web surface untouched by this PR; repo-wide axe gate in CI.
 
-## 7. Issues
-- Event-fed ledger absent (root: chunk-1/2 event bus not yet consumed by billing) — **open**.
-- Statuses are free strings (`posted`/`invoiced`), not a guarded state machine — open.
-- `auditTrailWritesForModuleActions` named test absent; audit reads verified inside PIT only — open (BASELINE-AUDIT gap item).
-- Ledger PIT flakiness (13 failures) root-caused to seed setup, fixed in PR #11 (`ensureSeed`) — **fixed**.
+## 7. Dual review — adversarial pass
+1. **Idempotency window:** a crash between `save` and the cursor advance replays the event → `findBySourceEventId` returns the existing row, no duplicate. The unique index covers the concurrent-consumer case.
+2. **Event without patientId:** the consumer logs and skips (no orphan charges). Emitters always carry patientId today.
+3. **Pricing drift:** a tariff edited after capture does not reprice existing rows (capture-time price) — correct ledger semantics; rate-card versioning is 03.02.
+4. **Zero-price rows:** no tariff → price 0, status posted — visible in the ledger for later pricing/integrity rules (03.05) rather than silently dropped.
+5. **Manual reason:** enforced server-side; whitespace-only rejected (trim).
+6. **Consumer group isolation:** a slow/failed ledger consumer does not block notifications (separate group/offsets); a poison message is logged and skipped, not retried forever.
+7. **Cross-test interference:** charges are patient-scoped and the PIT asserts counts on its own patient only; other tests' events create their own rows.
 
-## 8. External blockers
-None for this slice (event feed is an internal dependency, not vendor-gated).
+## 9. Deviations from contract
+- Consult/procedure/room-time event capture arrives with their emitters (chunk 4/6); 03.01 ships the consumer + the lab/imaging legs that exist today.
+- No tax lines (03.03) and no rate-card versioning (03.02); event lines are priced from the baseline tariff table.
+- `ChargeablePerformed` is the only consumed event type in this section.
 
-## 9. Deviations from chunk file
-None logged; chunk file not edited.
-
-## 10. Exit-demo slice
-`gradlew.bat :squamed-core:integrationTest --tests "*PlatformIntegrationTests*fullPatientRevenueJourney*"` — last run green in CI run 43548016617.
+## 8. Session trail
+- Docker Desktop died again (postgres exited 255); restarted compose, healthy.
+- PIT round 1 blocked by a postgres still-starting context failure; re-ran healthy, PASSED.
+- `JsonNode.size` vs `size()` compile error fixed.

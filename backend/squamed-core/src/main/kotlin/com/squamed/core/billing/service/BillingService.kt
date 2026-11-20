@@ -95,6 +95,9 @@ class BillingService(
     hospitalId: UUID,
   ): ChargeView {
     val patientId = dto.patientId ?: throw IllegalArgumentException("PATIENT_ID_REQUIRED")
+    // 03.01: manual ledger entries are audited and must carry a reason.
+    val reason = dto.reason?.trim()
+    if (reason.isNullOrEmpty()) throw IllegalArgumentException("CHARGE_REASON_REQUIRED")
     val quantity = dto.quantity ?: 1
     val unitPrice = dto.unitPriceQar ?: BigDecimal.ZERO
     val charge =
@@ -114,6 +117,8 @@ class BillingService(
           insuranceClaimable = dto.insuranceClaimable ?: true,
           postedBy = postedBy,
           postedAt = Instant.now(),
+          entryMode = "MANUAL",
+          entryReason = reason,
         ),
       )
     return ChargeView.from(charge)

@@ -43,4 +43,11 @@ class Charge(
   var referenceType: String? = null,
   @Column(name = "reference_id")
   var referenceId: UUID? = null,
+  // 03.01: event-driven ledger row (idempotency key) vs manual entry (reason mandatory).
+  @Column(name = "source_event_id")
+  var sourceEventId: UUID? = null,
+  @Column(name = "entry_mode", nullable = false, length = 10)
+  var entryMode: String = "MANUAL",
+  @Column(name = "entry_reason", length = 400)
+  var entryReason: String? = null,
 ) : BaseEntity()

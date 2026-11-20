@@ -45,6 +45,8 @@ data class PostChargeDto(
   val quantity: Int? = null,
   val unitPriceQar: BigDecimal? = null,
   val insuranceClaimable: Boolean? = null,
+  // 03.01: manual ledger entries are audited with a mandatory reason.
+  val reason: String? = null,
 )
 
 data class ChargeView(
@@ -65,6 +67,10 @@ data class ChargeView(
   val postedAt: Instant,
   val referenceType: String?,
   val referenceId: UUID?,
+  // 03.01 ledger provenance.
+  val sourceEventId: UUID?,
+  val entryMode: String,
+  val entryReason: String?,
   val createdAt: Instant?,
 ) {
   companion object {
@@ -87,6 +93,9 @@ data class ChargeView(
         postedAt = entity.postedAt,
         referenceType = entity.referenceType,
         referenceId = entity.referenceId,
+        sourceEventId = entity.sourceEventId,
+        entryMode = entity.entryMode,
+        entryReason = entity.entryReason,
         createdAt = entity.createdAt,
       )
   }

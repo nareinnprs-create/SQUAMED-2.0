@@ -10091,6 +10091,7 @@ export interface components {
             quantity?: number;
             unitPriceQar?: number;
             insuranceClaimable?: boolean;
+            reason?: string;
         };
         ApiResponseChargeView: {
             data?: components["schemas"]["ChargeView"];
@@ -10126,6 +10127,10 @@ export interface components {
             referenceType?: string;
             /** Format: uuid */
             referenceId?: string;
+            /** Format: uuid */
+            sourceEventId?: string;
+            entryMode: string;
+            entryReason?: string;
             /** Format: date-time */
             createdAt?: string;
         };
@@ -23410,4 +23415,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: a408b879edd0c2f939b27167bf6c87b056c1eb95888ab9de7ec5be1e4b753dcb
+// openapi snapshot sha256: dfc99baf34a106d6806f7ad74ef6052bfc92b387021d7d30788fea6e3d4ec867

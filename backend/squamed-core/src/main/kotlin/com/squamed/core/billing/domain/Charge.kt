@@ -50,4 +50,7 @@ class Charge(
   var entryMode: String = "MANUAL",
   @Column(name = "entry_reason", length = 400)
   var entryReason: String? = null,
+  // 03.02: the package version pinned at capture time (never re-resolved at bill time).
+  @Column(name = "package_version_id")
+  var packageVersionId: UUID? = null,
 ) : BaseEntity()

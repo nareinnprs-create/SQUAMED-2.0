@@ -7198,6 +7198,244 @@ class PlatformIntegrationTests {
       val cursors = `data`(api(HttpMethod.GET, "/api/v1/admin/events/cursors", token = token))
       assertTrue(cursors.any { it["consumer"].asText() == "billing-ledger" }, "billing-ledger cursor tracked: $cursors")
     }
+
+    @Test
+    fun billingEngineCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+
+      fun scopedUser(
+        role: String,
+        tag: String,
+      ): String {
+        val email = "$tag.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "Bill$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      }
+      val staff = scopedUser("BILLING_STAFF", "bill")
+      val supervisor = scopedUser("BILLING_SUPERVISOR", "bsup")
+
+      fun newPatient(tag: String): String {
+        val p =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/patients",
+              json(
+                "firstName" to "Bill$tag",
+                "lastName" to "Engine$s",
+                "gender" to "female",
+                "dateOfBirth" to "1985-01-01",
+                "phone" to "73$tag$s".take(11),
+                "qid" to "BE$tag$s".take(11),
+                "nationality" to "QA",
+                "city" to "Doha",
+              ),
+              token,
+            ),
+          )["patient"]
+        return p["id"].asText()
+      }
+
+      fun manualCharge(
+        patientId: String,
+        code: String,
+        price: Double,
+        quantity: Int = 1,
+        packageCode: String? = null,
+      ) = api(
+        HttpMethod.POST,
+        "/api/v1/billing/charges",
+        json(
+          "patientId" to patientId,
+          "hospitalId" to hospitalId,
+          "chargeCode" to code,
+          "chargeName" to "Engine $code",
+          "quantity" to quantity,
+          "unitPriceQar" to price,
+          "reason" to "billing engine coverage",
+          "packageCode" to packageCode,
+        ),
+        staff,
+      )
+
+      // 1. Rate cards: a TPA card reprices the line; the captured base price is kept.
+      val rateCode = "ENG-$s"
+      val p1 = newPatient("1")
+      assert2xx(manualCharge(p1, rateCode, 100.0), "base charge 100")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/rate-cards",
+          json("hospitalId" to hospitalId, "payerClass" to "tpa", "code" to rateCode, "priceQar" to 120.0),
+          staff,
+        ),
+        "tpa rate card 120",
+      )
+      val tpaInvoice =
+        `data`(api(HttpMethod.POST, "/api/v1/billing/invoices", json("patientId" to p1, "payerClass" to "tpa"), staff))
+      assertEquals(120.0, tpaInvoice["invoice"]["subtotalQar"].asDouble(), 1e-9, "TPA rate card reprices the subtotal")
+      assertEquals("tpa", tpaInvoice["invoice"]["payerClass"].asText(), "payer class recorded")
+      val tpaLine = tpaInvoice["lines"][0]
+      assertEquals(120.0, tpaLine["unitPriceQar"].asDouble(), 1e-9, "repriced unit")
+      assertEquals(100.0, tpaLine["basePriceQar"].asDouble(), 1e-9, "captured base price kept")
+      assertFalse(tpaLine["rateCardId"].isNull, "rate card reference on the line")
+
+      // Fallback: general payer with no card uses the captured price.
+      val p1b = newPatient("2")
+      assert2xx(manualCharge(p1b, "ENG2-$s", 90.0), "fallback charge")
+      val generalInvoice = `data`(api(HttpMethod.POST, "/api/v1/billing/invoices", json("patientId" to p1b, "payerClass" to "general"), staff))
+      assertEquals(90.0, generalInvoice["invoice"]["subtotalQar"].asDouble(), 1e-9, "no card -> captured price")
+      assertTrue(generalInvoice["lines"][0]["rateCardId"].isNull, "no rate card reference on fallback")
+
+      // 2. Packages: version pinned at capture; a later version does not reprice the pinned charge.
+      val pkgCode = "PKG-$s"
+      val pkg =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/billing/packages", json("code" to pkgCode, "name" to "Surgical bundle $s"), staff),
+        )
+      val v1 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/packages/${pkg["id"].asText()}/versions",
+            json("priceQar" to 500.0),
+            staff,
+          ),
+        )
+      assertEquals(1, v1["packageVersion"].asInt(), "first package version")
+      val p2 = newPatient("3")
+      val pinnedCharge = `data`(manualCharge(p2, "PKGV1-$s", 0.0, 1, pkgCode))
+      assertEquals(500.0, pinnedCharge["unitPriceQar"].asDouble(), 1e-9, "package price applied at capture")
+      assertEquals(v1["id"].asText(), pinnedCharge["packageVersionId"].asText(), "version pinned on the charge")
+      val v2 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/packages/${pkg["id"].asText()}/versions",
+            json("priceQar" to 600.0),
+            staff,
+          ),
+        )
+      assertEquals(2, v2["packageVersion"].asInt(), "second package version")
+      val pinnedAgain = `data`(manualCharge(p2, "PKGV2-$s", 0.0, 1, pkgCode))
+      assertEquals(600.0, pinnedAgain["unitPriceQar"].asDouble(), 1e-9, "new capture pins the new version")
+      val p2Charges = `data`(api(HttpMethod.GET, "/api/v1/billing/charges?patientId=$p2", token = staff))
+      assertEquals(
+        500.0,
+        p2Charges.first { it["chargeCode"].asText() == "PKGV1-$s" }["unitPriceQar"].asDouble(),
+        1e-9,
+        "pinned charge is not repriced by a later version",
+      )
+
+      // 3. Estimates.
+      val p3 = newPatient("4")
+      val estimate =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/estimates",
+            json(
+              "patientId" to p3,
+              "hospitalId" to hospitalId,
+              "items" to
+                listOf(
+                  mapOf("code" to "EST-A", "name" to "Consult", "quantity" to 2, "unitPriceQar" to 100.0),
+                  mapOf("code" to "EST-B", "name" to "Dressing", "quantity" to 1, "unitPriceQar" to 50.0),
+                ),
+              "expiresInDays" to 7,
+            ),
+            staff,
+          ),
+        )
+      assertEquals(250.0, estimate["totalQar"].asDouble(), 1e-9, "estimate total")
+      assertTrue(estimate["estimateNumber"].asText().startsWith("EST-"), "estimate number")
+      val estimates = `data`(api(HttpMethod.GET, "/api/v1/billing/estimates?patientId=$p3", token = staff))
+      assertEquals(1, estimates.size(), "estimate listed")
+
+      // 4. Deposits: held -> applied to one invoice, then not reusable.
+      val p4 = newPatient("5")
+      assert2xx(manualCharge(p4, "ENG4-$s", 100.0), "deposit leg charge")
+      val inv4 = `data`(api(HttpMethod.POST, "/api/v1/billing/invoices", json("patientId" to p4), staff))
+      val inv4Id = inv4["invoice"]["id"].asText()
+      val deposit =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/deposits",
+            json("patientId" to p4, "hospitalId" to hospitalId, "amountQar" to 200.0, "method" to "cash"),
+            staff,
+          ),
+        )
+      assertEquals("held", deposit["status"].asText(), "deposit held")
+      val applied = `data`(api(HttpMethod.POST, "/api/v1/billing/deposits/${deposit["id"].asText()}/apply", json("invoiceId" to inv4Id), staff))
+      assertEquals("applied", applied["status"].asText(), "deposit applied")
+      assertEquals(inv4Id, applied["appliedInvoiceId"].asText(), "invoice recorded on the deposit")
+      val inv4After = `data`(api(HttpMethod.GET, "/api/v1/billing/invoices/$inv4Id", token = staff))["invoice"]
+      assertEquals(100.0, inv4After["amountPaidQar"].asDouble(), 1e-9, "invoice paid from the deposit")
+      assertEquals(0.0, inv4After["amountDueQar"].asDouble(), 1e-9, "nothing due")
+      assertEquals("paid", inv4After["status"].asText(), "invoice paid")
+      val reapply = api(HttpMethod.POST, "/api/v1/billing/deposits/${deposit["id"].asText()}/apply", json("invoiceId" to inv4Id), staff)
+      assert4xx(reapply, "deposit cannot be applied twice")
+      assertTrue(reapply.body.contains("DEPOSIT_NOT_HELD"), "deposit guard code: ${reapply.body.take(200)}")
+
+      // 5. Discounts: reason mandatory; above 10% needs the supervisor permission.
+      val p5 = newPatient("6")
+      assert2xx(manualCharge(p5, "ENG5-$s", 1000.0), "discount leg charge")
+      val noReason =
+        api(HttpMethod.POST, "/api/v1/billing/invoices", json("patientId" to p5, "discountQar" to 50.0), staff)
+      assert4xx(noReason, "discount without a reason")
+      assertTrue(noReason.body.contains("DISCOUNT_REASON_REQUIRED"), "discount reason guard: ${noReason.body.take(200)}")
+      val smallDiscount =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/invoices",
+            json("patientId" to p5, "discountQar" to 50.0, "discountReason" to "loyalty 5%"),
+            staff,
+          ),
+        )
+      assertEquals(50.0, smallDiscount["invoice"]["discountQar"].asDouble(), 1e-9, "5% discount allowed for staff")
+      assertEquals("loyalty 5%", smallDiscount["invoice"]["discountReason"].asText(), "reason recorded")
+
+      val p6 = newPatient("7")
+      assert2xx(manualCharge(p6, "ENG6-$s", 1000.0), "supervisor discount leg charge")
+      val bigStaff =
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/invoices",
+          json("patientId" to p6, "discountQar" to 500.0, "discountReason" to "hardship"),
+          staff,
+        )
+      assert4xx(bigStaff, "50% discount needs supervisor approval")
+      assertTrue(bigStaff.body.contains("DISCOUNT_APPROVAL_REQUIRED"), "approval guard: ${bigStaff.body.take(200)}")
+      val bigSupervisor =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/invoices",
+            json("patientId" to p6, "discountQar" to 500.0, "discountReason" to "hardship"),
+            supervisor,
+          ),
+        )
+      assertEquals(500.0, bigSupervisor["invoice"]["discountQar"].asDouble(), 1e-9, "supervisor approves 50%")
+      assertEquals(500.0, bigSupervisor["invoice"]["totalQar"].asDouble(), 1e-9, "total after discount")
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */

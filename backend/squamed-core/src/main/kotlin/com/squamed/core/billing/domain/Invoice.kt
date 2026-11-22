@@ -35,6 +35,11 @@ class Invoice(
   var status: String = "unpaid",
   @Column(name = "insurance_claim_status", length = 30)
   var insuranceClaimStatus: String? = null,
+  // 03.02: payer-class repricing + gated discount reason.
+  @Column(name = "payer_class", nullable = false, length = 20)
+  var payerClass: String = "general",
+  @Column(name = "discount_reason", length = 400)
+  var discountReason: String? = null,
   @Column(name = "issued_at", nullable = false)
   var issuedAt: Instant = Instant.now(),
 ) : BaseEntity()

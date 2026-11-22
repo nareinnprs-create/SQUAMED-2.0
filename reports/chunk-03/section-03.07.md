@@ -1,6 +1,6 @@
 # Section 03.07 — Chunk exit (chunk 3)
 
-**Gate-run assessment of the CURRENT tree** @ PR #89 (all chunk-3 buildable sections merged: #82, #84, #86, #87, #88). Verdict: **SECTION REVIEW** (01.12/02.09 precedent — never COMPLETE). CI evidence: **run PENDING — all 7 gates green**. Exit demo live: **28/28**, transcript `reports/demo-03.07-live.log`.
+**Gate-run assessment of the CURRENT tree** @ PR #89 (all chunk-3 buildable sections merged: #82, #84, #86, #87, #88). Verdict: **SECTION REVIEW** (01.12/02.09 precedent — never COMPLETE). CI evidence: **run 44984284126 — all 7 gates green**. Exit demo live: **28/28**, transcript `reports/demo-03.07-live.log`.
 
 ## 1. Scope
 Per the chunk-3 contract: demo scenario, tax correctness table, claim adapter golden files, integrity rules, money math, billing parallel-run prep. Zero feature code by design.
@@ -19,12 +19,12 @@ Script bugs fixed during the run: verify/release need the pathologist role; coll
 | Gate | Result | Evidence |
 |---|---|---|
 | 1 Functional completeness | PASS (chunk) | Section reports + named PITs; demo 28/28 |
-| 2 Zero-stub | PASS | CI run PENDING |
-| 3 Types | PASS | CI run PENDING |
-| 4 Lint + format | PASS | CI run PENDING |
-| 5 Tests | PASS | CI run PENDING; chunk test table in FINAL §5 |
-| 6 Accessibility | PASS | CI run PENDING |
-| 7 Design system | PASS | CI run PENDING |
+| 2 Zero-stub | PASS | CI run 44984284126 |
+| 3 Types | PASS | CI run 44984284126 |
+| 4 Lint + format | PASS | CI run 44984284126 |
+| 5 Tests | PASS | CI run 44984284126; chunk test table in FINAL §5 |
+| 6 Accessibility | PASS | CI run 44984284126 |
+| 7 Design system | PASS | CI run 44984284126 |
 | 8 Contracts | PASS | OpenAPI snapshot current (cc91af05…, no API change in this PR) |
 | 9 Data | PASS | No migrations in this PR |
 | 10 Audit | PASS | Demo exercises discounts, refunds, cash-up, triage, coding trails |

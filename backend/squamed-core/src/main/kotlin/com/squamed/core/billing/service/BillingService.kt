@@ -1,5 +1,8 @@
 package com.squamed.core.billing.service
 
+import com.squamed.core.billing.api.CashupCloseDto
+import com.squamed.core.billing.api.CashupOpenDto
+import com.squamed.core.billing.api.CashupView
 import com.squamed.core.billing.api.ChargeView
 import com.squamed.core.billing.api.CreditNoteRequestDto
 import com.squamed.core.billing.api.CreditNoteView
@@ -9,6 +12,8 @@ import com.squamed.core.billing.api.EstimateRequestDto
 import com.squamed.core.billing.api.EstimateView
 import com.squamed.core.billing.api.InvoiceDetailView
 import com.squamed.core.billing.api.InvoiceView
+import com.squamed.core.billing.api.JournalExportView
+import com.squamed.core.billing.api.JournalLineView
 import com.squamed.core.billing.api.PackageDto
 import com.squamed.core.billing.api.PackageVersionDto
 import com.squamed.core.billing.api.PackageVersionRequestDto
@@ -16,6 +21,10 @@ import com.squamed.core.billing.api.PaymentCreateDto
 import com.squamed.core.billing.api.PaymentView
 import com.squamed.core.billing.api.PostChargeDto
 import com.squamed.core.billing.api.RateCardDto
+import com.squamed.core.billing.api.ReconRequestDto
+import com.squamed.core.billing.api.ReconView
+import com.squamed.core.billing.api.RefundRequestDto
+import com.squamed.core.billing.api.RefundView
 import com.squamed.core.billing.api.TariffDto
 import com.squamed.core.billing.api.TaxProfileDto
 import com.squamed.core.billing.domain.BillingPackage
@@ -29,6 +38,9 @@ import com.squamed.core.billing.domain.InvoiceLine
 import com.squamed.core.billing.domain.PackageVersion
 import com.squamed.core.billing.domain.Payment
 import com.squamed.core.billing.domain.RateCard
+import com.squamed.core.billing.domain.ReconStatement
+import com.squamed.core.billing.domain.Refund
+import com.squamed.core.billing.domain.ShiftCashup
 import com.squamed.core.billing.domain.TariffItem
 import com.squamed.core.billing.domain.TaxLine
 import com.squamed.core.billing.repository.BillingPackageRepository
@@ -42,11 +54,16 @@ import com.squamed.core.billing.repository.InvoiceRepository
 import com.squamed.core.billing.repository.PackageVersionRepository
 import com.squamed.core.billing.repository.PaymentRepository
 import com.squamed.core.billing.repository.RateCardRepository
+import com.squamed.core.billing.repository.ReconStatementRepository
+import com.squamed.core.billing.repository.RefundRepository
+import com.squamed.core.billing.repository.ShiftCashupRepository
 import com.squamed.core.billing.repository.TariffItemRepository
 import com.squamed.core.billing.repository.TaxLineRepository
 import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.identity.security.SquamedPermissionEvaluator
 import com.squamed.core.identity.security.SquamedPrincipal
+import com.squamed.core.task.api.TaskCreateDto
+import com.squamed.core.task.service.TaskService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
@@ -70,6 +87,10 @@ class BillingService(
   private val hospitalTaxProfileRepository: HospitalTaxProfileRepository,
   private val taxLineRepository: TaxLineRepository,
   private val creditNoteRepository: CreditNoteRepository,
+  private val shiftCashupRepository: ShiftCashupRepository,
+  private val reconStatementRepository: ReconStatementRepository,
+  private val refundRepository: RefundRepository,
+  private val taskService: TaskService,
   private val permissionEvaluator: SquamedPermissionEvaluator,
 ) {
   private val payerClasses = setOf("general", "cghs", "esic", "tpa", "corporate", "pmjay")
@@ -684,6 +705,208 @@ class BillingService(
     val year = Year.now().value
     val count = creditNoteRepository.count()
     return String.format("CN-%d-%05d", year, count + 1)
+  }
+
+  // -- 03.06 collections: shift cash-up, reconciliation, refunds, GL export. --
+
+  @Transactional
+  fun openCashup(
+    dto: CashupOpenDto,
+    principal: SquamedPrincipal,
+    hospitalId: UUID,
+  ): CashupView {
+    if (dto.openingFloatQar.compareTo(BigDecimal.ZERO) < 0) throw IllegalArgumentException("CASHUP_FLOAT_INVALID")
+    if (shiftCashupRepository.findOpenForCashier(hospitalId, principal.userId).isNotEmpty()) {
+      throw IllegalArgumentException("CASHUP_ALREADY_OPEN")
+    }
+    val saved =
+      shiftCashupRepository.save(
+        ShiftCashup(
+          hospitalId = hospitalId,
+          cashierId = principal.userId,
+          openedAt = Instant.now(),
+          openingFloatQar = dto.openingFloatQar,
+        ),
+      )
+    return CashupView.from(saved)
+  }
+
+  @Transactional
+  fun closeCashup(
+    id: UUID,
+    dto: CashupCloseDto,
+    principal: SquamedPrincipal,
+    hospitalId: UUID?,
+  ): CashupView {
+    val cashup = shiftCashupRepository.findById(id).orElseThrow { IllegalArgumentException("CASHUP_NOT_FOUND") }
+    requireSameHospital(hospitalId, cashup.hospitalId)
+    if (cashup.status != "OPEN") throw IllegalArgumentException("CASHUP_NOT_OPEN")
+    if (dto.countedCashQar.compareTo(BigDecimal.ZERO) < 0) throw IllegalArgumentException("CASHUP_COUNT_INVALID")
+    val now = Instant.now()
+    val collected =
+      paymentRepository
+        .cashForCashier(cashup.cashierId, cashup.openedAt, now)
+        .fold(BigDecimal.ZERO) { acc, payment -> acc.add(payment.amountQar) }
+    val expected = cashup.openingFloatQar.add(collected)
+    val variance = dto.countedCashQar.subtract(expected)
+    cashup.cashCollectedQar = collected
+    cashup.countedCashQar = dto.countedCashQar
+    cashup.varianceQar = variance
+    cashup.status = "CLOSED"
+    cashup.closedAt = now
+    cashup.note = dto.note
+    val saved = shiftCashupRepository.save(cashup)
+    // Drawer variance beyond the tolerance raises a task for the supervisor.
+    if (variance.abs() > BigDecimal("50")) {
+      taskService.createTask(
+        TaskCreateDto(
+          hospitalId = cashup.hospitalId,
+          title = "Cash drawer variance $variance",
+          description = "Cash-up ${cashup.id} closed with variance $variance (expected $expected, counted ${dto.countedCashQar})",
+          priority = "high",
+          relatedType = "CASHUP",
+          relatedId = cashup.id,
+        ),
+        principal.userId,
+      )
+    }
+    return CashupView.from(saved)
+  }
+
+  @Transactional(readOnly = true)
+  fun listCashups(hospitalId: UUID?): List<CashupView> = shiftCashupRepository.findAllForHospital(hospitalId).map { CashupView.from(it) }
+
+  @Transactional
+  fun reconcile(
+    dto: ReconRequestDto,
+    hospitalId: UUID,
+  ): ReconView {
+    if (dto.method.isBlank()) throw IllegalArgumentException("RECON_METHOD_REQUIRED")
+    if (!dto.periodEnd.isAfter(dto.periodStart)) throw IllegalArgumentException("RECON_PERIOD_INVALID")
+    val recorded =
+      paymentRepository
+        .findForPeriod(hospitalId, dto.method, dto.periodStart, dto.periodEnd)
+        .fold(BigDecimal.ZERO) { acc, payment -> acc.add(payment.amountQar) }
+    val variance = dto.statementTotalQar.subtract(recorded)
+    val saved =
+      reconStatementRepository.save(
+        ReconStatement(
+          hospitalId = hospitalId,
+          method = dto.method,
+          periodStart = dto.periodStart,
+          periodEnd = dto.periodEnd,
+          statementTotalQar = dto.statementTotalQar,
+          recordedTotalQar = recorded,
+          varianceQar = variance,
+          status = if (variance.compareTo(BigDecimal.ZERO) == 0) "MATCHED" else "VARIANCE",
+        ),
+      )
+    return ReconView.from(saved)
+  }
+
+  @Transactional(readOnly = true)
+  fun listRecon(hospitalId: UUID?): List<ReconView> = reconStatementRepository.findAllForHospital(hospitalId).map { ReconView.from(it) }
+
+  @Transactional
+  fun refundPayment(
+    paymentId: UUID,
+    dto: RefundRequestDto,
+    principal: SquamedPrincipal,
+    hospitalId: UUID?,
+  ): RefundView {
+    val payment = paymentRepository.findById(paymentId).orElseThrow { IllegalArgumentException("PAYMENT_NOT_FOUND") }
+    if (payment.status != "completed") throw IllegalArgumentException("PAYMENT_NOT_REFUNDABLE")
+    if (dto.amountQar.compareTo(BigDecimal.ZERO) <= 0) throw IllegalArgumentException("REFUND_AMOUNT_INVALID")
+    if (dto.amountQar.compareTo(payment.amountQar) > 0) throw IllegalArgumentException("REFUND_EXCEEDS_PAYMENT")
+    val reason = dto.reason.trim()
+    if (reason.isEmpty()) throw IllegalArgumentException("REFUND_REASON_REQUIRED")
+    val invoice = findInvoice(payment.invoiceId, hospitalId)
+    val refund =
+      refundRepository.save(
+        Refund(
+          hospitalId = invoice.hospitalId ?: hospitalId ?: throw IllegalArgumentException("HOSPITAL_REQUIRED"),
+          paymentId = payment.id!!,
+          invoiceId = payment.invoiceId,
+          amountQar = dto.amountQar,
+          reason = reason,
+          issuedBy = principal.userId,
+          issuedAt = Instant.now(),
+        ),
+      )
+    payment.status = "refunded"
+    paymentRepository.save(payment)
+    invoice.amountPaidQar = invoice.amountPaidQar.subtract(dto.amountQar).coerceAtLeast(BigDecimal.ZERO)
+    invoice.amountDueQar = invoice.totalQar.subtract(invoice.amountPaidQar).coerceAtLeast(BigDecimal.ZERO)
+    invoice.status =
+      when {
+        invoice.amountDueQar.compareTo(BigDecimal.ZERO) <= 0 && invoice.amountPaidQar.compareTo(BigDecimal.ZERO) > 0 -> "paid"
+        invoice.amountPaidQar.compareTo(BigDecimal.ZERO) > 0 -> "partial"
+        invoice.status == "paid" -> "unpaid"
+        else -> invoice.status
+      }
+    invoiceRepository.save(invoice)
+    return RefundView.from(refund)
+  }
+
+  @Transactional(readOnly = true)
+  fun listRefunds(hospitalId: UUID?): List<RefundView> = refundRepository.findAllForHospital(hospitalId).map { RefundView.from(it) }
+
+  // Summarized double-entry export per day (payments in, invoices earned, refunds out).
+  @Transactional(readOnly = true)
+  fun journalExport(
+    from: Instant,
+    to: Instant,
+    hospitalId: UUID?,
+  ): JournalExportView {
+    if (!to.isAfter(from)) throw IllegalArgumentException("JOURNAL_PERIOD_INVALID")
+    val lines = mutableListOf<JournalLineView>()
+
+    fun add(
+      at: Instant,
+      account: String,
+      debit: BigDecimal,
+      credit: BigDecimal,
+    ) {
+      if (debit.compareTo(BigDecimal.ZERO) == 0 && credit.compareTo(BigDecimal.ZERO) == 0) return
+      lines += JournalLineView(at.toString().take(10), account, debit, credit)
+    }
+
+    val methods = listOf("cash", "upi", "card")
+    methods.forEach { method ->
+      val account = "CASH_" + method.uppercase() + "_IN"
+      paymentRepository.findForPeriod(hospitalId, method, from, to).forEach { payment ->
+        add(payment.receivedAt, account, payment.amountQar, BigDecimal.ZERO)
+        add(payment.receivedAt, "RECEIVABLE", BigDecimal.ZERO, payment.amountQar)
+      }
+    }
+
+    invoiceRepository
+      .findAllForHospital(hospitalId)
+      .filter { !it.issuedAt.isBefore(from) && it.issuedAt.isBefore(to) && it.status != "cancelled" }
+      .forEach { invoice ->
+        add(invoice.issuedAt, "RECEIVABLE", invoice.totalQar, BigDecimal.ZERO)
+        add(invoice.issuedAt, "REVENUE", BigDecimal.ZERO, invoice.totalQar.subtract(invoice.taxQar))
+        add(invoice.issuedAt, "TAX_PAYABLE", BigDecimal.ZERO, invoice.taxQar)
+      }
+
+    refundRepository.findAllForHospital(hospitalId).filter { !it.issuedAt.isBefore(from) && it.issuedAt.isBefore(to) }.forEach { refund ->
+      val method =
+        paymentRepository
+          .findById(refund.paymentId)
+          .orElse(null)
+          ?.method
+          ?.uppercase() ?: "CASH"
+      add(refund.issuedAt, "REVENUE_REFUND", refund.amountQar, BigDecimal.ZERO)
+      add(refund.issuedAt, "CASH_${method}_IN", BigDecimal.ZERO, refund.amountQar)
+    }
+
+    return JournalExportView(
+      from = from,
+      to = to,
+      lines = lines,
+      totalDebitQar = lines.fold(BigDecimal.ZERO) { acc, line -> acc.add(line.debitQar) },
+      totalCreditQar = lines.fold(BigDecimal.ZERO) { acc, line -> acc.add(line.creditQar) },
+    )
   }
 
   private fun nextInvoiceNumber(): String {

@@ -444,3 +444,127 @@ data class CreditNoteView(
       CreditNoteView(entity.id, entity.invoiceId, entity.noteNumber, entity.amountQar, entity.reason, entity.status, entity.issuedBy, entity.issuedAt)
   }
 }
+
+// 03.06 collections + GL export surfaces.
+data class CashupOpenDto(
+  val hospitalId: UUID? = null,
+  val openingFloatQar: java.math.BigDecimal = java.math.BigDecimal.ZERO,
+)
+
+data class CashupCloseDto(
+  val countedCashQar: java.math.BigDecimal,
+  val note: String? = null,
+)
+
+data class CashupView(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val cashierId: UUID,
+  val openedAt: Instant,
+  val closedAt: Instant?,
+  val openingFloatQar: java.math.BigDecimal,
+  val cashCollectedQar: java.math.BigDecimal,
+  val countedCashQar: java.math.BigDecimal?,
+  val varianceQar: java.math.BigDecimal?,
+  val status: String,
+  val note: String?,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.billing.domain.ShiftCashup) =
+      CashupView(
+        entity.id,
+        entity.hospitalId,
+        entity.cashierId,
+        entity.openedAt,
+        entity.closedAt,
+        entity.openingFloatQar,
+        entity.cashCollectedQar,
+        entity.countedCashQar,
+        entity.varianceQar,
+        entity.status,
+        entity.note,
+      )
+  }
+}
+
+data class ReconRequestDto(
+  val hospitalId: UUID? = null,
+  val method: String,
+  val periodStart: Instant,
+  val periodEnd: Instant,
+  val statementTotalQar: java.math.BigDecimal,
+)
+
+data class ReconView(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val method: String,
+  val periodStart: Instant,
+  val periodEnd: Instant,
+  val statementTotalQar: java.math.BigDecimal,
+  val recordedTotalQar: java.math.BigDecimal,
+  val varianceQar: java.math.BigDecimal,
+  val status: String,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.billing.domain.ReconStatement) =
+      ReconView(
+        entity.id,
+        entity.hospitalId,
+        entity.method,
+        entity.periodStart,
+        entity.periodEnd,
+        entity.statementTotalQar,
+        entity.recordedTotalQar,
+        entity.varianceQar,
+        entity.status,
+      )
+  }
+}
+
+data class RefundRequestDto(
+  val amountQar: java.math.BigDecimal,
+  val reason: String,
+)
+
+data class RefundView(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val paymentId: UUID,
+  val invoiceId: UUID,
+  val amountQar: java.math.BigDecimal,
+  val reason: String,
+  val status: String,
+  val issuedBy: UUID?,
+  val issuedAt: Instant,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.billing.domain.Refund) =
+      RefundView(
+        entity.id,
+        entity.hospitalId,
+        entity.paymentId,
+        entity.invoiceId,
+        entity.amountQar,
+        entity.reason,
+        entity.status,
+        entity.issuedBy,
+        entity.issuedAt,
+      )
+  }
+}
+
+data class JournalLineView(
+  val date: String,
+  val account: String,
+  val debitQar: java.math.BigDecimal,
+  val creditQar: java.math.BigDecimal,
+)
+
+data class JournalExportView(
+  val from: Instant,
+  val to: Instant,
+  val lines: List<JournalLineView>,
+  val totalDebitQar: java.math.BigDecimal,
+  val totalCreditQar: java.math.BigDecimal,
+)

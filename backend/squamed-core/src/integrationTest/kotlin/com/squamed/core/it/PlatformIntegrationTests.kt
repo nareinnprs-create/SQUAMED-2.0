@@ -7842,6 +7842,195 @@ class PlatformIntegrationTests {
         "integrity finding opened a task",
       )
     }
+
+    @Test
+    fun collectionsAndGlCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      // Isolated hospital: reconciliation totals are hospital-wide, so a fresh one keeps other
+      // tests' cash payments out of this PIT's statements.
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Collections $s", "code" to "COL-$s", "country" to "Qatar"),
+            token,
+          ),
+        )["id"].asText()
+
+      fun scopedUser(
+        role: String,
+        tag: String,
+      ): String {
+        val email = "$tag.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "Cash$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      }
+      val staff = scopedUser("BILLING_STAFF", "cash")
+      val sup = scopedUser("BILLING_SUPERVISOR", "cashsup")
+
+      fun paidInvoice(tag: String): Pair<String, String> {
+        val p =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/patients",
+              json(
+                "firstName" to "Cash$tag",
+                "lastName" to "Coverage$s",
+                "gender" to "male",
+                "dateOfBirth" to "1986-06-06",
+                "phone" to "70$tag$s".take(11),
+                "qid" to "CS$tag$s".take(11),
+                "nationality" to "QA",
+                "city" to "Doha",
+                "hospitalId" to hospitalId,
+              ),
+              token,
+            ),
+          )["patient"]["id"].asText()
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/charges",
+            json(
+              "patientId" to p,
+              "hospitalId" to hospitalId,
+              "chargeCode" to "CASH$tag-$s",
+              "chargeName" to "Cash leg $tag",
+              "quantity" to 1,
+              "unitPriceQar" to 100.0,
+              "reason" to "collections coverage",
+            ),
+            staff,
+          ),
+          "charge for cash leg $tag",
+        )
+        val inv = `data`(api(HttpMethod.POST, "/api/v1/billing/invoices", json("patientId" to p), staff))
+        val invId = inv["invoice"]["id"].asText()
+        val payment =
+          `data`(
+            api(HttpMethod.POST, "/api/v1/billing/invoices/$invId/payments", json("method" to "cash", "amountQar" to 100.0), staff),
+          )
+        return invId to payment["id"].asText()
+      }
+
+      // Shift cash-up: expected = float + cash collected; clean close.
+      val cashup1 = `data`(api(HttpMethod.POST, "/api/v1/billing/cashups", json("hospitalId" to hospitalId, "openingFloatQar" to 200.0), staff))
+      assertEquals("OPEN", cashup1["status"].asText(), "cashup opens")
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/billing/cashups", json("hospitalId" to hospitalId, "openingFloatQar" to 0.0), staff),
+        "second open cashup rejected",
+      )
+      paidInvoice("1")
+      val closed1 =
+        `data`(api(HttpMethod.POST, "/api/v1/billing/cashups/${cashup1["id"].asText()}/close", json("countedCashQar" to 300.0, "note" to "balanced"), staff))
+      assertEquals("CLOSED", closed1["status"].asText(), "cashup closes")
+      assertEquals(100.0, closed1["cashCollectedQar"].asDouble(), 1e-9, "cash collected during the shift")
+      assertEquals(0.0, closed1["varianceQar"].asDouble(), 1e-9, "balanced drawer")
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/billing/cashups/${cashup1["id"].asText()}/close", json("countedCashQar" to 300.0), staff),
+        "double close rejected",
+      )
+
+      // Variance beyond tolerance raises a supervisor task.
+      val cashup2 = `data`(api(HttpMethod.POST, "/api/v1/billing/cashups", json("hospitalId" to hospitalId, "openingFloatQar" to 0.0), staff))
+      paidInvoice("2")
+      val closed2 =
+        `data`(api(HttpMethod.POST, "/api/v1/billing/cashups/${cashup2["id"].asText()}/close", json("countedCashQar" to 10.0, "note" to "short"), staff))
+      assertEquals(-90.0, closed2["varianceQar"].asDouble(), 1e-9, "short drawer variance")
+      val tasks = `data`(api(HttpMethod.GET, "/api/v1/tasks", token = token))
+      assertTrue(
+        tasks.any { it["relatedType"].asText() == "CASHUP" && it["relatedId"].asText() == cashup2["id"].asText() },
+        "variance task raised",
+      )
+
+      // Reconciliation: matched and variance statements.
+      val from =
+        java.time.Instant
+          .now()
+          .minusSeconds(3600)
+          .toString()
+      val to =
+        java.time.Instant
+          .now()
+          .plusSeconds(3600)
+          .toString()
+      val matched =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/recon/statements",
+            json("hospitalId" to hospitalId, "method" to "cash", "periodStart" to from, "periodEnd" to to, "statementTotalQar" to 200.0),
+            staff,
+          ),
+        )
+      assertEquals("MATCHED", matched["status"].asText(), "statement matches recorded cash: $matched")
+      assertEquals(200.0, matched["recordedTotalQar"].asDouble(), 1e-9, "recorded cash total")
+      val variance =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/recon/statements",
+            json("hospitalId" to hospitalId, "method" to "upi", "periodStart" to from, "periodEnd" to to, "statementTotalQar" to 5.0),
+            staff,
+          ),
+        )
+      assertEquals("VARIANCE", variance["status"].asText(), "no recorded UPI but a statement total")
+      assertEquals(5.0, variance["varianceQar"].asDouble(), 1e-9, "variance amount")
+
+      // Refunds: supervisor-gated, reason mandatory, capped at the payment.
+      val (inv3, pay3) = paidInvoice("3")
+      assertEquals(
+        403,
+        api(HttpMethod.POST, "/api/v1/billing/payments/$pay3/refund", json("amountQar" to 40.0, "reason" to "duplicate payment"), staff).status,
+        "staff cannot refund",
+      )
+      val blank = api(HttpMethod.POST, "/api/v1/billing/payments/$pay3/refund", json("amountQar" to 40.0, "reason" to "  "), sup)
+      assert4xx(blank, "refund without a reason")
+      assertTrue(blank.body.contains("REFUND_REASON_REQUIRED"), "refund reason guard: ${blank.body.take(200)}")
+      val tooMuch = api(HttpMethod.POST, "/api/v1/billing/payments/$pay3/refund", json("amountQar" to 150.0, "reason" to "too much"), sup)
+      assert4xx(tooMuch, "refund above the payment")
+      assertTrue(tooMuch.body.contains("REFUND_EXCEEDS_PAYMENT"), "refund cap guard: ${tooMuch.body.take(200)}")
+      val refund =
+        `data`(api(HttpMethod.POST, "/api/v1/billing/payments/$pay3/refund", json("amountQar" to 40.0, "reason" to "duplicate payment"), sup))
+      assertEquals(40.0, refund["amountQar"].asDouble(), 1e-9, "refund amount")
+      assertFalse(refund["issuedBy"].isNull, "refund issuer recorded")
+      val inv3After = `data`(api(HttpMethod.GET, "/api/v1/billing/invoices/$inv3", token = staff))["invoice"]
+      assertEquals(60.0, inv3After["amountPaidQar"].asDouble(), 1e-9, "paid reduced by the refund")
+      assertEquals(40.0, inv3After["amountDueQar"].asDouble(), 1e-9, "due increased by the refund")
+      assertEquals("partial", inv3After["status"].asText(), "invoice back to partial")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/billing/refunds", token = staff)).size(), "refund listed")
+
+      // GL export: summarized double-entry lines that balance.
+      val journal = `data`(api(HttpMethod.GET, "/api/v1/billing/journal/export?from=$from&to=$to", token = staff))
+      val lines = journal["lines"]
+      assertTrue(lines.size() >= 6, "journal lines present: $journal")
+      assertTrue(lines.any { it["account"].asText() == "CASH_CASH_IN" && it["debitQar"].asDouble() > 0 }, "cash debit line")
+      assertTrue(lines.any { it["account"].asText() == "REVENUE" && it["creditQar"].asDouble() > 0 }, "revenue credit line")
+      assertTrue(lines.any { it["account"].asText() == "REVENUE_REFUND" && it["debitQar"].asDouble() == 40.0 }, "refund debit line")
+      assertEquals(
+        journal["totalDebitQar"].asDouble(),
+        journal["totalCreditQar"].asDouble(),
+        1e-9,
+        "journal balances",
+      )
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */

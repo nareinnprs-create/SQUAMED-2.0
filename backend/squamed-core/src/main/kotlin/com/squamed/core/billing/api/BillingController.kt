@@ -205,6 +205,74 @@ class BillingController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<CreditNoteView> = ApiResponse.ok(billingService.issueCreditNote(id, dto, principal, principal.hospitalId))
 
+  // 03.06 collections + GL export.
+  @PostMapping("/cashups")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("billing:collect:payment")
+  @Transactional
+  fun openCashup(
+    @RequestBody dto: CashupOpenDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<CashupView> = ApiResponse.ok(billingService.openCashup(dto, principal, tenantResolver.pinOrDefault(principal, dto.hospitalId)))
+
+  @PostMapping("/cashups/{id}/close")
+  @RequiresPermission("billing:collect:payment")
+  @Transactional
+  fun closeCashup(
+    @PathVariable id: UUID,
+    @RequestBody dto: CashupCloseDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<CashupView> = ApiResponse.ok(billingService.closeCashup(id, dto, principal, principal.hospitalId))
+
+  @GetMapping("/cashups")
+  @RequiresPermission("billing:read:invoice")
+  @Transactional(readOnly = true)
+  fun listCashups(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<CashupView>> = ApiResponse.ok(billingService.listCashups(principal.hospitalId))
+
+  @PostMapping("/recon/statements")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("billing:write:invoice")
+  @Transactional
+  fun reconcile(
+    @RequestBody dto: ReconRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<ReconView> = ApiResponse.ok(billingService.reconcile(dto, tenantResolver.pinOrDefault(principal, dto.hospitalId)))
+
+  @GetMapping("/recon/statements")
+  @RequiresPermission("billing:read:invoice")
+  @Transactional(readOnly = true)
+  fun listRecon(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ReconView>> = ApiResponse.ok(billingService.listRecon(principal.hospitalId))
+
+  @PostMapping("/payments/{id}/refund")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("billing:approve:creditnote")
+  @Transactional
+  fun refundPayment(
+    @PathVariable id: UUID,
+    @RequestBody dto: RefundRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<RefundView> = ApiResponse.ok(billingService.refundPayment(id, dto, principal, principal.hospitalId))
+
+  @GetMapping("/refunds")
+  @RequiresPermission("billing:read:invoice")
+  @Transactional(readOnly = true)
+  fun listRefunds(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<RefundView>> = ApiResponse.ok(billingService.listRefunds(principal.hospitalId))
+
+  @GetMapping("/journal/export")
+  @RequiresPermission("billing:read:invoice")
+  @Transactional(readOnly = true)
+  fun journalExport(
+    @RequestParam(name = "from") from: java.time.Instant,
+    @RequestParam(name = "to") to: java.time.Instant,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<JournalExportView> = ApiResponse.ok(billingService.journalExport(from, to, principal.hospitalId))
+
   @GetMapping("/invoices")
   @RequiresPermission("billing:read:invoice")
   @Transactional(readOnly = true)

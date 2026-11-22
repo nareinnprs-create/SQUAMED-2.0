@@ -2996,6 +2996,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/recon/statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRecon"];
+        put?: never;
+        post: operations["reconcile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/rate-cards": {
         parameters: {
             query?: never;
@@ -3006,6 +3022,22 @@ export interface paths {
         get: operations["listRateCards"];
         put?: never;
         post: operations["upsertRateCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/payments/{id}/refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["refundPayment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3166,6 +3198,38 @@ export interface paths {
         get: operations["listCharges"];
         put?: never;
         post: operations["postCharge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/cashups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCashups"];
+        put?: never;
+        post: operations["openCashup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/cashups/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["closeCashup"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5580,6 +5644,38 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getChannel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRefunds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/journal/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["journalExport"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10393,6 +10489,38 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ReconRequestDto: {
+            /** Format: uuid */
+            hospitalId?: string;
+            method: string;
+            /** Format: date-time */
+            periodStart: string;
+            /** Format: date-time */
+            periodEnd: string;
+            statementTotalQar: number;
+        };
+        ApiResponseReconView: {
+            data?: components["schemas"]["ReconView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ReconView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            method: string;
+            /** Format: date-time */
+            periodStart: string;
+            /** Format: date-time */
+            periodEnd: string;
+            statementTotalQar: number;
+            recordedTotalQar: number;
+            varianceQar: number;
+            status: string;
+        };
         RateCardDto: {
             /** Format: uuid */
             id?: string;
@@ -10409,6 +10537,34 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        RefundRequestDto: {
+            amountQar: number;
+            reason: string;
+        };
+        ApiResponseRefundView: {
+            data?: components["schemas"]["RefundView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        RefundView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            paymentId: string;
+            /** Format: uuid */
+            invoiceId: string;
+            amountQar: number;
+            reason: string;
+            status: string;
+            /** Format: uuid */
+            issuedBy?: string;
+            /** Format: date-time */
+            issuedAt: string;
         };
         PackageDto: {
             /** Format: uuid */
@@ -10725,6 +10881,40 @@ export interface components {
             hsnCode?: string;
             /** Format: date-time */
             createdAt?: string;
+        };
+        CashupOpenDto: {
+            /** Format: uuid */
+            hospitalId?: string;
+            openingFloatQar: number;
+        };
+        ApiResponseCashupView: {
+            data?: components["schemas"]["CashupView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CashupView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            cashierId: string;
+            /** Format: date-time */
+            openedAt: string;
+            /** Format: date-time */
+            closedAt?: string;
+            openingFloatQar: number;
+            cashCollectedQar: number;
+            countedCashQar?: number;
+            varianceQar?: number;
+            status: string;
+            note?: string;
+        };
+        CashupCloseDto: {
+            countedCashQar: number;
+            note?: string;
         };
         RegisterDto: {
             email: string;
@@ -12598,6 +12788,20 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListRefundView: {
+            data?: components["schemas"]["RefundView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListReconView: {
+            data?: components["schemas"]["ReconView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListRateCardDto: {
             data?: components["schemas"]["RateCardDto"][];
             success: boolean;
@@ -12611,6 +12815,28 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseJournalExportView: {
+            data?: components["schemas"]["JournalExportView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        JournalExportView: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            lines: components["schemas"]["JournalLineView"][];
+            totalDebitQar: number;
+            totalCreditQar: number;
+        };
+        JournalLineView: {
+            date: string;
+            account: string;
+            debitQar: number;
+            creditQar: number;
         };
         ApiResponseListInvoiceView: {
             data?: components["schemas"]["InvoiceView"][];
@@ -12635,6 +12861,13 @@ export interface components {
         };
         ApiResponseListChargeView: {
             data?: components["schemas"]["ChargeView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListCashupView: {
+            data?: components["schemas"]["CashupView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -19800,6 +20033,50 @@ export interface operations {
             };
         };
     };
+    listRecon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListReconView"];
+                };
+            };
+        };
+    };
+    reconcile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReconRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReconView"];
+                };
+            };
+        };
+    };
     listRateCards: {
         parameters: {
             query?: never;
@@ -19840,6 +20117,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseRateCardDto"];
+                };
+            };
+        };
+    };
+    refundPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefundRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRefundView"];
                 };
             };
         };
@@ -20200,6 +20503,76 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseChargeView"];
+                };
+            };
+        };
+    };
+    listCashups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCashupView"];
+                };
+            };
+        };
+    };
+    openCashup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CashupOpenDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCashupView"];
+                };
+            };
+        };
+    };
+    closeCashup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CashupCloseDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCashupView"];
                 };
             };
         };
@@ -23981,6 +24354,49 @@ export interface operations {
             };
         };
     };
+    listRefunds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListRefundView"];
+                };
+            };
+        };
+    };
+    journalExport: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseJournalExportView"];
+                };
+            };
+        };
+    };
     getInvoice: {
         parameters: {
             query?: never;
@@ -24608,4 +25024,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: d3df19b64ec20419275d2c6234b6fe999764856a6c2b10779380398ef1ad424b
+// openapi snapshot sha256: cc91af050fad73ad4c8a5ba25e64797f5bf109f729105dc5c9f4e74701484ddf

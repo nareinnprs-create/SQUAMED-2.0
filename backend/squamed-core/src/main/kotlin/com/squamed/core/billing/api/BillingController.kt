@@ -176,6 +176,35 @@ class BillingController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<DepositView> = ApiResponse.ok(billingService.applyDeposit(id, dto.invoiceId, principal.hospitalId))
 
+  // 03.03 tax profile + credit notes.
+  @PostMapping("/tax-profile")
+  @RequiresPermission("billing:write:invoice")
+  @Transactional
+  fun upsertTaxProfile(
+    @RequestBody dto: TaxProfileDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<TaxProfileDto> = ApiResponse.ok(billingService.upsertTaxProfile(dto, tenantResolver.pinOrDefault(principal, dto.hospitalId)))
+
+  @GetMapping("/tax-profile")
+  @RequiresPermission("billing:read:invoice")
+  @Transactional(readOnly = true)
+  fun getTaxProfile(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<TaxProfileDto?> {
+    val hid = principal.hospitalId ?: tenantResolver.primaryHospitalId()
+    return ApiResponse.ok(billingService.getTaxProfile(hid))
+  }
+
+  @PostMapping("/invoices/{id}/credit-notes")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("billing:approve:creditnote")
+  @Transactional
+  fun issueCreditNote(
+    @PathVariable id: UUID,
+    @RequestBody dto: CreditNoteRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<CreditNoteView> = ApiResponse.ok(billingService.issueCreditNote(id, dto, principal, principal.hospitalId))
+
   @GetMapping("/invoices")
   @RequiresPermission("billing:read:invoice")
   @Transactional(readOnly = true)

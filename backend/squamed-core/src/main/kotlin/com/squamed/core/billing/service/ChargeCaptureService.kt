@@ -58,6 +58,9 @@ class ChargeCaptureService(
           referenceId = event.entityId,
           sourceEventId = eventId,
           entryMode = "EVENT",
+          // 03.03: performed lab/imaging services are exempt healthcare services.
+          taxCategory = "EXEMPT_SERVICE",
+          hsnCode = "9993",
         ),
       )
     return charge

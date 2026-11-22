@@ -40,6 +40,9 @@ class Invoice(
   var payerClass: String = "general",
   @Column(name = "discount_reason", length = 400)
   var discountReason: String? = null,
+  // 03.03: invoice crossed the hospital e-invoicing threshold.
+  @Column(name = "e_invoice_required", nullable = false)
+  var eInvoiceRequired: Boolean = false,
   @Column(name = "issued_at", nullable = false)
   var issuedAt: Instant = Instant.now(),
 ) : BaseEntity()

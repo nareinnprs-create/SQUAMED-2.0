@@ -80,8 +80,101 @@ class BillingController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<InvoiceDetailView> {
     val patientId = dto.patientId ?: throw IllegalArgumentException("PATIENT_ID_REQUIRED")
-    return ApiResponse.ok(billingService.issueInvoice(patientId, dto.visitId, dto.discountQar, principal.hospitalId))
+    return ApiResponse.ok(
+      billingService.issueInvoice(
+        patientId,
+        dto.visitId,
+        dto.discountQar,
+        dto.payerClass,
+        dto.discountReason,
+        principal,
+        principal.hospitalId,
+      ),
+    )
   }
+
+  // 03.02 rate cards, packages, estimates, deposits.
+  @PostMapping("/rate-cards")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("billing:write:invoice")
+  @Transactional
+  fun upsertRateCard(
+    @RequestBody dto: RateCardDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<RateCardDto> = ApiResponse.ok(billingService.upsertRateCard(dto, tenantResolver.pinOrDefault(principal, dto.hospitalId)))
+
+  @GetMapping("/rate-cards")
+  @RequiresPermission("billing:read:invoice")
+  @Transactional(readOnly = true)
+  fun listRateCards(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<RateCardDto>> = ApiResponse.ok(billingService.listRateCards(principal.hospitalId))
+
+  @PostMapping("/packages")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("billing:write:invoice")
+  @Transactional
+  fun createPackage(
+    @RequestBody dto: PackageDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<PackageDto> = ApiResponse.ok(billingService.createPackage(dto, principal.hospitalId))
+
+  @GetMapping("/packages")
+  @RequiresPermission("billing:read:invoice")
+  @Transactional(readOnly = true)
+  fun listPackages(): ApiResponse<List<PackageDto>> = ApiResponse.ok(billingService.listPackages())
+
+  @PostMapping("/packages/{id}/versions")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("billing:write:invoice")
+  @Transactional
+  fun addPackageVersion(
+    @PathVariable id: UUID,
+    @RequestBody dto: PackageVersionRequestDto,
+  ): ApiResponse<PackageVersionDto> = ApiResponse.ok(billingService.addPackageVersion(id, dto))
+
+  @PostMapping("/estimates")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("billing:write:invoice")
+  @Transactional
+  fun createEstimate(
+    @RequestBody dto: EstimateRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<EstimateView> = ApiResponse.ok(billingService.createEstimate(dto, principal, tenantResolver.pinOrDefault(principal, dto.hospitalId)))
+
+  @GetMapping("/estimates")
+  @RequiresPermission("billing:read:invoice")
+  @Transactional(readOnly = true)
+  fun listEstimates(
+    @RequestParam(name = "patientId", required = false) patientId: UUID?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<EstimateView>> = ApiResponse.ok(billingService.listEstimates(patientId, principal.hospitalId))
+
+  @PostMapping("/deposits")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("billing:collect:payment")
+  @Transactional
+  fun takeDeposit(
+    @RequestBody dto: DepositRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DepositView> = ApiResponse.ok(billingService.takeDeposit(dto, principal, tenantResolver.pinOrDefault(principal, dto.hospitalId)))
+
+  @GetMapping("/deposits")
+  @RequiresPermission("billing:read:invoice")
+  @Transactional(readOnly = true)
+  fun listDeposits(
+    @RequestParam(name = "patientId", required = false) patientId: UUID?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<DepositView>> = ApiResponse.ok(billingService.listDeposits(patientId, principal.hospitalId))
+
+  @PostMapping("/deposits/{id}/apply")
+  @RequiresPermission("billing:collect:payment")
+  @Transactional
+  fun applyDeposit(
+    @PathVariable id: UUID,
+    @RequestBody dto: DepositApplyDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DepositView> = ApiResponse.ok(billingService.applyDeposit(id, dto.invoiceId, principal.hospitalId))
 
   @GetMapping("/invoices")
   @RequiresPermission("billing:read:invoice")

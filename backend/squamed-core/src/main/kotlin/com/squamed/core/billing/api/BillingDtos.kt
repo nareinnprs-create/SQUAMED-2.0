@@ -47,6 +47,8 @@ data class PostChargeDto(
   val insuranceClaimable: Boolean? = null,
   // 03.01: manual ledger entries are audited with a mandatory reason.
   val reason: String? = null,
+  // 03.02: package code pins the active package version at capture time.
+  val packageCode: String? = null,
 )
 
 data class ChargeView(
@@ -71,6 +73,7 @@ data class ChargeView(
   val sourceEventId: UUID?,
   val entryMode: String,
   val entryReason: String?,
+  val packageVersionId: UUID?,
   val createdAt: Instant?,
 ) {
   companion object {
@@ -96,6 +99,7 @@ data class ChargeView(
         sourceEventId = entity.sourceEventId,
         entryMode = entity.entryMode,
         entryReason = entity.entryReason,
+        packageVersionId = entity.packageVersionId,
         createdAt = entity.createdAt,
       )
   }
@@ -105,6 +109,9 @@ data class IssueInvoiceDto(
   val patientId: UUID? = null,
   val visitId: UUID? = null,
   val discountQar: BigDecimal? = null,
+  // 03.02: payer class drives rate-card repricing; discounts need a reason and >10% needs approval.
+  val payerClass: String? = null,
+  val discountReason: String? = null,
 )
 
 data class InvoiceView(
@@ -121,6 +128,8 @@ data class InvoiceView(
   val amountDueQar: BigDecimal,
   val status: String,
   val insuranceClaimStatus: String?,
+  val payerClass: String,
+  val discountReason: String?,
   val issuedAt: Instant,
   val createdAt: Instant?,
 ) {
@@ -140,6 +149,8 @@ data class InvoiceView(
         amountDueQar = entity.amountDueQar,
         status = entity.status,
         insuranceClaimStatus = entity.insuranceClaimStatus,
+        payerClass = entity.payerClass,
+        discountReason = entity.discountReason,
         issuedAt = entity.issuedAt,
         createdAt = entity.createdAt,
       )
@@ -151,6 +162,8 @@ data class InvoiceLineView(
   val quantity: Int,
   val unitPriceQar: BigDecimal,
   val totalQar: BigDecimal,
+  val basePriceQar: BigDecimal?,
+  val rateCardId: UUID?,
 ) {
   companion object {
     fun from(entity: InvoiceLine) =
@@ -159,6 +172,8 @@ data class InvoiceLineView(
         quantity = entity.quantity,
         unitPriceQar = entity.unitPriceQar,
         totalQar = entity.totalQar,
+        basePriceQar = entity.basePriceQar,
+        rateCardId = entity.rateCardId,
       )
   }
 }
@@ -219,3 +234,146 @@ data class InvoiceDetailView(
 data class CancelInvoiceDto(
   val reason: String? = null,
 )
+
+// 03.02 billing engine surfaces.
+data class RateCardDto(
+  val id: UUID? = null,
+  val hospitalId: UUID? = null,
+  val payerClass: String,
+  val code: String,
+  val priceQar: java.math.BigDecimal,
+  val isActive: Boolean = true,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.billing.domain.RateCard) =
+      RateCardDto(entity.id, entity.hospitalId, entity.payerClass, entity.code, entity.priceQar, entity.isActive)
+  }
+}
+
+data class PackageDto(
+  val id: UUID? = null,
+  val hospitalId: UUID? = null,
+  val code: String,
+  val name: String,
+  val isActive: Boolean = true,
+  val versions: List<PackageVersionDto> = emptyList(),
+) {
+  companion object {
+    fun from(
+      entity: com.squamed.core.billing.domain.BillingPackage,
+      versions: List<com.squamed.core.billing.domain.PackageVersion>,
+    ) = PackageDto(
+      entity.id,
+      entity.hospitalId,
+      entity.code,
+      entity.name,
+      entity.isActive,
+      versions.map { PackageVersionDto.from(it) },
+    )
+  }
+}
+
+data class PackageVersionDto(
+  val id: UUID? = null,
+  val packageId: UUID,
+  val packageVersion: Int,
+  val priceQar: java.math.BigDecimal,
+  val effectiveFrom: java.time.LocalDate? = null,
+  val isActive: Boolean = true,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.billing.domain.PackageVersion) =
+      PackageVersionDto(entity.id, entity.packageId, entity.packageVersion, entity.priceQar, entity.effectiveFrom, entity.isActive)
+  }
+}
+
+data class PackageVersionRequestDto(
+  val packageVersion: Int? = null,
+  val priceQar: java.math.BigDecimal? = null,
+  val effectiveFrom: java.time.LocalDate? = null,
+)
+
+data class EstimateItemDto(
+  val code: String,
+  val name: String,
+  val quantity: Int = 1,
+  val unitPriceQar: java.math.BigDecimal,
+)
+
+data class EstimateRequestDto(
+  val patientId: UUID,
+  val encounterId: UUID? = null,
+  val hospitalId: UUID? = null,
+  val items: List<EstimateItemDto> = emptyList(),
+  val expiresInDays: Int? = null,
+)
+
+data class EstimateView(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val patientId: UUID,
+  val encounterId: UUID?,
+  val estimateNumber: String,
+  val totalQar: java.math.BigDecimal,
+  val status: String,
+  val expiresAt: Instant?,
+  val createdAt: Instant?,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.billing.domain.Estimate) =
+      EstimateView(
+        entity.id,
+        entity.hospitalId,
+        entity.patientId,
+        entity.encounterId,
+        entity.estimateNumber,
+        entity.totalQar,
+        entity.status,
+        entity.expiresAt,
+        entity.createdAt,
+      )
+  }
+}
+
+data class DepositRequestDto(
+  val patientId: UUID,
+  val hospitalId: UUID? = null,
+  val amountQar: java.math.BigDecimal,
+  val method: String,
+  val reference: String? = null,
+)
+
+data class DepositApplyDto(
+  val invoiceId: UUID,
+)
+
+data class DepositView(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val patientId: UUID,
+  val amountQar: java.math.BigDecimal,
+  val method: String,
+  val reference: String?,
+  val status: String,
+  val receivedBy: UUID?,
+  val receivedAt: Instant,
+  val appliedInvoiceId: UUID?,
+  val appliedAt: Instant?,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.billing.domain.Deposit) =
+      DepositView(
+        entity.id,
+        entity.hospitalId,
+        entity.patientId,
+        entity.amountQar,
+        entity.method,
+        entity.reference,
+        entity.status,
+        entity.receivedBy,
+        entity.receivedAt,
+        entity.appliedInvoiceId,
+        entity.appliedAt,
+      )
+  }
+}

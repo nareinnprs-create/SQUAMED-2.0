@@ -2900,6 +2900,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/rate-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRateCards"];
+        put?: never;
+        post: operations["upsertRateCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/packages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPackages"];
+        put?: never;
+        post: operations["createPackage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/packages/{id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["addPackageVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/invoices": {
         parameters: {
             query?: never;
@@ -2942,6 +2990,54 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["cancelInvoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/estimates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listEstimates"];
+        put?: never;
+        post: operations["createEstimate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/deposits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDeposits"];
+        put?: never;
+        post: operations["takeDeposit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/deposits/{id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["applyDeposit"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9993,12 +10089,74 @@ export interface components {
             /** Format: date-time */
             performedAt?: string;
         };
+        RateCardDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            payerClass: string;
+            code: string;
+            priceQar: number;
+            isActive: boolean;
+        };
+        ApiResponseRateCardDto: {
+            data?: components["schemas"]["RateCardDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PackageDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            code: string;
+            name: string;
+            isActive: boolean;
+            versions: components["schemas"]["PackageVersionDto"][];
+        };
+        PackageVersionDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            packageId: string;
+            /** Format: int32 */
+            packageVersion: number;
+            priceQar: number;
+            /** Format: date */
+            effectiveFrom?: string;
+            isActive: boolean;
+        };
+        ApiResponsePackageDto: {
+            data?: components["schemas"]["PackageDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PackageVersionRequestDto: {
+            /** Format: int32 */
+            packageVersion?: number;
+            priceQar?: number;
+            /** Format: date */
+            effectiveFrom?: string;
+        };
+        ApiResponsePackageVersionDto: {
+            data?: components["schemas"]["PackageVersionDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         IssueInvoiceDto: {
             /** Format: uuid */
             patientId?: string;
             /** Format: uuid */
             visitId?: string;
             discountQar?: number;
+            payerClass?: string;
+            discountReason?: string;
         };
         ApiResponseInvoiceDetailView: {
             data?: components["schemas"]["InvoiceDetailView"];
@@ -10018,6 +10176,9 @@ export interface components {
             quantity: number;
             unitPriceQar: number;
             totalQar: number;
+            basePriceQar?: number;
+            /** Format: uuid */
+            rateCardId?: string;
         };
         InvoiceView: {
             /** Format: uuid */
@@ -10037,6 +10198,8 @@ export interface components {
             amountDueQar: number;
             status: string;
             insuranceClaimStatus?: string;
+            payerClass: string;
+            discountReason?: string;
             /** Format: date-time */
             issuedAt: string;
             /** Format: date-time */
@@ -10075,6 +10238,88 @@ export interface components {
         CancelInvoiceDto: {
             reason?: string;
         };
+        EstimateItemDto: {
+            code: string;
+            name: string;
+            /** Format: int32 */
+            quantity: number;
+            unitPriceQar: number;
+        };
+        EstimateRequestDto: {
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            encounterId?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            items: components["schemas"]["EstimateItemDto"][];
+            /** Format: int32 */
+            expiresInDays?: number;
+        };
+        ApiResponseEstimateView: {
+            data?: components["schemas"]["EstimateView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        EstimateView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            encounterId?: string;
+            estimateNumber: string;
+            totalQar: number;
+            status: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        DepositRequestDto: {
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            amountQar: number;
+            method: string;
+            reference?: string;
+        };
+        ApiResponseDepositView: {
+            data?: components["schemas"]["DepositView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        DepositView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            patientId: string;
+            amountQar: number;
+            method: string;
+            reference?: string;
+            status: string;
+            /** Format: uuid */
+            receivedBy?: string;
+            /** Format: date-time */
+            receivedAt: string;
+            /** Format: uuid */
+            appliedInvoiceId?: string;
+            /** Format: date-time */
+            appliedAt?: string;
+        };
+        DepositApplyDto: {
+            /** Format: uuid */
+            invoiceId: string;
+        };
         PostChargeDto: {
             /** Format: uuid */
             hospitalId?: string;
@@ -10092,6 +10337,7 @@ export interface components {
             unitPriceQar?: number;
             insuranceClaimable?: boolean;
             reason?: string;
+            packageCode?: string;
         };
         ApiResponseChargeView: {
             data?: components["schemas"]["ChargeView"];
@@ -10131,6 +10377,8 @@ export interface components {
             sourceEventId?: string;
             entryMode: string;
             entryReason?: string;
+            /** Format: uuid */
+            packageVersionId?: string;
             /** Format: date-time */
             createdAt?: string;
         };
@@ -11965,8 +12213,36 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListRateCardDto: {
+            data?: components["schemas"]["RateCardDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListPackageDto: {
+            data?: components["schemas"]["PackageDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListInvoiceView: {
             data?: components["schemas"]["InvoiceView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListEstimateView: {
+            data?: components["schemas"]["EstimateView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListDepositView: {
+            data?: components["schemas"]["DepositView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -18949,6 +19225,120 @@ export interface operations {
             };
         };
     };
+    listRateCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListRateCardDto"];
+                };
+            };
+        };
+    };
+    upsertRateCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RateCardDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRateCardDto"];
+                };
+            };
+        };
+    };
+    listPackages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPackageDto"];
+                };
+            };
+        };
+    };
+    createPackage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PackageDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePackageDto"];
+                };
+            };
+        };
+    };
+    addPackageVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PackageVersionRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePackageVersionDto"];
+                };
+            };
+        };
+    };
     listInvoices: {
         parameters: {
             query?: {
@@ -19044,6 +19434,124 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseInvoiceDetailView"];
+                };
+            };
+        };
+    };
+    listEstimates: {
+        parameters: {
+            query?: {
+                patientId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListEstimateView"];
+                };
+            };
+        };
+    };
+    createEstimate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EstimateRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEstimateView"];
+                };
+            };
+        };
+    };
+    listDeposits: {
+        parameters: {
+            query?: {
+                patientId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListDepositView"];
+                };
+            };
+        };
+    };
+    takeDeposit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepositRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDepositView"];
+                };
+            };
+        };
+    };
+    applyDeposit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepositApplyDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDepositView"];
                 };
             };
         };
@@ -23415,4 +23923,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: dfc99baf34a106d6806f7ad74ef6052bfc92b387021d7d30788fea6e3d4ec867
+// openapi snapshot sha256: b76b4879fba7cd61b2b11545e1bbcee2527fdf7e427b4b4e8b02de4968d6532e

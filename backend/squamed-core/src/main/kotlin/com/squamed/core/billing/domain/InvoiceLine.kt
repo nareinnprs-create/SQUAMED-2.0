@@ -22,4 +22,9 @@ class InvoiceLine(
   var unitPriceQar: BigDecimal = BigDecimal.ZERO,
   @Column(name = "total_qar", nullable = false, precision = 12, scale = 2)
   var totalQar: BigDecimal = BigDecimal.ZERO,
+  // 03.02: captured base price + the rate card that repriced the line (null = charge price).
+  @Column(name = "base_price_qar", precision = 12, scale = 2)
+  var basePriceQar: BigDecimal? = null,
+  @Column(name = "rate_card_id")
+  var rateCardId: UUID? = null,
 ) : BaseEntity()

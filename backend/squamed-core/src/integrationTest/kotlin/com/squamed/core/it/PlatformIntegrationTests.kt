@@ -8283,6 +8283,240 @@ class PlatformIntegrationTests {
         assertTrue(catalog.any { it["name"].asText() == name && it["status"].asText() == "EMITTED" }, "$name cataloged EMITTED")
       }
     }
+
+    @Test
+    fun emarNursingCoreCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+
+      fun scopedUser(
+        role: String,
+        tag: String,
+      ): Pair<String, String> {
+        val email = "$tag.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "Emar$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role",
+        )
+        val tok = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+        val me = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = tok))["userId"].asText()
+        return tok to me
+      }
+      val (doc, _) = scopedUser("DOCTOR", "emardoc")
+      val (nurse, nurseId) = scopedUser("NURSE", "emarnurse")
+      val (_, checkerId) = scopedUser("NURSE", "emarcheck")
+
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Emar",
+              "lastName" to "Coverage$s",
+              "gender" to "male",
+              "dateOfBirth" to "1965-05-05",
+              "phone" to "68$s".take(11),
+              "qid" to "EM$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]
+      val patientId = patient["id"].asText()
+      val mrn = patient["mrn"].asText()
+      assert2xx(api(HttpMethod.POST, "/api/v1/patients/$patientId/allergies", json("allergen" to "NKA", "severity" to "none"), token), "NKA")
+      val enc =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/encounters", json("patientId" to patientId, "chiefComplaint" to "diabetes review", "reason" to "04.02 coverage"), doc),
+        )["id"].asText()
+
+      val insulin =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/drugs",
+            json("code" to "INS-$s", "name" to "Insulin Glargine", "genericName" to "insulin glargine", "category" to "General", "unit" to "unit"),
+            token,
+          ),
+        )["id"].asText()
+      val insulinRx =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters/$enc/prescriptions",
+            json(
+              "drugId" to insulin,
+              "drugName" to "Insulin Glargine",
+              "dose" to "10 units",
+              "frequency" to "BD",
+              "route" to "subcutaneous",
+              "quantity" to 10,
+              "patientMrn" to mrn,
+            ),
+            doc,
+          ),
+        )["id"].asText()
+      val doses =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/mar/schedule",
+            json("prescriptionId" to insulinRx, "hospitalId" to hospitalId, "doses" to 2),
+            nurse,
+          ),
+        )
+      assertEquals(2, doses.size(), "BD prescription schedules two doses")
+      assertTrue(doses[0]["highAlert"].asBoolean(), "insulin flagged high-alert")
+      assertEquals(insulin, doses[0]["drugCode"].asText(), "drug barcode source recorded")
+      assertEquals(
+        12,
+        java.time.Duration
+          .between(
+            java.time.Instant.parse(doses[0]["scheduledAt"].asText()),
+            java.time.Instant.parse(doses[1]["scheduledAt"].asText()),
+          ).toHours(),
+        "BD = 12h apart",
+      )
+
+      // Barcode hard block: wrong patient, wrong drug.
+      val wrongPatient =
+        api(
+          HttpMethod.POST,
+          "/api/v1/nursing/mar/${doses[0]["id"].asText()}/administer",
+          json("patientBarcode" to "MQ-0000-0001", "drugBarcode" to insulin),
+          nurse,
+        )
+      assertEquals(409, wrongPatient.status, "wrong patient barcode blocks: ${wrongPatient.body.take(200)}")
+      assertTrue(wrongPatient.body.contains("MAR_BARCODE_MISMATCH"), "patient barcode guard code")
+      val wrongDrug =
+        api(
+          HttpMethod.POST,
+          "/api/v1/nursing/mar/${doses[0]["id"].asText()}/administer",
+          json("patientBarcode" to mrn, "drugBarcode" to "SOME-OTHER-DRUG"),
+          nurse,
+        )
+      assertEquals(409, wrongDrug.status, "wrong drug barcode blocks")
+      assertTrue(wrongDrug.body.contains("MAR_BARCODE_MISMATCH"), "drug barcode guard code")
+
+      // High-alert double-check.
+      val noChecker =
+        api(HttpMethod.POST, "/api/v1/nursing/mar/${doses[0]["id"].asText()}/administer", json("patientBarcode" to mrn, "drugBarcode" to insulin), nurse)
+      assert4xx(noChecker, "high-alert dose needs a second checker")
+      assertTrue(noChecker.body.contains("HIGH_ALERT_SECOND_CHECK_REQUIRED"), "double-check guard code")
+      val selfCheck =
+        api(
+          HttpMethod.POST,
+          "/api/v1/nursing/mar/${doses[0]["id"].asText()}/administer",
+          json("patientBarcode" to mrn, "drugBarcode" to insulin, "secondCheckerId" to nurseId),
+          nurse,
+        )
+      assert4xx(selfCheck, "administrator cannot second-check their own dose")
+      val administered =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/mar/${doses[0]["id"].asText()}/administer",
+            json("patientBarcode" to mrn, "drugBarcode" to insulin, "secondCheckerId" to checkerId),
+            nurse,
+          ),
+        )
+      assertEquals("administered", administered["status"].asText(), "dose administered")
+      assertTrue(administered["barcodeVerified"].asBoolean(), "barcodes verified")
+      assertEquals(checkerId, administered["secondCheckerId"].asText(), "second checker recorded")
+
+      // PRN needs a reason.
+      val prnDrug =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/drugs",
+            json("code" to "PRN-$s", "name" to "Paracetamol", "genericName" to "paracetamol", "category" to "General", "unit" to "tab"),
+            token,
+          ),
+        )["id"].asText()
+      val prnRx =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters/$enc/prescriptions",
+            json(
+              "drugId" to prnDrug,
+              "drugName" to "Paracetamol",
+              "dose" to "1 g",
+              "frequency" to "PRN",
+              "route" to "oral",
+              "quantity" to 10,
+              "patientMrn" to mrn,
+            ),
+            doc,
+          ),
+        )["id"].asText()
+      val prnDose = `data`(api(HttpMethod.POST, "/api/v1/nursing/mar/schedule", json("prescriptionId" to prnRx, "hospitalId" to hospitalId), nurse))[0]
+      assertTrue(prnDose["isPrn"].asBoolean(), "PRN dose flagged")
+      val prnNoReason =
+        api(HttpMethod.POST, "/api/v1/nursing/mar/${prnDose["id"].asText()}/administer", json("patientBarcode" to mrn, "drugBarcode" to prnDrug), nurse)
+      assert4xx(prnNoReason, "PRN dose needs a reason")
+      assertTrue(prnNoReason.body.contains("MAR_PRN_REASON_REQUIRED"), "PRN guard code")
+      val prnGiven =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/mar/${prnDose["id"].asText()}/administer",
+            json("patientBarcode" to mrn, "drugBarcode" to prnDrug, "prnReason" to "temperature 38.9"),
+            nurse,
+          ),
+        )
+      assertEquals("temperature 38.9", prnGiven["prnReason"].asText(), "PRN reason recorded")
+
+      // Omission: code + reason + clinician notification.
+      val badCode = api(HttpMethod.POST, "/api/v1/nursing/mar/${doses[1]["id"].asText()}/omit", json("code" to "WHATEVER", "reason" to "x"), nurse)
+      assert4xx(badCode, "invalid omission code")
+      assertTrue(badCode.body.contains("MAR_OMISSION_CODE_INVALID"), "omission code guard")
+      val noReason = api(HttpMethod.POST, "/api/v1/nursing/mar/${doses[1]["id"].asText()}/omit", json("code" to "PATIENT_REFUSED"), nurse)
+      assert4xx(noReason, "omission needs a reason")
+      assertTrue(noReason.body.contains("MAR_OMISSION_REASON_REQUIRED"), "omission reason guard")
+      val omitted =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/mar/${doses[1]["id"].asText()}/omit",
+            json("code" to "PATIENT_REFUSED", "reason" to "patient refused the injection", "notifyDoctor" to true),
+            nurse,
+          ),
+        )
+      assertEquals("omitted", omitted["status"].asText(), "dose omitted")
+      assertEquals("PATIENT_REFUSED", omitted["omissionCode"].asText(), "omission code recorded")
+      val tasks = `data`(api(HttpMethod.GET, "/api/v1/tasks", token = token))
+      assertTrue(
+        tasks.any { it["relatedType"].asText() == "MAR" && it["relatedId"].asText() == doses[1]["id"].asText() },
+        "omission notified the prescriber via a task",
+      )
+
+      // Events + catalog.
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      listOf("nursing.dose_scheduled", "nursing.dose_administered", "nursing.dose_omitted").forEach { type ->
+        assertTrue(outbox.any { it["eventType"].asText() == type }, "$type emitted")
+      }
+      val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog", token = token))
+      listOf("DoseScheduled", "DoseAdministered", "DoseOmitted").forEach { name ->
+        assertTrue(catalog.any { it["name"].asText() == name && it["status"].asText() == "EMITTED" }, "$name cataloged EMITTED")
+      }
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */
@@ -8422,12 +8656,12 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping (34 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR (37 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        34,
+        37,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission events: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR events: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
@@ -9050,12 +9284,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        34,
+        37,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")

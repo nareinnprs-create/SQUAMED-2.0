@@ -152,6 +152,35 @@ class NursingController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<MarView> = ApiResponse.ok(nursingService.updateMarStatus(id, dto, principal.userId))
 
+  // 04.02 eMAR: schedule from a prescription, barcode-checked administration, omissions.
+  @PostMapping("/mar/schedule")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("nursing:write:nursing")
+  @Transactional
+  fun scheduleMar(
+    @RequestBody dto: MarScheduleDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<MarView>> =
+    ApiResponse.ok(nursingService.scheduleMar(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
+
+  @PostMapping("/mar/{id}/administer")
+  @RequiresPermission("nursing:write:nursing")
+  @Transactional
+  fun administerMar(
+    @PathVariable id: UUID,
+    @RequestBody dto: MarAdministerDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<MarView> = ApiResponse.ok(nursingService.administerMar(id, dto, principal.userId))
+
+  @PostMapping("/mar/{id}/omit")
+  @RequiresPermission("nursing:write:nursing")
+  @Transactional
+  fun omitMar(
+    @PathVariable id: UUID,
+    @RequestBody dto: MarOmitDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<MarView> = ApiResponse.ok(nursingService.omitMar(id, dto, principal.userId))
+
   @PostMapping("/risk-assessments")
   @ResponseStatus(HttpStatus.CREATED)
   @RequiresPermission("nursing:write:nursing")

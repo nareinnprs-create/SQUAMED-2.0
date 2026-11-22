@@ -1,8 +1,13 @@
 package com.squamed.core.nursing.service
 
+import com.squamed.core.encounter.repository.PrescriptionRepository
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
+import com.squamed.core.masterdata.repository.DrugRepository
+import com.squamed.core.nursing.api.MarAdministerDto
 import com.squamed.core.nursing.api.MarCreateDto
+import com.squamed.core.nursing.api.MarOmitDto
+import com.squamed.core.nursing.api.MarScheduleDto
 import com.squamed.core.nursing.api.MarStatusDto
 import com.squamed.core.nursing.api.MarView
 import com.squamed.core.nursing.api.NursingAssessmentCreateDto
@@ -32,8 +37,11 @@ import com.squamed.core.nursing.repository.NursingHandoverRepository
 import com.squamed.core.nursing.repository.NursingNoteRepository
 import com.squamed.core.nursing.repository.RiskAssessmentRepository
 import com.squamed.core.nursing.repository.VitalsEntryRepository
+import com.squamed.core.task.api.TaskCreateDto
+import com.squamed.core.task.service.TaskService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -46,6 +54,10 @@ class NursingService(
   private val vitalsRepository: VitalsEntryRepository,
   private val marRepository: MedicationAdministrationRecordRepository,
   private val riskAssessmentRepository: RiskAssessmentRepository,
+  private val prescriptionRepository: PrescriptionRepository,
+  private val drugRepository: DrugRepository,
+  private val patientRecordLookup: com.squamed.core.patient.repository.PatientRecordRepository,
+  private val taskService: TaskService,
   private val eventPublisher: DomainEventPublisher,
 ) {
   @Transactional
@@ -340,20 +352,151 @@ class NursingService(
     }
     marRepository.save(mar)
     if (status == "administered") {
-      eventPublisher.publish(
-        DomainEvent(
-          eventId = UUID.randomUUID(),
-          eventType = "nursing.medication_administered",
-          occurredAt = now,
-          source = "nursing-service",
-          entityType = "medication_administration_record",
-          entityId = id,
+      publishMar(mar, "nursing.medication_administered", mapOf("patientId" to mar.patientId, "medicationName" to mar.medicationName))
+    }
+    return MarView.from(mar)
+  }
+
+  // -- 04.02 eMAR: schedule from an active prescription, barcode-checked administration, omissions --
+
+  @Transactional
+  fun scheduleMar(
+    dto: MarScheduleDto,
+    actorId: UUID,
+  ): List<MarView> {
+    val prescription = prescriptionRepository.findById(dto.prescriptionId).orElseThrow { IllegalArgumentException("PRESCRIPTION_NOT_FOUND") }
+    if (prescription.status != "prescribed" && prescription.status != "active") throw IllegalArgumentException("PRESCRIPTION_NOT_ACTIVE")
+    val hospitalId = dto.hospitalId ?: throw IllegalArgumentException("NURSING_HOSPITAL_REQUIRED")
+    val frequency = prescription.frequency?.trim()?.uppercase()
+    val isPrn = frequency == "PRN" || prescription.isPrn
+    val intervalHours = frequency?.let { FREQUENCY_HOURS[it] }
+    val doseCount = dto.doses ?: 1
+    if (!isPrn && intervalHours == null && doseCount > 1) throw IllegalArgumentException("MAR_FREQUENCY_UNSCHEDULABLE")
+    val start = dto.startAt ?: Instant.now()
+    val drug = prescription.drugId?.let { drugRepository.findById(it).orElse(null) }
+    val highAlert =
+      HIGH_ALERT_TOKENS.any { token ->
+        prescription.drugName.lowercase().contains(token) || (drug?.genericName?.lowercase()?.contains(token) == true)
+      }
+    val rows =
+      (0 until doseCount.coerceAtLeast(1)).map { index ->
+        marRepository.save(
+          MedicationAdministrationRecord(
+            hospitalId = hospitalId,
+            patientId = prescription.patientId,
+            admissionId = dto.admissionId,
+            medicationName = prescription.drugName,
+            dose = prescription.dose,
+            route = prescription.route,
+            scheduledAt = if (intervalHours != null) start.plus(Duration.ofHours(intervalHours * index)) else start,
+            prescriptionId = prescription.id,
+            drugCode = prescription.drugId?.toString() ?: prescription.drugName,
+            isPrn = isPrn,
+            highAlert = highAlert,
+          ).also { it.createdBy = actorId },
+        )
+      }
+    rows.forEach { row ->
+      publishMar(row, "nursing.dose_scheduled", mapOf("patientId" to row.patientId, "scheduledAt" to row.scheduledAt.toString()))
+    }
+    return rows.map { MarView.from(it) }
+  }
+
+  @Transactional
+  fun administerMar(
+    id: UUID,
+    dto: MarAdministerDto,
+    actorId: UUID,
+  ): MarView {
+    val mar = marRepository.findById(id).orElseThrow { IllegalArgumentException("NURSING_MAR_NOT_FOUND") }
+    if (mar.status != "scheduled") throw IllegalArgumentException("MAR_NOT_SCHEDULED")
+    // Barcode patient + drug hard block (SAFETY: mismatch = block).
+    val patientBarcode = dto.patientBarcode?.trim()
+    val drugBarcode = dto.drugBarcode?.trim()
+    if (patientBarcode.isNullOrEmpty() || drugBarcode.isNullOrEmpty()) throw IllegalArgumentException("MAR_BARCODE_REQUIRED")
+    val patient = patientRecordLookup.findById(mar.patientId).orElse(null)
+    val expectedPatient = patient?.mrn ?: patient?.id?.toString()
+    if (expectedPatient != null && patientBarcode != expectedPatient) throw IllegalStateException("MAR_BARCODE_MISMATCH")
+    if (mar.drugCode != null && drugBarcode != mar.drugCode) throw IllegalStateException("MAR_BARCODE_MISMATCH")
+    // PRN doses need a reason.
+    val prnReason = dto.prnReason?.trim()
+    if (mar.isPrn && prnReason.isNullOrEmpty()) throw IllegalArgumentException("MAR_PRN_REASON_REQUIRED")
+    // High-alert doses need a second checker who is not the administrator.
+    if (mar.highAlert) {
+      val checker = dto.secondCheckerId ?: throw IllegalArgumentException("HIGH_ALERT_SECOND_CHECK_REQUIRED")
+      if (checker == actorId) throw IllegalArgumentException("HIGH_ALERT_SECOND_CHECK_REQUIRED")
+    }
+    val now = Instant.now()
+    mar.status = "administered"
+    mar.administeredAt = now
+    mar.administeredBy = actorId
+    mar.omittedReason = null
+    mar.omissionCode = null
+    mar.secondCheckerId = dto.secondCheckerId
+    mar.barcodeVerified = true
+    mar.prnReason = prnReason
+    mar.updatedBy = actorId
+    marRepository.save(mar)
+    publishMar(mar, "nursing.dose_administered", mapOf("patientId" to mar.patientId, "medicationName" to mar.medicationName))
+    return MarView.from(mar)
+  }
+
+  @Transactional
+  fun omitMar(
+    id: UUID,
+    dto: MarOmitDto,
+    actorId: UUID,
+  ): MarView {
+    val mar = marRepository.findById(id).orElseThrow { IllegalArgumentException("NURSING_MAR_NOT_FOUND") }
+    if (mar.status != "scheduled") throw IllegalArgumentException("MAR_NOT_SCHEDULED")
+    val code = dto.code.trim().uppercase()
+    if (code !in OMISSION_CODES) throw IllegalArgumentException("MAR_OMISSION_CODE_INVALID")
+    val reason = dto.reason?.trim()
+    if (reason.isNullOrEmpty()) throw IllegalArgumentException("MAR_OMISSION_REASON_REQUIRED")
+    mar.status = "omitted"
+    mar.omissionCode = code
+    mar.omittedReason = reason
+    mar.administeredAt = null
+    mar.administeredBy = null
+    mar.updatedBy = actorId
+    marRepository.save(mar)
+    publishMar(mar, "nursing.dose_omitted", mapOf("patientId" to mar.patientId, "code" to code, "reason" to reason))
+    // Omission notifies the prescriber through the task engine (unassigned if the rx has no prescriber).
+    if (dto.notifyDoctor != false) {
+      val rx = mar.prescriptionId?.let { prescriptionRepository.findById(it).orElse(null) }
+      taskService.createTask(
+        TaskCreateDto(
           hospitalId = mar.hospitalId,
-          payload = mapOf("patientId" to mar.patientId, "medicationName" to mar.medicationName),
+          title = "Omitted dose: ${mar.medicationName}",
+          description = "$code - $reason",
+          assigneeId = rx?.prescribedBy,
+          priority = "high",
+          relatedType = "MAR",
+          relatedId = mar.id,
         ),
+        actorId,
       )
     }
     return MarView.from(mar)
+  }
+
+  private fun publishMar(
+    mar: MedicationAdministrationRecord,
+    eventType: String,
+    payload: Map<String, Any?>,
+  ) {
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = eventType,
+        occurredAt = Instant.now(),
+        source = "nursing-service",
+        entityType = "medication_administration_record",
+        entityId = mar.id,
+        hospitalId = mar.hospitalId,
+        payload = payload,
+      ),
+    )
   }
 
   @Transactional
@@ -397,5 +540,10 @@ class NursingService(
     val CAREPLAN_STATUSES = setOf("active", "in_progress", "completed", "cancelled")
     val MAR_STATUSES = setOf("scheduled", "administered", "omitted")
     val SHIFTS = setOf("morning", "evening", "night")
+    val OMISSION_CODES =
+      setOf("PATIENT_REFUSED", "NPO", "VOMITING", "UNAVAILABLE", "HELD_FOR_CLINICAL_REASON", "PATIENT_ABSENT")
+    val HIGH_ALERT_TOKENS = listOf("insulin", "heparin", "warfarin", "morphine", "potassium", "digoxin")
+    val FREQUENCY_HOURS =
+      mapOf("OD" to 24L, "HS" to 24L, "BD" to 12L, "BID" to 12L, "TID" to 8L, "TDS" to 8L, "QID" to 6L, "QDS" to 6L)
   }
 }

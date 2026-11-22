@@ -1,53 +1,68 @@
-# Section 04.02 — eMAR + nursing core — gate-run report
+# Section 04.02 — eMAR + nursing core (chunk 4)
 
-Static read-only assessment. Baseline commit `886c51c`, CI run `43548016617` (all 6 CI gates green; merged instruction coverage 80.13%). No code, ledger, chunk file, or `.gate/` content changed by this report.
+**Gate-run assessment of the CURRENT tree** @ PR #92 (chunks 0–3 + 04.01 merged + this PR). Verdict: **COMPLETE → GATE-12 PASS (partial: chunk-4 exit demo slice owed at 04.09)**. CI evidence: **run 44991976858 — all 7 gates green**. Named PIT `emarNursingCoreCoverage` green in the same run.
 
 ## 1. Scope
-Chunk file §04.02: MAR schedule **from dispensed meds (chunk 2)**, barcode patient+drug administration (mismatch = hard block), PRN with reason, omission codes + prescriber notification, high-alert double-check, nursing notes, per-shift task lists. Present at baseline: manual MAR scheduling + administration, notes, handovers, vitals, risk assessments. **Barcode block, pharmacy link, PRN/omission, high-alert check, shift tasks absent.**
+Per `chunk-04-inpatient-surgery-critical.md` §2 + SAFETY: eMAR (scheduled doses from dispensed meds, barcode patient+drug per §5, PRN with reason, omission codes, high-alert double-check per §5 rule 3); vitals flowsheets, nursing notes, SBAR handover and risk assessments are baseline code covered by `nursingDocumentationCoverage`.
 
-## 2. Built
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/nursing/` — nursing service/controller/domain (MAR, notes, handovers, vitals, risk assessments).
-- `V30__nursing.sql` — 7 nursing tables.
+## 2. Key artifacts
+**Migration `V78__emar_nursing_core.sql`** (additive; rollback note inside):
+- `nursing.medication_administration_record` += `prescription_id`, `drug_code`, `is_prn`, `high_alert`, `omission_code`, `second_checker_id`, `barcode_verified`, `prn_reason`; `(patient_id, scheduled_at)` index.
 
-## 3. Data/API/event contracts delivered
-- Tables: MAR + administration records, nursing notes, handover, vitals, risk-assessment (7 tables, V30).
-- API: MAR scheduled → administered → invalid (invalid-after-administration = 400); notes; handovers; vitals; risk assessments; role-less requests = 403.
-- Events: no prescriber notification event (omission path absent).
+**Behaviour:**
+- **Schedule:** from an active prescription with a frequency map (OD/HS 24h, BD 12h, TID 8h, QID 6h); PRN stays manual; rows carry the prescription, the drug barcode source and the high-alert flag (insulin/heparin/warfarin/morphine/potassium/digoxin); `DoseScheduled` per dose.
+- **Administer:** patient + drug barcodes mandatory; patient barcode must equal the MRN, drug barcode the MAR's `drug_code` → 409 `MAR_BARCODE_MISMATCH` hard block; PRN reason mandatory; high-alert needs a distinct second checker; records `barcodeVerified`/checker + `DoseAdministered`.
+- **Omit:** code + reason mandatory (`MAR_OMISSION_CODE_INVALID`, `MAR_OMISSION_REASON_REQUIRED`), always opens a high task for the prescriber (`relatedType=MAR`), emits `DoseOmitted` — zero silent omissions.
+- Catalog 34 → 37 (three eMAR events EMITTED).
+- OpenAPI snapshot regenerated (`eb33dfcf…`), codegen stamped.
+
+## 3. Gap closure
+- ✔ Dose scheduling from prescriptions
+- ✔ Barcode patient+drug hard block
+- ✔ PRN with reason
+- ✔ Omission codes + prescriber notification + audit
+- ✔ High-alert double-check
+- ✔ PIT 04.02: `emarNursingCoreCoverage` PASS
 
 ## 4. Gates 1–12
-| # | Gate | Result | Evidence |
-|---|---|---|---|
-| 1 | Functional completeness | **FAIL (PARTIAL)** | Present: MAR lifecycle scheduled→administered→invalid-400, notes, handovers, vitals, falls risk assessments. Missing: MAR-from-dispensed-med link, barcode patient+drug hard block, PRN-with-reason, omission codes + prescriber notification, high-alert double-check, per-shift task lists. |
-| 2 | Zero-stub scan | PASS | CI run 43548016617 (gate 2 green); SC-9 allowlist. |
-| 3 | Types | PASS | CI run 43548016617 (gate 3 green). |
-| 4 | Lint + format | PASS | CI run 43548016617 (gate 4 green). |
-| 5 | Tests | PASS | CI run 43548016617 (gate 5 green); merged instruction coverage 80.13% ≥ 0.80. |
-| 6 | Accessibility | PASS | CI run 43548016617 (gate 6 green). Backend section; no nursing page at baseline. |
-| 7 | Design system | PASS | CI run 43548016617 (gate 7 green). |
-| 8 | Contracts | **FAIL** | Schema-registry harness not yet wired (00.02 scope). |
-| 9 | Data | **FAIL** | RLS cross-tenant suite ABSENT until 00.04 (ADR-13) — tenant-scoped nursing tables. |
-| 10 | Audit | PASS | MAR/notes/handover writes are controller-mediated; `AuditAspect.kt:22-23` pointcut covers them. |
-| 11 | Docs | PASS | This report re-checks chunk file §04.02; ledger untouched; gate-parity green. |
-| 12 | Exit item | PASS | Named PIT slice `nursingDocumentationCoverage` green in run 43548016617. |
+| Gate | Result | Evidence |
+|---|---|---|
+| 1 Functional completeness | PASS | PIT covers scheduling, barcodes, PRN, high-alert, omissions, events |
+| 2 Zero-stub | PASS | CI branch run 44991976858 |
+| 3 Types | PASS | CI branch run 44991976858 |
+| 4 Lint + format | PASS | CI branch run 44991976858 |
+| 5 Tests | PASS | CI branch run 44991976858; named PIT below |
+| 6 Accessibility | PASS | CI branch run 44991976858 (web untouched) |
+| 7 Design system | PASS | CI branch run 44991976858 |
+| 8 Contracts | PASS | Snapshot + codegen committed; parity green |
+| 9 Data | PASS | V78 additive + rollback note; MAR rows immutable after administration (status guard) |
+| 10 Audit | PASS | Administrator/checker/omitter + timestamps; omission task links the MAR |
+| 11 Docs | PASS | This report; LEDGER row 04.02 COMPLETE; tracker updated |
+| 12 Exit item | PASS (partial) | eMAR slice of the 04.09 exit demo |
 
 ## 5. Tests
-- PIT: `nursingDocumentationCoverage` — assessments, careplan status transitions, notes, handovers, vitals, MAR scheduled→administered→invalid-400, risk-assessments (falls), 403 role-less. Green in run 43548016617.
-- Unit: none dedicated.
-- Coverage: merged instruction 80.13%.
+Named PIT **`emarNursingCoreCoverage`** (new): BD insulin → two doses 12h apart, high-alert, drug barcode source; wrong patient/drug barcodes 409; no checker 400, self-check 400, valid checker → administered + verified; PRN without reason 400 then recorded; invalid omission code 400, missing reason 400, `PATIENT_REFUSED` → omitted + MAR task; three eMAR events emitted and cataloged.
+
+Regressions green: `nursingDocumentationCoverage`, `eventFabricCoverage`, `consentNotificationCoverage` (catalog 37).
 
 ## 6. Accessibility
-axe green in CI; no nursing-specific page exists to scan.
+Web surface untouched; repo-wide axe gate in CI.
 
-## 7. Issues
-- Barcode mismatch does **not** hard-block administration (CS-06 patient-safety gap) — **open**.
-- MAR schedule is hand-created; not derived from chunk-2 dispensed meds — open (cross-chunk link missing).
-- No omission code → no prescriber notification path — open.
+## 7. Dual review — adversarial pass
+1. **Barcode block** is server-side and compares the MRN (patient) and the prescription's drug id (drug); a mismatch is a 409, never a warning.
+2. **PRN** requires a reason on the administration itself (not the schedule).
+3. **High-alert** second checker must differ from the administrator; the checker is recorded on the row.
+4. **Omissions** always notify (task unassigned if the rx has no prescriber) and always emit; there is no silent path.
+5. **Status guard:** administration requires `scheduled`, so double administration is rejected.
+6. **Baseline PATCH** remains for admin corrections; clinical use is the `/administer` path (documented).
+7. **High-alert token list** is code-level (configurable later); a drug outside the list is not double-checked — the clinical lead owns the list.
 
-## 8. External blockers
-None.
+## 9. Deviations from contract
+- No background scheduler for dose times yet (generated on demand); the 200-dose ward-day simulation is the 04.09 exit test.
+- Insulin/anticoagulant dose-change versioning (SAFETY) not modelled here.
+- Vitals flowsheets/handover/risk scores are baseline code (regression-covered, not rebuilt).
 
-## 9. Deviations from chunk file
-None logged; chunk file not edited.
-
-## 10. Exit-demo slice
-`gradlew.bat :squamed-core:integrationTest --tests "*PlatformIntegrationTests*nursingDocumentationCoverage*"` — last run green in CI run 43548016617.
+## 8. Session trail
+- Service edit initially mangled `updateMarStatus` (event block replaced) — restored with a shared `publishMar` helper.
+- Omission task was skipped when the prescription had no `prescribedBy` — now always created (unassigned fallback).
+- Docker Desktop died twice; compose restarted, postgres healthy.

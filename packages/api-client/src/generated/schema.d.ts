@@ -1620,6 +1620,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/nursing/mar/{id}/omit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["omitMar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nursing/mar/{id}/administer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["administerMar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nursing/mar/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["scheduleMar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nursing/handovers": {
         parameters: {
             query?: never;
@@ -8637,6 +8685,47 @@ export interface components {
             administeredBy?: string;
             omittedReason?: string;
             status: string;
+            /** Format: uuid */
+            prescriptionId?: string;
+            drugCode?: string;
+            isPrn: boolean;
+            highAlert: boolean;
+            omissionCode?: string;
+            /** Format: uuid */
+            secondCheckerId?: string;
+            barcodeVerified: boolean;
+            prnReason?: string;
+        };
+        MarOmitDto: {
+            code: string;
+            reason?: string;
+            notifyDoctor?: boolean;
+        };
+        MarAdministerDto: {
+            patientBarcode?: string;
+            drugBarcode?: string;
+            /** Format: uuid */
+            secondCheckerId?: string;
+            prnReason?: string;
+        };
+        MarScheduleDto: {
+            /** Format: uuid */
+            prescriptionId: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
+            admissionId?: string;
+            /** Format: date-time */
+            startAt?: string;
+            /** Format: int32 */
+            doses?: number;
+        };
+        ApiResponseListMarView: {
+            data?: components["schemas"]["MarView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
         };
         NursingHandoverCreateDto: {
             /** Format: uuid */
@@ -12302,13 +12391,6 @@ export interface components {
         };
         ApiResponseListNursingNoteView: {
             data?: components["schemas"]["NursingNoteView"][];
-            success: boolean;
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        ApiResponseListMarView: {
-            data?: components["schemas"]["MarView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -16892,6 +16974,82 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseMarView"];
+                };
+            };
+        };
+    };
+    omitMar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarOmitDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMarView"];
+                };
+            };
+        };
+    };
+    administerMar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarAdministerDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMarView"];
+                };
+            };
+        };
+    };
+    scheduleMar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarScheduleDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListMarView"];
                 };
             };
         };
@@ -25367,4 +25525,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 45dd4cc89cff65e1b26339eed6e9e086aaf468dce697ae328e046548bbe18921
+// openapi snapshot sha256: eb33dfcf174aac08075f5b59fa1c5625f4a6438b7b1acdffaaf3895bf9be4286

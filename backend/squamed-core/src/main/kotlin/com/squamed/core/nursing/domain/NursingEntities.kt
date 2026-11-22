@@ -90,6 +90,15 @@ class MedicationAdministrationRecord(
   @Column(name = "administered_by") var administeredBy: UUID? = null,
   @Column(name = "omitted_reason") var omittedReason: String? = null,
   @Column(name = "status", nullable = false, length = 20) var status: String = "scheduled",
+  // 04.02 eMAR: prescription link, barcode checks, PRN, high-alert double-check, omission codes.
+  @Column(name = "prescription_id") var prescriptionId: UUID? = null,
+  @Column(name = "drug_code", length = 100) var drugCode: String? = null,
+  @Column(name = "is_prn", nullable = false) var isPrn: Boolean = false,
+  @Column(name = "high_alert", nullable = false) var highAlert: Boolean = false,
+  @Column(name = "omission_code", length = 40) var omissionCode: String? = null,
+  @Column(name = "second_checker_id") var secondCheckerId: UUID? = null,
+  @Column(name = "barcode_verified", nullable = false) var barcodeVerified: Boolean = false,
+  @Column(name = "prn_reason", length = 400) var prnReason: String? = null,
 ) : BaseEntity()
 
 @Entity

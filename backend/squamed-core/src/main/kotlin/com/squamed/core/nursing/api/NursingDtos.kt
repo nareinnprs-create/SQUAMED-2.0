@@ -246,6 +246,14 @@ data class MarView(
   val administeredBy: UUID?,
   val omittedReason: String?,
   val status: String,
+  val prescriptionId: UUID?,
+  val drugCode: String?,
+  val isPrn: Boolean,
+  val highAlert: Boolean,
+  val omissionCode: String?,
+  val secondCheckerId: UUID?,
+  val barcodeVerified: Boolean,
+  val prnReason: String?,
 ) {
   companion object {
     fun from(entity: MedicationAdministrationRecord) =
@@ -262,6 +270,14 @@ data class MarView(
         administeredBy = entity.administeredBy,
         omittedReason = entity.omittedReason,
         status = entity.status,
+        prescriptionId = entity.prescriptionId,
+        drugCode = entity.drugCode,
+        isPrn = entity.isPrn,
+        highAlert = entity.highAlert,
+        omissionCode = entity.omissionCode,
+        secondCheckerId = entity.secondCheckerId,
+        barcodeVerified = entity.barcodeVerified,
+        prnReason = entity.prnReason,
       )
   }
 }
@@ -292,3 +308,25 @@ data class RiskAssessmentView(
       )
   }
 }
+
+// 04.02 eMAR surfaces.
+data class MarScheduleDto(
+  val prescriptionId: UUID,
+  val hospitalId: UUID? = null,
+  val admissionId: UUID? = null,
+  val startAt: Instant? = null,
+  val doses: Int? = null,
+)
+
+data class MarAdministerDto(
+  val patientBarcode: String? = null,
+  val drugBarcode: String? = null,
+  val secondCheckerId: UUID? = null,
+  val prnReason: String? = null,
+)
+
+data class MarOmitDto(
+  val code: String,
+  val reason: String? = null,
+  val notifyDoctor: Boolean? = null,
+)

@@ -86,6 +86,9 @@ object EventCatalog {
       Entry("PatientDischarged", "admission.discharged", Status.EMITTED, "Admission discharged after the checklist (04.01)."),
       Entry("DischargeSummarySigned", "admission.summary_signed", Status.EMITTED, "Coded discharge summary signed (04.01)."),
       Entry("HousekeepingTaskCreated", "housekeeping.task_created", Status.EMITTED, "Bed released for terminal cleaning (04.01)."),
+      Entry("DoseScheduled", "nursing.dose_scheduled", Status.EMITTED, "eMAR dose scheduled from an active prescription (04.02)."),
+      Entry("DoseAdministered", "nursing.dose_administered", Status.EMITTED, "eMAR dose administered after barcode verification (04.02)."),
+      Entry("DoseOmitted", "nursing.dose_omitted", Status.EMITTED, "eMAR dose omitted with a code + reason, clinician notified (04.02)."),
     )
 
   fun all(): List<Entry> = entries

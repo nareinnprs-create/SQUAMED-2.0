@@ -2180,6 +2180,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrity/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["scan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrity/findings/{id}/triage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["triage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/icu/vitals": {
         parameters: {
             query?: never;
@@ -2388,6 +2420,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/him/queries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listQueries"];
+        put?: never;
+        post: operations["raiseQuery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/him/queries/{id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["answerQuery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/him/encounters/{id}/coding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["assignCoding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/encounters": {
         parameters: {
             query?: never;
@@ -2589,7 +2669,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["triage"];
+        post: operations["triage_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4900,6 +4980,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrity/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listFindings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identity/roles": {
         parameters: {
             query?: never;
@@ -4988,6 +5084,54 @@ export interface paths {
             cookie?: never;
         };
         get: operations["health_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/him/coding-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["codingQueue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/him/coding-audit-sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["auditSample"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/him/coding-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAssignments"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8852,6 +8996,55 @@ export interface components {
             username?: string;
             password?: string;
         };
+        ApiResponseIntegrityScanResultView: {
+            data?: components["schemas"]["IntegrityScanResultView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        IntegrityScanResultView: {
+            /** Format: int32 */
+            scannedCharges: number;
+            /** Format: int32 */
+            scannedEncounters: number;
+            /** Format: int32 */
+            newFindings: number;
+            byRule: {
+                [key: string]: number;
+            };
+        };
+        TriageDto: {
+            status: string;
+            resolution?: string;
+        };
+        ApiResponseIntegrityFindingView: {
+            data?: components["schemas"]["IntegrityFindingView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        IntegrityFindingView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            ruleCode: string;
+            severity: string;
+            subjectType: string;
+            /** Format: uuid */
+            subjectId?: string;
+            detail?: string;
+            status: string;
+            /** Format: date-time */
+            detectedAt: string;
+            /** Format: uuid */
+            resolvedBy?: string;
+            /** Format: date-time */
+            resolvedAt?: string;
+            resolution?: string;
+        };
         IcuVitalsCreateDto: {
             /** Format: uuid */
             hospitalId?: string;
@@ -9183,6 +9376,67 @@ export interface components {
         };
         Hl7ReceiveRequest: {
             raw: string;
+        };
+        CoderQueryRequestDto: {
+            /** Format: uuid */
+            encounterId: string;
+            question: string;
+        };
+        ApiResponseCoderQueryView: {
+            data?: components["schemas"]["CoderQueryView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CoderQueryView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            encounterId: string;
+            question: string;
+            status: string;
+            /** Format: uuid */
+            taskId?: string;
+            /** Format: uuid */
+            raisedBy?: string;
+            /** Format: date-time */
+            raisedAt: string;
+            answer?: string;
+            /** Format: uuid */
+            answeredBy?: string;
+            /** Format: date-time */
+            answeredAt?: string;
+        };
+        CoderAnswerDto: {
+            answer: string;
+        };
+        CodingAssignRequestDto: {
+            icdCodes: string[];
+            snomedCodes: string[];
+        };
+        ApiResponseCodingAssignmentView: {
+            data?: components["schemas"]["CodingAssignmentView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CodingAssignmentView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            encounterId: string;
+            icdCodes: string[];
+            snomedCodes: string[];
+            /** Format: uuid */
+            coderId?: string;
+            /** Format: date-time */
+            codedAt: string;
         };
         StartEncounterDto: {
             /** Format: uuid */
@@ -11913,6 +12167,13 @@ export interface components {
             /** Format: date-time */
             occurredAt?: string;
         };
+        ApiResponseListIntegrityFindingView: {
+            data?: components["schemas"]["IntegrityFindingView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListRoleView: {
             data?: components["schemas"]["RoleView"][];
             success: boolean;
@@ -12084,6 +12345,40 @@ export interface components {
         };
         ApiResponseListBedDto: {
             data?: components["schemas"]["BedDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListCoderQueryView: {
+            data?: components["schemas"]["CoderQueryView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListCodingQueueRowView: {
+            data?: components["schemas"]["CodingQueueRowView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CodingQueueRowView: {
+            /** Format: uuid */
+            encounterId: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            doctorId?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: int32 */
+            diagnosisCount: number;
+            assigned: boolean;
+        };
+        ApiResponseListCodingAssignmentView: {
+            data?: components["schemas"]["CodingAssignmentView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -17479,6 +17774,54 @@ export interface operations {
             };
         };
     };
+    scan: {
+        parameters: {
+            query?: {
+                unbilledHours?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseIntegrityScanResultView"];
+                };
+            };
+        };
+    };
+    triage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TriageDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseIntegrityFindingView"];
+                };
+            };
+        };
+    };
     listVitals_1: {
         parameters: {
             query?: {
@@ -18074,6 +18417,104 @@ export interface operations {
             };
         };
     };
+    listQueries: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCoderQueryView"];
+                };
+            };
+        };
+    };
+    raiseQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoderQueryRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCoderQueryView"];
+                };
+            };
+        };
+    };
+    answerQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoderAnswerDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCoderQueryView"];
+                };
+            };
+        };
+    };
+    assignCoding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodingAssignRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCodingAssignmentView"];
+                };
+            };
+        };
+    };
     startEncounter: {
         parameters: {
             query?: never;
@@ -18537,7 +18978,7 @@ export interface operations {
             };
         };
     };
-    triage: {
+    triage_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -22737,6 +23178,28 @@ export interface operations {
             };
         };
     };
+    listFindings: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListIntegrityFindingView"];
+                };
+            };
+        };
+    };
     listRoles: {
         parameters: {
             query?: never;
@@ -22864,6 +23327,68 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    codingQueue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCodingQueueRowView"];
+                };
+            };
+        };
+    };
+    auditSample: {
+        parameters: {
+            query?: {
+                percent?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCodingAssignmentView"];
+                };
+            };
+        };
+    };
+    listAssignments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCodingAssignmentView"];
                 };
             };
         };
@@ -24083,4 +24608,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 2b2a4a59fbc1295f220636f688939be78c2d8220af6c784872bc1f2bdab98462
+// openapi snapshot sha256: d3df19b64ec20419275d2c6234b6fe999764856a6c2b10779380398ef1ad424b

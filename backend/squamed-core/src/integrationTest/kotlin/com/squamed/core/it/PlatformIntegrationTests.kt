@@ -7657,6 +7657,191 @@ class PlatformIntegrationTests {
         )
       }
     }
+
+    @Test
+    fun himCodingAndIntegrityCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+
+      fun scopedUser(
+        role: String,
+        tag: String,
+      ): String {
+        val email = "$tag.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "Him$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      }
+      val coder = scopedUser("MEDICAL_CODER", "coder")
+      val doc = scopedUser("DOCTOR", "himdoc")
+      val sup = scopedUser("BILLING_SUPERVISOR", "himsup")
+
+      fun newPatient(tag: String): Pair<String, String> {
+        val p =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/patients",
+              json(
+                "firstName" to "Him$tag",
+                "lastName" to "Coverage$s",
+                "gender" to "female",
+                "dateOfBirth" to "1982-02-02",
+                "phone" to "71$tag$s".take(11),
+                "qid" to "HM$tag$s".take(11),
+                "nationality" to "QA",
+                "city" to "Doha",
+              ),
+              token,
+            ),
+          )["patient"]
+        return p["id"].asText() to p["mrn"].asText()
+      }
+
+      fun completedEncounter(
+        patientId: String,
+        mrn: String,
+      ): String {
+        val enc =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/encounters",
+              json("patientId" to patientId, "chiefComplaint" to "coding leg", "reason" to "03.05 coverage"),
+              doc,
+            ),
+          )["id"].asText()
+        assert2xx(
+          api(HttpMethod.POST, "/api/v1/encounters/$enc/diagnoses", json("code" to "R05", "name" to "Cough", "system" to "ICD-10", "patientMrn" to mrn), doc),
+          "diagnosis for coding",
+        )
+        assert2xx(api(HttpMethod.PATCH, "/api/v1/encounters/$enc/complete", json(), doc), "complete encounter")
+        return enc
+      }
+
+      val (p1, mrn1) = newPatient("1")
+      val enc1 = completedEncounter(p1, mrn1)
+      val (p2, mrn2) = newPatient("2")
+      val enc2 = completedEncounter(p2, mrn2)
+
+      // Coding worklist shows both completed encounters as unassigned.
+      val queue = `data`(api(HttpMethod.GET, "/api/v1/him/coding-queue", token = coder))
+      val row1 = queue.firstOrNull { it["encounterId"].asText() == enc1 }
+      assertNotNull(row1, "completed encounter on the coding queue: $queue")
+      assertFalse(row1!!["assigned"].asBoolean(), "unassigned before coding")
+      assertEquals(1, row1["diagnosisCount"].asInt(), "diagnosis count carried")
+
+      // Assign ICD-10 codes; a second assignment is rejected.
+      val assignment =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/him/encounters/$enc1/coding",
+            json("icdCodes" to listOf("R05", "J18.9"), "snomedCodes" to listOf("267036007")),
+            coder,
+          ),
+        )
+      assertEquals(listOf("R05", "J18.9"), assignment["icdCodes"].map { it.asText() }, "ICD codes recorded")
+      assertEquals(listOf("267036007"), assignment["snomedCodes"].map { it.asText() }, "SNOMED code recorded")
+      assertFalse(assignment["coderId"].isNull, "coder recorded")
+      val reCode = api(HttpMethod.POST, "/api/v1/him/encounters/$enc1/coding", json("icdCodes" to listOf("A00")), coder)
+      assert4xx(reCode, "second assignment rejected")
+      assertTrue(reCode.body.contains("CODING_ALREADY_ASSIGNED"), "re-code guard: ${reCode.body.take(200)}")
+      val queueAfter = `data`(api(HttpMethod.GET, "/api/v1/him/coding-queue", token = coder))
+      assertTrue(queueAfter.first { it["encounterId"].asText() == enc1 }["assigned"].asBoolean(), "queue reflects the assignment")
+      assert2xx(api(HttpMethod.GET, "/api/v1/him/coding-assignments", token = coder), "assignments listed")
+      val sample = `data`(api(HttpMethod.GET, "/api/v1/him/coding-audit-sample?percent=100", token = coder))
+      assertTrue(sample.any { it["encounterId"].asText() == enc1 }, "audit sample covers the assignment")
+
+      // Coder query opens a task for the clinician; the answer closes it.
+      val query =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/him/queries", json("encounterId" to enc1, "question" to "Was the chest X-ray abnormal?"), coder),
+        )
+      assertEquals("OPEN", query["status"].asText(), "query opens")
+      assertFalse(query["taskId"].isNull, "query linked to a task")
+      val task = `data`(api(HttpMethod.GET, "/api/v1/tasks/${query["taskId"].asText()}", token = token))
+      assertEquals("ENCOUNTER", task["relatedType"].asText(), "task linked to the encounter")
+      assertEquals(enc1, task["relatedId"].asText(), "task subject id")
+      val answered =
+        `data`(api(HttpMethod.POST, "/api/v1/him/queries/${query["id"].asText()}/answer", json("answer" to "Yes, right lower lobe consolidation"), doc))
+      assertEquals("ANSWERED", answered["status"].asText(), "query answered")
+      assertFalse(answered["answeredBy"].isNull, "answerer recorded")
+      assert4xx(api(HttpMethod.POST, "/api/v1/him/queries/${query["id"].asText()}/answer", json("answer" to "again"), doc), "double answer rejected")
+
+      // Integrity scan: unbilled (threshold 0), duplicate pair, uncoded encounter; dedupe on re-scan.
+      fun postCharge(
+        code: String,
+        price: Double,
+      ) = api(
+        HttpMethod.POST,
+        "/api/v1/billing/charges",
+        json(
+          "patientId" to p1,
+          "hospitalId" to hospitalId,
+          "chargeCode" to code,
+          "chargeName" to "Integrity $code",
+          "quantity" to 1,
+          "unitPriceQar" to price,
+          "reason" to "integrity fixture",
+        ),
+        sup,
+      )
+      assert2xx(postCharge("INT-$s", 50.0), "first charge")
+      assert2xx(postCharge("INT-$s", 50.0), "duplicate charge")
+      assert2xx(postCharge("INT2-$s", 30.0), "distinct charge")
+      val scan =
+        `data`(api(HttpMethod.POST, "/api/v1/integrity/scan?unbilledHours=0", json(), sup))
+      assertTrue(scan["newFindings"].asInt() >= 3, "scan finds the seeded leakage: $scan")
+      assertTrue(scan["byRule"]["UNBILLED_CHARGE"].asInt() >= 3, "unbilled charges flagged: $scan")
+      assertTrue(scan["byRule"]["DUPLICATE_CHARGE"].asInt() >= 1, "duplicate pair flagged: $scan")
+      assertTrue(scan["byRule"]["UNCODED_ENCOUNTER"].asInt() >= 1, "uncoded encounter flagged: $scan")
+      val rescan = `data`(api(HttpMethod.POST, "/api/v1/integrity/scan?unbilledHours=0", json(), sup))
+      assertEquals(0, rescan["newFindings"].asInt(), "re-scan creates no duplicates: $rescan")
+
+      val findings = `data`(api(HttpMethod.GET, "/api/v1/integrity/findings?status=OPEN", token = sup))
+      assertTrue(findings.size() >= 3, "open findings listed")
+      val dupFinding = findings.first { it["ruleCode"].asText() == "DUPLICATE_CHARGE" }
+      assertFalse(dupFinding["subjectId"].isNull, "finding carries its subject")
+      val blankTriage = api(HttpMethod.POST, "/api/v1/integrity/findings/${dupFinding["id"].asText()}/triage", json("status" to "RESOLVED"), sup)
+      assert4xx(blankTriage, "triage without a resolution note")
+      assertTrue(blankTriage.body.contains("TRIAGE_RESOLUTION_REQUIRED"), "triage note guard: ${blankTriage.body.take(200)}")
+      val triaged =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/integrity/findings/${dupFinding["id"].asText()}/triage",
+            json("status" to "RESOLVED", "resolution" to "second entry reversed at the counter"),
+            sup,
+          ),
+        )
+      assertEquals("RESOLVED", triaged["status"].asText(), "finding resolved")
+      assertEquals("second entry reversed at the counter", triaged["resolution"].asText(), "resolution recorded")
+      assertFalse(triaged["resolvedBy"].isNull, "resolver recorded")
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/integrity/findings/${dupFinding["id"].asText()}/triage", json("status" to "IGNORED", "resolution" to "x"), sup),
+        "double triage rejected",
+      )
+      val allTasks = `data`(api(HttpMethod.GET, "/api/v1/tasks", token = token))
+      assertTrue(
+        allTasks.any { it["relatedType"].asText() == "INTEGRITY" && it["relatedId"].asText() == dupFinding["id"].asText() },
+        "integrity finding opened a task",
+      )
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */

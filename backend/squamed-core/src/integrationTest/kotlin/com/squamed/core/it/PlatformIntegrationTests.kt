@@ -7436,6 +7436,227 @@ class PlatformIntegrationTests {
       assertEquals(500.0, bigSupervisor["invoice"]["discountQar"].asDouble(), 1e-9, "supervisor approves 50%")
       assertEquals(500.0, bigSupervisor["invoice"]["totalQar"].asDouble(), 1e-9, "total after discount")
     }
+
+    @Test
+    fun taxEngineCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+
+      fun scopedUser(
+        role: String,
+        tag: String,
+      ): String {
+        val email = "$tag.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "Tax$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      }
+      val staff = scopedUser("BILLING_STAFF", "tax")
+      val supervisor = scopedUser("BILLING_SUPERVISOR", "taxsup")
+
+      val profile =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/tax-profile",
+            json("hospitalId" to hospitalId, "gstin" to "27AABCS1429B1Z1", "stateCode" to "27", "eInvoiceThresholdQar" to 1000.0),
+            staff,
+          ),
+        )
+      assertEquals("27AABCS1429B1Z1", profile["gstin"].asText(), "GSTIN stored")
+      assertEquals(
+        "27AABCS1429B1Z1",
+        `data`(api(HttpMethod.GET, "/api/v1/billing/tax-profile", token = staff))["gstin"].asText(),
+        "tax profile readable",
+      )
+
+      fun newPatient(tag: String): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Tax$tag",
+              "lastName" to "Coverage$s",
+              "gender" to "male",
+              "dateOfBirth" to "1980-01-01",
+              "phone" to "72$tag$s".take(11),
+              "qid" to "TX$tag$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+            ),
+            token,
+          ),
+        )["patient"]["id"].asText()
+
+      fun charge(
+        patientId: String,
+        code: String,
+        price: Double,
+        quantity: Int = 1,
+        category: String? = null,
+        taxCategory: String? = null,
+        hsnCode: String? = null,
+      ) = `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/charges",
+          json(
+            "patientId" to patientId,
+            "hospitalId" to hospitalId,
+            "chargeCode" to code,
+            "chargeName" to "Tax $code",
+            "category" to category,
+            "quantity" to quantity,
+            "unitPriceQar" to price,
+            "reason" to "tax engine coverage",
+            "taxCategory" to taxCategory,
+            "hsnCode" to hsnCode,
+          ),
+          staff,
+        ),
+      )
+
+      fun invoice(patientId: String) = `data`(api(HttpMethod.POST, "/api/v1/billing/invoices", json("patientId" to patientId), staff))
+
+      // 1. Exempt healthcare service: 0% line, HSN/SAC 9993.
+      val p1 = newPatient("1")
+      assertEquals("EXEMPT_SERVICE", charge(p1, "TAX1-$s", 200.0, category = "consultation")["taxCategory"].asText(), "consultation defaults exempt")
+      val inv1 = invoice(p1)
+      assertEquals(0.0, inv1["invoice"]["taxQar"].asDouble(), 1e-9, "exempt service has no tax")
+      assertEquals(200.0, inv1["invoice"]["totalQar"].asDouble(), 1e-9, "exempt total")
+      assertEquals(1, inv1["taxLines"].size(), "one tax line")
+      assertEquals(0.0, inv1["taxLines"][0]["ratePct"].asDouble(), 1e-9, "0% rate")
+      assertTrue(inv1["taxLines"][0]["isExempt"].asBoolean(), "line flagged exempt")
+      assertEquals("9993", inv1["taxLines"][0]["hsnCode"].asText(), "SAC 9993 default")
+      assertFalse(inv1["invoice"]["eInvoiceRequired"].asBoolean(), "below threshold")
+
+      // 2. Pharmacy goods: 5% GST, HSN 3004.
+      val p2 = newPatient("2")
+      assertEquals("GOODS_GST_5", charge(p2, "TAX2-$s", 100.0, category = "pharmacy")["taxCategory"].asText(), "pharmacy defaults 5%")
+      val inv2 = invoice(p2)
+      assertEquals(5.0, inv2["invoice"]["taxQar"].asDouble(), 1e-9, "5% tax")
+      assertEquals(105.0, inv2["invoice"]["totalQar"].asDouble(), 1e-9, "total with GST")
+      assertEquals(5.0, inv2["taxLines"][0]["ratePct"].asDouble(), 1e-9, "5% rate line")
+      assertEquals("3004", inv2["taxLines"][0]["hsnCode"].asText(), "HSN 3004")
+
+      // 3. Device goods: explicit 12% + HSN 9018.
+      val p3 = newPatient("3")
+      charge(p3, "TAX3-$s", 100.0, category = "device", taxCategory = "GOODS_GST_12", hsnCode = "9018")
+      val inv3 = invoice(p3)
+      assertEquals(12.0, inv3["invoice"]["taxQar"].asDouble(), 1e-9, "12% tax")
+      assertEquals("9018", inv3["taxLines"][0]["hsnCode"].asText(), "explicit HSN")
+
+      // 4. Mixed bill: exempt + 5% + 12% split into three tax lines.
+      val p4 = newPatient("4")
+      charge(p4, "TAX4A-$s", 200.0, category = "consultation")
+      charge(p4, "TAX4B-$s", 100.0, category = "pharmacy")
+      charge(p4, "TAX4C-$s", 50.0, category = "device", taxCategory = "GOODS_GST_12")
+      val inv4 = invoice(p4)
+      assertEquals(350.0, inv4["invoice"]["subtotalQar"].asDouble(), 1e-9, "mixed subtotal")
+      assertEquals(11.0, inv4["invoice"]["taxQar"].asDouble(), 1e-9, "mixed tax 5+6")
+      assertEquals(361.0, inv4["invoice"]["totalQar"].asDouble(), 1e-9, "mixed total")
+      assertEquals(3, inv4["taxLines"].size(), "three tax lines")
+
+      // 5. E-invoice threshold.
+      val p5 = newPatient("5")
+      charge(p5, "TAX5-$s", 1500.0, category = "consultation")
+      val inv5 = invoice(p5)
+      assertTrue(inv5["invoice"]["eInvoiceRequired"].asBoolean(), "above threshold flags e-invoicing")
+
+      // 6. Credit notes: supervisor-gated, reason mandatory, capped at the invoice total.
+      assertEquals(
+        403,
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/invoices/${inv2["invoice"]["id"].asText()}/credit-notes",
+          json("amountQar" to 10.0, "reason" to "billing error"),
+          staff,
+        ).status,
+        "staff cannot issue credit notes",
+      )
+      val blankNote =
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/invoices/${inv2["invoice"]["id"].asText()}/credit-notes",
+          json("amountQar" to 10.0, "reason" to "  "),
+          supervisor,
+        )
+      assert4xx(blankNote, "credit note without a reason")
+      assertTrue(blankNote.body.contains("CREDIT_NOTE_REASON_REQUIRED"), "credit note reason guard: ${blankNote.body.take(200)}")
+      val tooBig =
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/invoices/${inv2["invoice"]["id"].asText()}/credit-notes",
+          json("amountQar" to 500.0, "reason" to "too much"),
+          supervisor,
+        )
+      assert4xx(tooBig, "credit note above the invoice total")
+      assertTrue(tooBig.body.contains("CREDIT_NOTE_EXCEEDS_INVOICE"), "credit note cap guard: ${tooBig.body.take(200)}")
+      val note =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/invoices/${inv2["invoice"]["id"].asText()}/credit-notes",
+            json("amountQar" to 50.0, "reason" to "dispensed item returned"),
+            supervisor,
+          ),
+        )
+      assertTrue(note["noteNumber"].asText().startsWith("CN-"), "credit note number")
+      assertFalse(note["issuedBy"].isNull, "issuer recorded")
+      val inv2After = `data`(api(HttpMethod.GET, "/api/v1/billing/invoices/${inv2["invoice"]["id"].asText()}", token = staff))
+      assertEquals(55.0, inv2After["invoice"]["totalQar"].asDouble(), 1e-9, "credit note reduces the invoice total")
+      assertEquals(1, inv2After["creditNotes"].size(), "credit note listed on the invoice")
+
+      // 7. Tax correctness table: 40 cases across the three categories with rounding.
+      val cases =
+        (0 until 40).map { i ->
+          val category =
+            when (i % 3) {
+              0 -> "EXEMPT_SERVICE"
+              1 -> "GOODS_GST_5"
+              else -> "GOODS_GST_12"
+            }
+          val rate =
+            when (category) {
+              "GOODS_GST_5" -> java.math.BigDecimal("5")
+              "GOODS_GST_12" -> java.math.BigDecimal("12")
+              else -> java.math.BigDecimal.ZERO
+            }
+          val quantity = (i % 4) + 1
+          val unit = java.math.BigDecimal("10").add(java.math.BigDecimal(i).multiply(java.math.BigDecimal("1.37")))
+          val taxable = unit.multiply(java.math.BigDecimal(quantity))
+          val expectedTax = taxable.multiply(rate).divide(java.math.BigDecimal("100"), 2, java.math.RoundingMode.HALF_UP)
+          Triple(category, quantity to unit, expectedTax)
+        }
+      val tablePatient = newPatient("6")
+      cases.forEachIndexed { index, (category, qtyUnit, expectedTax) ->
+        val (quantity, unit) = qtyUnit
+        charge(tablePatient, "TBL$index-$s", unit.toDouble(), quantity, category = "misc", taxCategory = category)
+        val caseInvoice = invoice(tablePatient)
+        assertEquals(expectedTax.toDouble(), caseInvoice["invoice"]["taxQar"].asDouble(), 1e-9, "case $index ($category x$quantity @$unit) tax")
+        assertEquals(
+          unit.multiply(java.math.BigDecimal(quantity)).add(expectedTax).toDouble(),
+          caseInvoice["invoice"]["totalQar"].asDouble(),
+          1e-9,
+          "case $index total",
+        )
+      }
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */

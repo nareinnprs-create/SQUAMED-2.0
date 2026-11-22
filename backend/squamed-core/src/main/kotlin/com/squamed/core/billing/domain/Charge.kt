@@ -53,4 +53,9 @@ class Charge(
   // 03.02: the package version pinned at capture time (never re-resolved at bill time).
   @Column(name = "package_version_id")
   var packageVersionId: UUID? = null,
+  // 03.03: tax classification (exempt service / goods 5% / goods 12%) + HSN/SAC.
+  @Column(name = "tax_category", nullable = false, length = 20)
+  var taxCategory: String = "EXEMPT_SERVICE",
+  @Column(name = "hsn_code", length = 12)
+  var hsnCode: String? = null,
 ) : BaseEntity()

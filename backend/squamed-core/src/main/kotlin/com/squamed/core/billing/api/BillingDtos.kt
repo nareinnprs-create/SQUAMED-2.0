@@ -49,6 +49,9 @@ data class PostChargeDto(
   val reason: String? = null,
   // 03.02: package code pins the active package version at capture time.
   val packageCode: String? = null,
+  // 03.03: explicit tax classification + HSN/SAC (defaults by category when omitted).
+  val taxCategory: String? = null,
+  val hsnCode: String? = null,
 )
 
 data class ChargeView(
@@ -74,6 +77,8 @@ data class ChargeView(
   val entryMode: String,
   val entryReason: String?,
   val packageVersionId: UUID?,
+  val taxCategory: String,
+  val hsnCode: String?,
   val createdAt: Instant?,
 ) {
   companion object {
@@ -100,6 +105,8 @@ data class ChargeView(
         entryMode = entity.entryMode,
         entryReason = entity.entryReason,
         packageVersionId = entity.packageVersionId,
+        taxCategory = entity.taxCategory,
+        hsnCode = entity.hsnCode,
         createdAt = entity.createdAt,
       )
   }
@@ -130,6 +137,9 @@ data class InvoiceView(
   val insuranceClaimStatus: String?,
   val payerClass: String,
   val discountReason: String?,
+  // 03.03: invoice crossed the hospital e-invoicing threshold.
+  @get:com.fasterxml.jackson.annotation.JsonProperty("eInvoiceRequired")
+  val eInvoiceRequired: Boolean,
   val issuedAt: Instant,
   val createdAt: Instant?,
 ) {
@@ -151,6 +161,7 @@ data class InvoiceView(
         insuranceClaimStatus = entity.insuranceClaimStatus,
         payerClass = entity.payerClass,
         discountReason = entity.discountReason,
+        eInvoiceRequired = entity.eInvoiceRequired,
         issuedAt = entity.issuedAt,
         createdAt = entity.createdAt,
       )
@@ -217,16 +228,22 @@ data class InvoiceDetailView(
   val invoice: InvoiceView,
   val lines: List<InvoiceLineView>,
   val payments: List<PaymentView>,
+  val taxLines: List<TaxLineView> = emptyList(),
+  val creditNotes: List<CreditNoteView> = emptyList(),
 ) {
   companion object {
     fun from(
       invoice: Invoice,
       lines: List<InvoiceLine>,
       payments: List<Payment>,
+      taxLines: List<com.squamed.core.billing.domain.TaxLine> = emptyList(),
+      creditNotes: List<com.squamed.core.billing.domain.CreditNote> = emptyList(),
     ) = InvoiceDetailView(
       invoice = InvoiceView.from(invoice),
       lines = lines.map { InvoiceLineView.from(it) },
       payments = payments.map { PaymentView.from(it) },
+      taxLines = taxLines.map { TaxLineView.from(it) },
+      creditNotes = creditNotes.map { CreditNoteView.from(it) },
     )
   }
 }
@@ -375,5 +392,55 @@ data class DepositView(
         entity.appliedInvoiceId,
         entity.appliedAt,
       )
+  }
+}
+
+// 03.03 tax engine surfaces.
+data class TaxProfileDto(
+  val id: UUID? = null,
+  val hospitalId: UUID,
+  val gstin: String? = null,
+  val stateCode: String? = null,
+  val isGstRegistered: Boolean = true,
+  val eInvoiceThresholdQar: java.math.BigDecimal? = null,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.billing.domain.HospitalTaxProfile) =
+      TaxProfileDto(entity.id, entity.hospitalId, entity.gstin, entity.stateCode, entity.isGstRegistered, entity.eInvoiceThresholdQar)
+  }
+}
+
+data class TaxLineView(
+  val hsnCode: String?,
+  val taxCategory: String,
+  val taxableQar: java.math.BigDecimal,
+  val ratePct: java.math.BigDecimal,
+  val taxQar: java.math.BigDecimal,
+  val isExempt: Boolean,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.billing.domain.TaxLine) =
+      TaxLineView(entity.hsnCode, entity.taxCategory, entity.taxableQar, entity.ratePct, entity.taxQar, entity.isExempt)
+  }
+}
+
+data class CreditNoteRequestDto(
+  val amountQar: java.math.BigDecimal,
+  val reason: String,
+)
+
+data class CreditNoteView(
+  val id: UUID?,
+  val invoiceId: UUID,
+  val noteNumber: String,
+  val amountQar: java.math.BigDecimal,
+  val reason: String,
+  val status: String,
+  val issuedBy: UUID?,
+  val issuedAt: Instant,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.billing.domain.CreditNote) =
+      CreditNoteView(entity.id, entity.invoiceId, entity.noteNumber, entity.amountQar, entity.reason, entity.status, entity.issuedBy, entity.issuedAt)
   }
 }

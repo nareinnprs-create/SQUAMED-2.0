@@ -1,6 +1,8 @@
 package com.squamed.core.billing.service
 
 import com.squamed.core.billing.api.ChargeView
+import com.squamed.core.billing.api.CreditNoteRequestDto
+import com.squamed.core.billing.api.CreditNoteView
 import com.squamed.core.billing.api.DepositRequestDto
 import com.squamed.core.billing.api.DepositView
 import com.squamed.core.billing.api.EstimateRequestDto
@@ -15,26 +17,33 @@ import com.squamed.core.billing.api.PaymentView
 import com.squamed.core.billing.api.PostChargeDto
 import com.squamed.core.billing.api.RateCardDto
 import com.squamed.core.billing.api.TariffDto
+import com.squamed.core.billing.api.TaxProfileDto
 import com.squamed.core.billing.domain.BillingPackage
 import com.squamed.core.billing.domain.Charge
+import com.squamed.core.billing.domain.CreditNote
 import com.squamed.core.billing.domain.Deposit
 import com.squamed.core.billing.domain.Estimate
+import com.squamed.core.billing.domain.HospitalTaxProfile
 import com.squamed.core.billing.domain.Invoice
 import com.squamed.core.billing.domain.InvoiceLine
 import com.squamed.core.billing.domain.PackageVersion
 import com.squamed.core.billing.domain.Payment
 import com.squamed.core.billing.domain.RateCard
 import com.squamed.core.billing.domain.TariffItem
+import com.squamed.core.billing.domain.TaxLine
 import com.squamed.core.billing.repository.BillingPackageRepository
 import com.squamed.core.billing.repository.ChargeRepository
+import com.squamed.core.billing.repository.CreditNoteRepository
 import com.squamed.core.billing.repository.DepositRepository
 import com.squamed.core.billing.repository.EstimateRepository
+import com.squamed.core.billing.repository.HospitalTaxProfileRepository
 import com.squamed.core.billing.repository.InvoiceLineRepository
 import com.squamed.core.billing.repository.InvoiceRepository
 import com.squamed.core.billing.repository.PackageVersionRepository
 import com.squamed.core.billing.repository.PaymentRepository
 import com.squamed.core.billing.repository.RateCardRepository
 import com.squamed.core.billing.repository.TariffItemRepository
+import com.squamed.core.billing.repository.TaxLineRepository
 import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.identity.security.SquamedPermissionEvaluator
 import com.squamed.core.identity.security.SquamedPrincipal
@@ -58,10 +67,35 @@ class BillingService(
   private val packageVersionRepository: PackageVersionRepository,
   private val estimateRepository: EstimateRepository,
   private val depositRepository: DepositRepository,
+  private val hospitalTaxProfileRepository: HospitalTaxProfileRepository,
+  private val taxLineRepository: TaxLineRepository,
+  private val creditNoteRepository: CreditNoteRepository,
   private val permissionEvaluator: SquamedPermissionEvaluator,
 ) {
   private val payerClasses = setOf("general", "cghs", "esic", "tpa", "corporate", "pmjay")
   private val discountApprovalThresholdPct = BigDecimal("10")
+
+  // 03.03: healthcare services are exempt; pharmacy goods 5%, devices 12%.
+  private fun defaultTaxCategory(category: String?): String =
+    when (category?.trim()?.uppercase()) {
+      "PHARMACY", "GOODS" -> "GOODS_GST_5"
+      "DEVICE", "DEVICES" -> "GOODS_GST_12"
+      else -> "EXEMPT_SERVICE"
+    }
+
+  private fun defaultHsn(taxCategory: String): String =
+    when (taxCategory) {
+      "GOODS_GST_5" -> "3004"
+      "GOODS_GST_12" -> "9018"
+      else -> "9993"
+    }
+
+  private fun taxRatePct(taxCategory: String): BigDecimal =
+    when (taxCategory) {
+      "GOODS_GST_5" -> BigDecimal("5")
+      "GOODS_GST_12" -> BigDecimal("12")
+      else -> BigDecimal.ZERO
+    }
 
   @Transactional
   fun createTariff(dto: TariffDto): TariffDto {
@@ -142,6 +176,10 @@ class BillingService(
       packageVersionId = version.id
     }
     val quantity = dto.quantity ?: 1
+    val taxCategory = dto.taxCategory?.trim()?.uppercase() ?: defaultTaxCategory(dto.category)
+    if (taxCategory !in setOf("EXEMPT_SERVICE", "GOODS_GST_5", "GOODS_GST_12")) {
+      throw IllegalArgumentException("TAX_CATEGORY_INVALID")
+    }
     val charge =
       chargeRepository.save(
         Charge(
@@ -162,6 +200,8 @@ class BillingService(
           entryMode = "MANUAL",
           entryReason = reason,
           packageVersionId = packageVersionId,
+          taxCategory = taxCategory,
+          hsnCode = dto.hsnCode?.trim() ?: defaultHsn(taxCategory),
         ),
       )
     return ChargeView.from(charge)
@@ -231,7 +271,30 @@ class BillingService(
         throw IllegalArgumentException("DISCOUNT_APPROVAL_REQUIRED")
       }
     }
-    val tax = BigDecimal.ZERO
+    // 03.03: tax per HSN/category group; exempt services contribute a 0% line.
+    val taxGroups =
+      priced.groupBy { (charge, _, _) -> (charge.hsnCode ?: defaultHsn(charge.taxCategory)) to charge.taxCategory }
+    val taxLines =
+      taxGroups.map { (key, rows) ->
+        val taxable =
+          rows.fold(BigDecimal.ZERO) { acc, (charge, unit, _) ->
+            acc.add(unit.multiply(BigDecimal.valueOf(charge.quantity.toLong())))
+          }
+        val rate = taxRatePct(key.second)
+        TaxLine(
+          invoiceId = UUID.randomUUID(),
+          hsnCode = key.first,
+          taxCategory = key.second,
+          taxableQar = taxable,
+          ratePct = rate,
+          taxQar = taxable.multiply(rate).divide(BigDecimal("100"), 2, RoundingMode.HALF_UP),
+          isExempt = rate.compareTo(BigDecimal.ZERO) == 0,
+        )
+      }
+    val tax = taxLines.fold(BigDecimal.ZERO) { acc, line -> acc.add(line.taxQar) }
+    val profile = hid?.let { hospitalTaxProfileRepository.findByHospitalId(it) }
+    val eInvoice =
+      profile?.eInvoiceThresholdQar?.let { subtotal.subtract(discount).add(tax).compareTo(it) >= 0 } ?: false
     val total = subtotal.subtract(discount).add(tax).coerceAtLeast(BigDecimal.ZERO)
     val invoice =
       invoiceRepository.save(
@@ -249,10 +312,15 @@ class BillingService(
           status = "unpaid",
           payerClass = payer,
           discountReason = reason,
+          eInvoiceRequired = eInvoice,
           issuedAt = now,
         ),
       )
     val invoiceId = invoice.id ?: throw IllegalStateException("INVOICE_ID_MISSING")
+    taxLines.forEach {
+      it.invoiceId = invoiceId
+      taxLineRepository.save(it)
+    }
     priced.forEach { (charge, unit, card) ->
       invoiceLineRepository.save(
         InvoiceLine(
@@ -282,6 +350,8 @@ class BillingService(
       invoice = invoice,
       lines = invoiceLineRepository.findByInvoiceId(id),
       payments = paymentRepository.findByInvoiceId(id),
+      taxLines = taxLineRepository.findByInvoiceId(id),
+      creditNotes = creditNoteRepository.findByInvoiceId(id),
     )
   }
 
@@ -552,6 +622,68 @@ class BillingService(
     val year = Year.now().value
     val count = estimateRepository.count()
     return String.format("EST-%d-%05d", year, count + 1)
+  }
+
+  // -- 03.03 tax profile + credit notes. --
+
+  @Transactional
+  fun upsertTaxProfile(
+    dto: TaxProfileDto,
+    hospitalId: UUID,
+  ): TaxProfileDto {
+    val profile = hospitalTaxProfileRepository.findByHospitalId(hospitalId) ?: HospitalTaxProfile(hospitalId = hospitalId)
+    profile.gstin = dto.gstin
+    profile.stateCode = dto.stateCode
+    profile.isGstRegistered = dto.isGstRegistered
+    profile.eInvoiceThresholdQar = dto.eInvoiceThresholdQar
+    return TaxProfileDto.from(hospitalTaxProfileRepository.save(profile))
+  }
+
+  @Transactional(readOnly = true)
+  fun getTaxProfile(hospitalId: UUID): TaxProfileDto? = hospitalTaxProfileRepository.findByHospitalId(hospitalId)?.let { TaxProfileDto.from(it) }
+
+  @Transactional
+  fun issueCreditNote(
+    invoiceId: UUID,
+    dto: CreditNoteRequestDto,
+    principal: SquamedPrincipal,
+    hospitalId: UUID?,
+  ): CreditNoteView {
+    val invoice = findInvoice(invoiceId, hospitalId)
+    if (invoice.status == "cancelled") throw IllegalArgumentException("INVOICE_CANCELLED")
+    if (dto.amountQar.compareTo(BigDecimal.ZERO) <= 0) throw IllegalArgumentException("CREDIT_NOTE_AMOUNT_INVALID")
+    if (dto.amountQar.compareTo(invoice.totalQar) > 0) throw IllegalArgumentException("CREDIT_NOTE_EXCEEDS_INVOICE")
+    val reason = dto.reason.trim()
+    if (reason.isEmpty()) throw IllegalArgumentException("CREDIT_NOTE_REASON_REQUIRED")
+    val note =
+      creditNoteRepository.save(
+        CreditNote(
+          hospitalId = invoice.hospitalId ?: hospitalId ?: throw IllegalArgumentException("HOSPITAL_REQUIRED"),
+          invoiceId = invoiceId,
+          noteNumber = nextCreditNoteNumber(),
+          amountQar = dto.amountQar,
+          reason = reason,
+          issuedBy = principal.userId,
+          issuedAt = Instant.now(),
+        ),
+      )
+    // A credit note reduces the billable total; corrections never edit finalized lines.
+    invoice.totalQar = invoice.totalQar.subtract(dto.amountQar).coerceAtLeast(BigDecimal.ZERO)
+    invoice.amountDueQar = invoice.totalQar.subtract(invoice.amountPaidQar).coerceAtLeast(BigDecimal.ZERO)
+    invoice.status =
+      when {
+        invoice.amountDueQar.compareTo(BigDecimal.ZERO) <= 0 && invoice.amountPaidQar.compareTo(BigDecimal.ZERO) > 0 -> "paid"
+        invoice.amountPaidQar.compareTo(BigDecimal.ZERO) > 0 -> "partial"
+        else -> invoice.status
+      }
+    invoiceRepository.save(invoice)
+    return CreditNoteView.from(note)
+  }
+
+  private fun nextCreditNoteNumber(): String {
+    val year = Year.now().value
+    val count = creditNoteRepository.count()
+    return String.format("CN-%d-%05d", year, count + 1)
   }
 
   private fun nextInvoiceNumber(): String {

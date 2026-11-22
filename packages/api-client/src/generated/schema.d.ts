@@ -2884,6 +2884,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/tax-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getTaxProfile"];
+        put?: never;
+        post: operations["upsertTaxProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/tariffs": {
         parameters: {
             query?: never;
@@ -2974,6 +2990,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["recordPayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/invoices/{id}/credit-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["issueCreditNote"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10089,6 +10121,24 @@ export interface components {
             /** Format: date-time */
             performedAt?: string;
         };
+        TaxProfileDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            gstin?: string;
+            stateCode?: string;
+            isGstRegistered: boolean;
+            eInvoiceThresholdQar?: number;
+            einvoiceThresholdQar?: number;
+        };
+        ApiResponseTaxProfileDto: {
+            data?: components["schemas"]["TaxProfileDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         RateCardDto: {
             /** Format: uuid */
             id?: string;
@@ -10165,10 +10215,26 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        CreditNoteView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            invoiceId: string;
+            noteNumber: string;
+            amountQar: number;
+            reason: string;
+            status: string;
+            /** Format: uuid */
+            issuedBy?: string;
+            /** Format: date-time */
+            issuedAt: string;
+        };
         InvoiceDetailView: {
             invoice: components["schemas"]["InvoiceView"];
             lines: components["schemas"]["InvoiceLineView"][];
             payments: components["schemas"]["PaymentView"][];
+            taxLines: components["schemas"]["TaxLineView"][];
+            creditNotes: components["schemas"]["CreditNoteView"][];
         };
         InvoiceLineView: {
             description: string;
@@ -10200,6 +10266,7 @@ export interface components {
             insuranceClaimStatus?: string;
             payerClass: string;
             discountReason?: string;
+            eInvoiceRequired: boolean;
             /** Format: date-time */
             issuedAt: string;
             /** Format: date-time */
@@ -10223,6 +10290,14 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
+        TaxLineView: {
+            hsnCode?: string;
+            taxCategory: string;
+            taxableQar: number;
+            ratePct: number;
+            taxQar: number;
+            isExempt: boolean;
+        };
         PaymentCreateDto: {
             method?: string;
             amountQar?: number;
@@ -10230,6 +10305,17 @@ export interface components {
         };
         ApiResponsePaymentView: {
             data?: components["schemas"]["PaymentView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CreditNoteRequestDto: {
+            amountQar: number;
+            reason: string;
+        };
+        ApiResponseCreditNoteView: {
+            data?: components["schemas"]["CreditNoteView"];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -10338,6 +10424,8 @@ export interface components {
             insuranceClaimable?: boolean;
             reason?: string;
             packageCode?: string;
+            taxCategory?: string;
+            hsnCode?: string;
         };
         ApiResponseChargeView: {
             data?: components["schemas"]["ChargeView"];
@@ -10379,6 +10467,8 @@ export interface components {
             entryReason?: string;
             /** Format: uuid */
             packageVersionId?: string;
+            taxCategory: string;
+            hsnCode?: string;
             /** Format: date-time */
             createdAt?: string;
         };
@@ -19178,6 +19268,50 @@ export interface operations {
             };
         };
     };
+    getTaxProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseTaxProfileDto"];
+                };
+            };
+        };
+    };
+    upsertTaxProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxProfileDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseTaxProfileDto"];
+                };
+            };
+        };
+    };
     listTariffs: {
         parameters: {
             query?: {
@@ -19408,6 +19542,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponsePaymentView"];
+                };
+            };
+        };
+    };
+    issueCreditNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreditNoteRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCreditNoteView"];
                 };
             };
         };
@@ -23923,4 +24083,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: b76b4879fba7cd61b2b11545e1bbcee2527fdf7e427b4b4e8b02de4968d6532e
+// openapi snapshot sha256: 2b2a4a59fbc1295f220636f688939be78c2d8220af6c784872bc1f2bdab98462

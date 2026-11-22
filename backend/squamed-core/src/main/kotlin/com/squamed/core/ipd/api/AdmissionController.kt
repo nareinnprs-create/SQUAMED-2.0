@@ -96,6 +96,42 @@ class AdmissionController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<DischargeSummaryView> = ApiResponse.ok(admissionService.upsertDischargeSummary(id, dto, principal.userId))
 
+  // 04.01 expected-discharge planning + checklist + summary signature.
+  @PostMapping("/{id}/plan-discharge")
+  @RequiresPermission("ipd:write:admission")
+  @Transactional
+  fun planDischarge(
+    @PathVariable id: UUID,
+    @RequestBody dto: PlanDischargeDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AdmissionView> = ApiResponse.ok(admissionService.planDischarge(id, dto, principal.userId))
+
+  @GetMapping("/{id}/checklist")
+  @RequiresPermission("ipd:read:admission")
+  @Transactional(readOnly = true)
+  fun getChecklist(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DischargeChecklistView> = ApiResponse.ok(admissionService.getChecklist(id, principal.hospitalId))
+
+  @PostMapping("/{id}/checklist/{item}")
+  @RequiresPermission("ipd:write:admission")
+  @Transactional
+  fun completeChecklistItem(
+    @PathVariable id: UUID,
+    @PathVariable item: String,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DischargeChecklistView> = ApiResponse.ok(admissionService.completeChecklistItem(id, item, principal.userId))
+
+  @PostMapping("/{id}/discharge-summary/sign")
+  @RequiresPermission("ipd:write:admission")
+  @Transactional
+  fun signSummary(
+    @PathVariable id: UUID,
+    @RequestBody dto: SummarySignDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DischargeSummaryView> = ApiResponse.ok(admissionService.signSummary(id, dto, principal.userId))
+
   @GetMapping("/{id}/attendants")
   @RequiresPermission("ipd:read:admission")
   @Transactional(readOnly = true)

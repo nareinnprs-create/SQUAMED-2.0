@@ -40,6 +40,11 @@ class Admission(
   var dischargeType: String? = null,
   @Column(name = "discharge_notes")
   var dischargeNotes: String? = null,
+  // 04.01 expected-discharge planning + IPC isolation flag for allocation.
+  @Column(name = "expected_discharge_at")
+  var expectedDischargeAt: Instant? = null,
+  @Column(name = "isolation_type", nullable = false, length = 10)
+  var isolationType: String = "NONE",
 ) : BaseEntity()
 
 @Entity
@@ -76,6 +81,33 @@ class DischargeSummary(
   var preparedBy: UUID? = null,
   @Column(name = "prepared_at", nullable = false)
   var preparedAt: Instant = Instant.now(),
+  // 04.01: the summary must be signed before discharge; edits after signing are rejected.
+  @Column(name = "status", nullable = false, length = 10)
+  var status: String = "DRAFT",
+  @Column(name = "icd_codes", length = 300)
+  var icdCodes: String? = null,
+  @Column(name = "signed_by")
+  var signedBy: UUID? = null,
+  @Column(name = "signed_at")
+  var signedAt: Instant? = null,
+) : BaseEntity()
+
+// 04.01 discharge checklist: pharmacy returns + final bill + summary signature gate the discharge.
+@Entity
+@Table(name = "discharge_checklist", schema = "ipd")
+class DischargeChecklist(
+  @Column(name = "admission_id", nullable = false)
+  var admissionId: UUID,
+  @Column(name = "pharmacy_return_done", nullable = false)
+  var pharmacyReturnDone: Boolean = false,
+  @Column(name = "pharmacy_return_at")
+  var pharmacyReturnAt: Instant? = null,
+  @Column(name = "final_bill_verified", nullable = false)
+  var finalBillVerified: Boolean = false,
+  @Column(name = "completed_by")
+  var completedBy: UUID? = null,
+  @Column(name = "completed_at")
+  var completedAt: Instant? = null,
 ) : BaseEntity()
 
 @Entity

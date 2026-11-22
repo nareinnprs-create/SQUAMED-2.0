@@ -78,6 +78,14 @@ object EventCatalog {
         Status.EMITTED,
         "Radiologist signed a structured imaging report (02.05).",
       ),
+      Entry("AdmissionCreated", "admission.created", Status.EMITTED, "An inpatient admission record was created (04.01)."),
+      Entry("PatientAdmitted", "admission.admitted", Status.EMITTED, "Patient admitted with a bed assigned (04.01)."),
+      Entry("BedAssigned", "admission.bed_assigned", Status.EMITTED, "Bed assigned at admission or transfer (04.01)."),
+      Entry("PatientTransferred", "admission.transferred", Status.EMITTED, "Inpatient transferred to another bed/ward with a trace (04.01)."),
+      Entry("DischargePlanned", "admission.discharge_planned", Status.EMITTED, "Expected discharge date set (04.01)."),
+      Entry("PatientDischarged", "admission.discharged", Status.EMITTED, "Admission discharged after the checklist (04.01)."),
+      Entry("DischargeSummarySigned", "admission.summary_signed", Status.EMITTED, "Coded discharge summary signed (04.01)."),
+      Entry("HousekeepingTaskCreated", "housekeeping.task_created", Status.EMITTED, "Bed released for terminal cleaning (04.01)."),
     )
 
   fun all(): List<Entry> = entries

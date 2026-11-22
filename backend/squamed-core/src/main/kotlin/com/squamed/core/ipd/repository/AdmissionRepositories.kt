@@ -3,6 +3,7 @@ package com.squamed.core.ipd.repository
 import com.squamed.core.ipd.domain.Admission
 import com.squamed.core.ipd.domain.AdmissionTransfer
 import com.squamed.core.ipd.domain.Attendant
+import com.squamed.core.ipd.domain.DischargeChecklist
 import com.squamed.core.ipd.domain.DischargeSummary
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
@@ -61,6 +62,11 @@ interface AdmissionTransferRepository : JpaRepository<AdmissionTransfer, UUID> {
 
 interface DischargeSummaryRepository : JpaRepository<DischargeSummary, UUID> {
   fun findByAdmissionId(admissionId: UUID): Optional<DischargeSummary>
+}
+
+// 04.01 discharge checklist (one per admission).
+interface DischargeChecklistRepository : JpaRepository<DischargeChecklist, UUID> {
+  fun findByAdmissionId(admissionId: UUID): Optional<DischargeChecklist>
 }
 
 interface AttendantRepository : JpaRepository<Attendant, UUID> {

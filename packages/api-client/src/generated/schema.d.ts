@@ -3236,6 +3236,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/beds/{id}/cleaning": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["markCleaning"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/beds/{id}/available": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["markAvailable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/register": {
         parameters: {
             query?: never;
@@ -3636,6 +3668,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admissions/{id}/plan-discharge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["planDischarge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admissions/{id}/discharge": {
         parameters: {
             query?: never;
@@ -3646,6 +3694,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["discharge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admissions/{id}/discharge-summary/sign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["signSummary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admissions/{id}/checklist/{item}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeChecklistItem"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5700,6 +5780,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/beds/board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["board_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/me": {
         parameters: {
             query?: never;
@@ -5932,6 +6028,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listTransfers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admissions/{id}/checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getChecklist"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6989,6 +7101,12 @@ export interface components {
             preparedBy?: string;
             /** Format: date-time */
             preparedAt?: string;
+            status: string;
+            icdCodes: string[];
+            /** Format: uuid */
+            signedBy?: string;
+            /** Format: date-time */
+            signedAt?: string;
         };
         TriggerWorkflowRequest: {
             /** Format: uuid */
@@ -9459,6 +9577,8 @@ export interface components {
             label?: string;
             type?: string;
             status?: string;
+            isolationType?: string;
+            genderPolicy?: string;
         };
         ApiResponseBedDto: {
             data?: components["schemas"]["BedDto"];
@@ -10916,6 +11036,31 @@ export interface components {
             countedCashQar: number;
             note?: string;
         };
+        ApiResponseBedBoardRowView: {
+            data?: components["schemas"]["BedBoardRowView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        BedBoardRowView: {
+            /** Format: uuid */
+            bedId?: string;
+            label: string;
+            /** Format: uuid */
+            wardId?: string;
+            /** Format: uuid */
+            roomId?: string;
+            status: string;
+            isolationType: string;
+            genderPolicy: string;
+            /** Format: uuid */
+            admissionId?: string;
+            /** Format: uuid */
+            patientId?: string;
+            /** Format: date-time */
+            admittedAt?: string;
+        };
         RegisterDto: {
             email: string;
             password: string;
@@ -11416,6 +11561,7 @@ export interface components {
             attendingDoctorId?: string;
             admissionDiagnosis?: string;
             source?: string;
+            isolationType?: string;
         };
         AdmissionView: {
             /** Format: uuid */
@@ -11445,6 +11591,9 @@ export interface components {
             dischargeType?: string;
             dischargeNotes?: string;
             /** Format: date-time */
+            expectedDischargeAt?: string;
+            isolationType: string;
+            /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
@@ -11461,6 +11610,10 @@ export interface components {
             toBedId?: string;
             reason?: string;
         };
+        PlanDischargeDto: {
+            /** Format: date-time */
+            expectedDischargeAt: string;
+        };
         AdmissionDischargeDto: {
             dischargeType?: string;
             dischargeNotes?: string;
@@ -11468,6 +11621,28 @@ export interface components {
             followUpPlan?: string;
             medicationsAtDischarge?: string;
             instructions?: string;
+        };
+        SummarySignDto: {
+            icdCodes: string[];
+        };
+        ApiResponseDischargeChecklistView: {
+            data?: components["schemas"]["DischargeChecklistView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        DischargeChecklistView: {
+            /** Format: uuid */
+            admissionId: string;
+            pharmacyReturnDone: boolean;
+            /** Format: date-time */
+            pharmacyReturnAt?: string;
+            finalBillVerified: boolean;
+            /** Format: uuid */
+            completedBy?: string;
+            /** Format: date-time */
+            completedAt?: string;
         };
         AttendantCreateDto: {
             name?: string;
@@ -12868,6 +13043,13 @@ export interface components {
         };
         ApiResponseListCashupView: {
             data?: components["schemas"]["CashupView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListBedBoardRowView: {
+            data?: components["schemas"]["BedBoardRowView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -20577,6 +20759,50 @@ export interface operations {
             };
         };
     };
+    markCleaning: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseBedBoardRowView"];
+                };
+            };
+        };
+    };
+    markAvailable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseBedBoardRowView"];
+                };
+            };
+        };
+    };
     register_1: {
         parameters: {
             query?: never;
@@ -21421,6 +21647,32 @@ export interface operations {
             };
         };
     };
+    planDischarge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanDischargeDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAdmissionView"];
+                };
+            };
+        };
+    };
     discharge: {
         parameters: {
             query?: never;
@@ -21443,6 +21695,55 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseAdmissionView"];
+                };
+            };
+        };
+    };
+    signSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummarySignDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDischargeSummaryView"];
+                };
+            };
+        };
+    };
+    completeChecklistItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDischargeChecklistView"];
                 };
             };
         };
@@ -24419,6 +24720,26 @@ export interface operations {
             };
         };
     };
+    board_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListBedBoardRowView"];
+                };
+            };
+        };
+    };
     me: {
         parameters: {
             query?: never;
@@ -24729,6 +25050,28 @@ export interface operations {
             };
         };
     };
+    getChecklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDischargeChecklistView"];
+                };
+            };
+        };
+    };
     outbox: {
         parameters: {
             query?: {
@@ -25024,4 +25367,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: cc91af050fad73ad4c8a5ba25e64797f5bf109f729105dc5c9f4e74701484ddf
+// openapi snapshot sha256: 45dd4cc89cff65e1b26339eed6e9e086aaf468dce697ae328e046548bbe18921

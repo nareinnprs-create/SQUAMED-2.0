@@ -8031,6 +8031,258 @@ class PlatformIntegrationTests {
         "journal balances",
       )
     }
+
+    @Test
+    fun admissionBedManagementCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      // Isolated hospital: the bed board is hospital-wide.
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Ward $s", "code" to "WRD-$s", "country" to "Qatar"),
+            token,
+          ),
+        )["id"].asText()
+      val wardId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json("name" to "Ward A $s", "code" to "WA-$s", "type" to "general"),
+            token,
+          ),
+        )["id"].asText()
+
+      fun bed(
+        label: String,
+        isolation: String = "NONE",
+        gender: String = "ANY",
+      ) = `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+          json("label" to label, "type" to "standard", "status" to "available", "wardId" to wardId, "isolationType" to isolation, "genderPolicy" to gender),
+          token,
+        ),
+      )
+      val bedA = bed("A-$s")["id"].asText()
+      val bedB = bed("B-$s")["id"].asText()
+      val bedIso = bed("ISO-$s", "CONTACT")["id"].asText()
+      val bedFemale = bed("F-$s", "NONE", "FEMALE")["id"].asText()
+
+      fun patient(
+        tag: String,
+        gender: String,
+      ): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Ward$tag",
+              "lastName" to "Coverage$s",
+              "gender" to gender,
+              "dateOfBirth" to "1978-01-01",
+              "phone" to "69$tag$s".take(11),
+              "qid" to "WD$tag$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]["id"].asText()
+      val male = patient("1", "male")
+      val female = patient("2", "female")
+
+      // Gender + isolation rules at allocation.
+      val wrongGender =
+        api(
+          HttpMethod.POST,
+          "/api/v1/admissions",
+          json(
+            "hospitalId" to hospitalId,
+            "patientId" to male,
+            "bedId" to bedFemale,
+            "admissionType" to "elective",
+          ),
+          token,
+        )
+      assert4xx(wrongGender, "male patient in a female bed rejected")
+      assertTrue(wrongGender.body.contains("ADMISSION_BED_RULE_VIOLATION"), "gender rule code: ${wrongGender.body.take(200)}")
+      val wrongIso =
+        api(
+          HttpMethod.POST,
+          "/api/v1/admissions",
+          json(
+            "hospitalId" to hospitalId,
+            "patientId" to male,
+            "bedId" to bedA,
+            "admissionType" to "emergency",
+            "isolationType" to "CONTACT",
+          ),
+          token,
+        )
+      assert4xx(wrongIso, "isolation patient in a non-isolation bed rejected")
+      assertTrue(wrongIso.body.contains("ADMISSION_BED_RULE_VIOLATION"), "isolation rule code: ${wrongIso.body.take(200)}")
+
+      val admission =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to male,
+              "bedId" to bedA,
+              "admissionType" to "elective",
+            ),
+            token,
+          ),
+        )
+      val admissionId = admission["id"].asText()
+      assertEquals(
+        "occupied",
+        `data`(api(HttpMethod.GET, "/api/v1/beds/board", token = token))
+          .first {
+            it["bedId"].asText() == bedA
+          }["status"]
+          .asText(),
+        "bed occupied",
+      )
+      val isoAdmission =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json("hospitalId" to hospitalId, "patientId" to female, "bedId" to bedIso, "admissionType" to "emergency", "isolationType" to "CONTACT"),
+            token,
+          ),
+        )
+      assertEquals("CONTACT", isoAdmission["isolationType"].asText(), "isolation recorded on the admission")
+
+      // Cataloged events for created/admitted/bed-assigned.
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      listOf("admission.created", "admission.admitted", "admission.bed_assigned").forEach { type ->
+        assertTrue(outbox.any { it["eventType"].asText() == type && it["envelope"].asText().contains(admissionId) }, "$type emitted")
+      }
+
+      // Expected-discharge planning + transfer rules + trace.
+      val planned =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions/$admissionId/plan-discharge",
+            json(
+              "expectedDischargeAt" to
+                java.time.Instant
+                  .now()
+                  .plusSeconds(86_400)
+                  .toString(),
+            ),
+            token,
+          ),
+        )
+      assertFalse(planned["expectedDischargeAt"].isNull, "expected discharge date set")
+      val badTransfer = api(HttpMethod.POST, "/api/v1/admissions/$admissionId/transfer", json("toBedId" to bedFemale, "reason" to "closer to nurses"), token)
+      assert4xx(badTransfer, "transfer into a female bed rejected for a male patient")
+      val transfer = `data`(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/transfer", json("toBedId" to bedB, "reason" to "monitoring"), token))
+      assertEquals(bedB, transfer["bedId"].asText(), "transferred to the new bed")
+      val transfers = `data`(api(HttpMethod.GET, "/api/v1/admissions/$admissionId/transfers", token = token))
+      assertEquals(1, transfers.size(), "transfer trace recorded")
+      assertEquals(bedA, transfers[0]["fromBedId"].asText(), "from bed in the trace")
+
+      // Discharge is gated by the checklist: no summary -> 409.
+      val early = api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge", json("dischargeType" to "routine"), token)
+      assertEquals(409, early.status, "discharge without the checklist is blocked: ${early.body.take(200)}")
+      assertTrue(early.body.contains("DISCHARGE_CHECKLIST_INCOMPLETE"), "checklist guard code")
+      val checklist0 = `data`(api(HttpMethod.GET, "/api/v1/admissions/$admissionId/checklist", token = token))
+      assertFalse(checklist0["pharmacyReturnDone"].asBoolean(), "checklist starts empty")
+
+      // Summary + signature (ICD required).
+      assert2xx(
+        api(
+          HttpMethod.PUT,
+          "/api/v1/admissions/$admissionId/discharge-summary",
+          json(
+            "summaryText" to "Admitted for observation; recovered.",
+            "medicationsAtDischarge" to "Paracetamol PRN",
+          ),
+          token,
+        ),
+        "summary drafted",
+      )
+      val noIcd = api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge-summary/sign", json("icdCodes" to emptyList<String>()), token)
+      assert4xx(noIcd, "summary signature needs ICD codes")
+      assertTrue(noIcd.body.contains("SUMMARY_ICD_REQUIRED"), "ICD guard code")
+      val signed = `data`(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge-summary/sign", json("icdCodes" to listOf("R05")), token))
+      assertEquals("SIGNED", signed["status"].asText(), "summary signed")
+      assertFalse(signed["signedBy"].isNull, "signer recorded")
+      assert4xx(
+        api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge-summary/sign", json("icdCodes" to listOf("R05")), token),
+        "double sign rejected",
+      )
+
+      // Checklist legs, then discharge releases the bed to cleaning + housekeeping.
+      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/checklist/pharmacy_return", json(), token), "pharmacy returns cleared")
+      val billOk = `data`(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/checklist/final_bill", json(), token))
+      assertTrue(billOk["finalBillVerified"].asBoolean(), "final bill verified")
+      assertFalse(billOk["completedAt"].isNull, "checklist completion stamped")
+      val discharged =
+        `data`(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge", json("dischargeType" to "routine", "dischargeNotes" to "stable"), token))
+      assertEquals("discharged", discharged["status"].asText(), "admission discharged")
+      val boardAfter = `data`(api(HttpMethod.GET, "/api/v1/beds/board", token = token))
+      assertEquals("cleaning", boardAfter.first { it["bedId"].asText() == bedB }["status"].asText(), "bed released to cleaning")
+      val tasks = `data`(api(HttpMethod.GET, "/api/v1/tasks", token = token))
+      assertTrue(
+        tasks.any { it["relatedType"].asText() == "HOUSEKEEPING" && it["relatedId"].asText() == bedB },
+        "housekeeping task raised for the bed",
+      )
+      val cleared = `data`(api(HttpMethod.POST, "/api/v1/beds/$bedB/available", json(), token))
+      assertEquals("available", cleared["status"].asText(), "housekeeping clears the bed")
+
+      // Unsettled bill blocks the final-bill leg.
+      val isoId = isoAdmission["id"].asText()
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/charges",
+          json(
+            "patientId" to female,
+            "hospitalId" to hospitalId,
+            "chargeCode" to "IPD-$s",
+            "chargeName" to "Bed charge",
+            "quantity" to 1,
+            "unitPriceQar" to 500.0,
+            "reason" to "IPD bed charge",
+          ),
+          token,
+        ),
+        "unpaid IPD charge",
+      )
+      assert2xx(api(HttpMethod.POST, "/api/v1/billing/invoices", json("patientId" to female), token), "unpaid invoice issued")
+      val unsettled = api(HttpMethod.POST, "/api/v1/admissions/$isoId/checklist/final_bill", json(), token)
+      assertEquals(409, unsettled.status, "unsettled bill blocks the checklist: ${unsettled.body.take(200)}")
+      assertTrue(unsettled.body.contains("DISCHARGE_BILL_UNSETTLED"), "bill guard code")
+
+      // Catalog: the 04.01 event set is EMITTED.
+      val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog", token = token))
+      listOf(
+        "AdmissionCreated",
+        "PatientAdmitted",
+        "BedAssigned",
+        "PatientTransferred",
+        "DischargePlanned",
+        "PatientDischarged",
+        "DischargeSummarySigned",
+        "HousekeepingTaskCreated",
+      ).forEach { name ->
+        assertTrue(catalog.any { it["name"].asText() == name && it["status"].asText() == "EMITTED" }, "$name cataloged EMITTED")
+      }
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */
@@ -8170,12 +8422,12 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging (26 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping (34 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        26,
+        34,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging events: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission events: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
@@ -8798,12 +9050,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        26,
+        34,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")
@@ -9089,6 +9341,28 @@ class PlatformIntegrationTests {
       val transfers = `data`(api(HttpMethod.GET, "/api/v1/admissions/$admissionId/transfers", token = token))
       assertEquals(1, transfers.size(), "transfer history count")
 
+      // 04.01: discharge is gated by the checklist (draft + signed summary, pharmacy returns, final bill).
+      fun completeDischarge(
+        admId: String,
+        text: String,
+      ) {
+        assert2xx(
+          api(
+            HttpMethod.PUT,
+            "/api/v1/admissions/$admId/discharge-summary",
+            json("summaryText" to text, "followUpPlan" to "Cardiology clinic in 2 weeks", "medicationsAtDischarge" to "Aspirin 75mg od"),
+            token,
+          ),
+          "discharge summary drafted",
+        )
+        assert2xx(
+          api(HttpMethod.POST, "/api/v1/admissions/$admId/discharge-summary/sign", json("icdCodes" to listOf("R05")), token),
+          "discharge summary signed",
+        )
+        assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admId/checklist/pharmacy_return", json(), token), "pharmacy returns cleared")
+        assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admId/checklist/final_bill", json(), token), "final bill verified")
+      }
+      completeDischarge(admissionId, "Chest pain resolved")
       val discharge =
         `data`(
           api(
@@ -9097,9 +9371,6 @@ class PlatformIntegrationTests {
             json(
               "dischargeType" to "home",
               "dischargeNotes" to "Stable",
-              "summaryText" to "Chest pain resolved",
-              "followUpPlan" to "Cardiology clinic in 2 weeks",
-              "medicationsAtDischarge" to "Aspirin 75mg od",
             ),
             token,
           ),
@@ -9113,8 +9384,11 @@ class PlatformIntegrationTests {
       val dupDischarge = api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge", json("dischargeType" to "home"), token)
       assertEquals(400, dupDischarge.status, "discharge already discharged")
 
+      // 04.01: the released bed goes to cleaning; housekeeping clears it before reuse.
+      assert2xx(api(HttpMethod.POST, "/api/v1/beds/$bed2Id/available", json(), token), "housekeeping clears the bed")
       val readmit = `data`(api(HttpMethod.POST, "/api/v1/admissions", json("hospitalId" to hospitalId, "patientId" to patientId, "bedId" to bed2Id), token))
       assertNotNull(readmit["id"], "discharged bed is reusable")
+      completeDischarge(readmit["id"].asText(), "cleanup")
       assert2xx(
         api(HttpMethod.POST, "/api/v1/admissions/${readmit["id"].asText()}/discharge", json("dischargeType" to "home"), token),
         "cleanup second admission",
@@ -9323,7 +9597,7 @@ class PlatformIntegrationTests {
         "nursing write denied for role-less user",
       )
 
-      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge", json("dischargeType" to "home"), token), "cleanup nursing admission")
+      dischargeWithChecklist(token, admissionId, "nursing cleanup")
     }
 
     @Test
@@ -9475,7 +9749,7 @@ class PlatformIntegrationTests {
       assertEquals(403, api(HttpMethod.GET, "/api/v1/icu/vitals", token = noPerm).status, "icu read denied for role-less user")
       assertEquals(403, api(HttpMethod.POST, "/api/v1/icu/alerts", json("patientId" to patientId), noPerm).status, "icu write denied for role-less user")
 
-      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge", json("dischargeType" to "home"), token), "cleanup icu admission")
+      dischargeWithChecklist(token, admissionId, "icu cleanup")
     }
 
     @Test
@@ -10480,6 +10754,22 @@ class PlatformIntegrationTests {
           token,
         ),
       )
+
+    // 04.01: discharge now requires a signed summary + the pharmacy/bill checklist legs.
+    private fun dischargeWithChecklist(
+      token: String,
+      admissionId: String,
+      text: String = "cleanup discharge",
+    ) {
+      assert2xx(api(HttpMethod.PUT, "/api/v1/admissions/$admissionId/discharge-summary", json("summaryText" to text), token), "cleanup summary")
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge-summary/sign", json("icdCodes" to listOf("R05")), token),
+        "cleanup summary sign",
+      )
+      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/checklist/pharmacy_return", json(), token), "cleanup pharmacy returns")
+      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/checklist/final_bill", json(), token), "cleanup final bill")
+      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge", json("dischargeType" to "home"), token), "cleanup discharge")
+    }
 
     private fun createPatient(
       token: String,

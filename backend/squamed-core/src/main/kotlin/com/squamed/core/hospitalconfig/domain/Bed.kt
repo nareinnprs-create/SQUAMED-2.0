@@ -21,4 +21,9 @@ class Bed(
   var type: String = "standard",
   @Column(name = "status", nullable = false, length = 20)
   var status: String = "available",
+  // 04.01 allocation rules: IPC isolation flag + gender policy (ANY|MALE|FEMALE).
+  @Column(name = "isolation_type", nullable = false, length = 10)
+  var isolationType: String = "NONE",
+  @Column(name = "gender_policy", nullable = false, length = 6)
+  var genderPolicy: String = "ANY",
 ) : BaseEntity()

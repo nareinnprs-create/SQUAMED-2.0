@@ -374,6 +374,8 @@ class HospitalConfigController(
           label = dto.label ?: throw IllegalArgumentException("BED_LABEL_REQUIRED"),
           type = dto.type ?: "standard",
           status = dto.status ?: "available",
+          isolationType = dto.isolationType?.uppercase() ?: "NONE",
+          genderPolicy = dto.genderPolicy?.uppercase() ?: "ANY",
         ),
       )
     return ApiResponse.ok(BedDto.from(bed))

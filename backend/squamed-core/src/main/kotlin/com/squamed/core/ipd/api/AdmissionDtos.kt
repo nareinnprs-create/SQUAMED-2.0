@@ -17,6 +17,8 @@ data class AdmissionCreateDto(
   val attendingDoctorId: UUID? = null,
   val admissionDiagnosis: String? = null,
   val source: String? = null,
+  // 04.01 IPC isolation requirement for allocation.
+  val isolationType: String? = null,
 )
 
 data class AdmissionTransferDto(
@@ -64,6 +66,8 @@ data class AdmissionView(
   val dischargedAt: Instant?,
   val dischargeType: String?,
   val dischargeNotes: String?,
+  val expectedDischargeAt: Instant?,
+  val isolationType: String,
   val createdAt: Instant?,
   val updatedAt: Instant?,
 ) {
@@ -86,6 +90,8 @@ data class AdmissionView(
         dischargedAt = entity.dischargedAt,
         dischargeType = entity.dischargeType,
         dischargeNotes = entity.dischargeNotes,
+        expectedDischargeAt = entity.expectedDischargeAt,
+        isolationType = entity.isolationType,
         createdAt = entity.createdAt,
         updatedAt = entity.updatedAt,
       )
@@ -124,6 +130,10 @@ data class DischargeSummaryView(
   val instructions: String?,
   val preparedBy: UUID?,
   val preparedAt: Instant?,
+  val status: String,
+  val icdCodes: List<String>,
+  val signedBy: UUID?,
+  val signedAt: Instant?,
 ) {
   companion object {
     fun from(entity: DischargeSummary) =
@@ -136,6 +146,14 @@ data class DischargeSummaryView(
         instructions = entity.instructions,
         preparedBy = entity.preparedBy,
         preparedAt = entity.preparedAt,
+        status = entity.status,
+        icdCodes =
+          entity.icdCodes
+            ?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() } ?: emptyList(),
+        signedBy = entity.signedBy,
+        signedAt = entity.signedAt,
       )
   }
 }
@@ -162,3 +180,46 @@ data class AttendantView(
       )
   }
 }
+
+// 04.01 admission + bed management surfaces.
+data class PlanDischargeDto(
+  val expectedDischargeAt: Instant,
+)
+
+data class SummarySignDto(
+  val icdCodes: List<String> = emptyList(),
+)
+
+data class DischargeChecklistView(
+  val admissionId: UUID,
+  val pharmacyReturnDone: Boolean,
+  val pharmacyReturnAt: Instant?,
+  val finalBillVerified: Boolean,
+  val completedBy: UUID?,
+  val completedAt: Instant?,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.ipd.domain.DischargeChecklist) =
+      DischargeChecklistView(
+        entity.admissionId,
+        entity.pharmacyReturnDone,
+        entity.pharmacyReturnAt,
+        entity.finalBillVerified,
+        entity.completedBy,
+        entity.completedAt,
+      )
+  }
+}
+
+data class BedBoardRowView(
+  val bedId: UUID?,
+  val label: String,
+  val wardId: UUID?,
+  val roomId: UUID?,
+  val status: String,
+  val isolationType: String,
+  val genderPolicy: String,
+  val admissionId: UUID?,
+  val patientId: UUID?,
+  val admittedAt: Instant?,
+)

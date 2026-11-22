@@ -204,6 +204,9 @@ data class BedDto(
   val label: String?,
   val type: String?,
   val status: String?,
+  // 04.01 allocation rules.
+  val isolationType: String? = null,
+  val genderPolicy: String? = null,
 ) {
   companion object {
     fun from(entity: Bed) =
@@ -215,6 +218,8 @@ data class BedDto(
         label = entity.label,
         type = entity.type,
         status = entity.status,
+        isolationType = entity.isolationType,
+        genderPolicy = entity.genderPolicy,
       )
   }
 }

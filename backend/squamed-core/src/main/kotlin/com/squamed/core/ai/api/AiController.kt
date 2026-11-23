@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
@@ -43,6 +44,12 @@ data class AiModelCreateRequest(
   val temperature: Double? = null,
   val maxTokens: Int? = null,
   val isDefault: Boolean = false,
+  val costPer1kTokens: java.math.BigDecimal? = null,
+)
+
+data class AiPolicyUpdateRequest(
+  val enabled: Boolean? = null,
+  val dailyTokenCap: Int? = null,
 )
 
 data class AiAgentCreateRequest(
@@ -59,6 +66,7 @@ data class AiAgentCreateRequest(
 @RequestMapping("/api/v1/ai")
 class AiController(
   private val aiService: AiService,
+  private val governanceService: com.squamed.core.ai.service.AiGovernanceService,
   private val tenantResolver: TenantResolver,
 ) {
   @GetMapping("/models")
@@ -80,6 +88,7 @@ class AiController(
         req.temperature,
         req.maxTokens,
         req.isDefault,
+        req.costPer1kTokens,
       )
     return ApiResponse.ok(mapOf("id" to model.id, "name" to model.name, "provider" to model.provider))
   }
@@ -139,7 +148,7 @@ class AiController(
           com.squamed.core.ai.service
             .AiChatMessage(it.role, it.content)
         },
-        principal.userId,
+        principal,
         tenantResolver.pinOrDefault(principal, null),
       ),
     )
@@ -149,7 +158,7 @@ class AiController(
   fun command(
     @RequestBody req: AiCommandRequest,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<AiCommandOutput> = ApiResponse.ok(aiService.command(req.query, principal.userId, tenantResolver.pinOrDefault(principal, null)))
+  ): ApiResponse<AiCommandOutput> = ApiResponse.ok(aiService.command(req.query, principal, tenantResolver.pinOrDefault(principal, null)))
 
   @PostMapping("/chat/stream")
   @RequiresPermission("ai:chat:agent")
@@ -163,7 +172,7 @@ class AiController(
     response.setHeader("Cache-Control", "no-cache")
     response.setHeader("X-Accel-Buffering", "no")
     try {
-      val reply = aiService.generate(req.agentCode, userMessage, principal.userId, tenantResolver.pinOrDefault(principal, null))
+      val reply = aiService.generate(req.agentCode, userMessage, principal, tenantResolver.pinOrDefault(principal, null))
       val chunks = reply.reply.split(Regex("(?<=\\s)|(?=\\s)")).filter { it.isNotBlank() }
       val writer = response.writer
       chunks.forEach { chunk ->
@@ -206,10 +215,57 @@ class AiController(
           "assistantMessage" to log.assistantMessage,
           "intent" to log.intent,
           "latencyMs" to log.latencyMs,
+          "capability" to log.capability,
+          "promptVersion" to log.promptVersion,
+          "promptTokens" to log.promptTokens,
+          "completionTokens" to log.completionTokens,
+          "tokensUsed" to log.tokensUsed,
+          "costUsd" to log.costUsd,
+          "redacted" to log.redacted,
           "createdAt" to log.createdAt,
         )
       },
     )
+
+  // 05.01 governance: per-capability kill switch + daily token cap, and today's usage/cost.
+  @GetMapping("/governance/policies")
+  @RequiresPermission("ai:read:agent")
+  fun policies(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<Map<String, Any?>>> =
+    ApiResponse.ok(
+      governanceService.policies(tenantResolver.pinOrDefault(principal, null)).map {
+        mapOf(
+          "capability" to it.capability,
+          "enabled" to it.enabled,
+          "dailyTokenCap" to it.dailyTokenCap,
+          "updatedAt" to it.updatedAt,
+        )
+      },
+    )
+
+  @PutMapping("/governance/policies/{capability}")
+  @RequiresPermission("ai:manage:agent")
+  fun updatePolicy(
+    @PathVariable capability: String,
+    @RequestBody req: AiPolicyUpdateRequest,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<Map<String, Any?>> {
+    val policy =
+      governanceService.update(
+        tenantResolver.pinOrDefault(principal, null),
+        capability,
+        req.enabled,
+        req.dailyTokenCap,
+      )
+    return ApiResponse.ok(mapOf("capability" to policy.capability, "enabled" to policy.enabled, "dailyTokenCap" to policy.dailyTokenCap))
+  }
+
+  @GetMapping("/governance/usage")
+  @RequiresPermission("ai:read:agent")
+  fun usage(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<com.squamed.core.ai.service.AiUsageView>> = ApiResponse.ok(governanceService.usage(tenantResolver.pinOrDefault(principal, null)))
 
   private fun jsonEscape(s: String): String =
     s

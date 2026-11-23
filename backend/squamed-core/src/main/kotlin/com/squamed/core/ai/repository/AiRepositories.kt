@@ -44,4 +44,38 @@ interface InteractionLogRepository : JpaRepository<InteractionLog, UUID> {
     @Param("hid") hid: UUID?,
     pageable: Pageable,
   ): List<InteractionLog>
+
+  // 05.01: today's token spend per capability drives the hard daily cap.
+  @Query(
+    """
+    select coalesce(sum(l.tokensUsed), 0) from InteractionLog l
+    where l.hospitalId = :hid and l.capability = :cap and l.createdAt >= :from
+    """,
+  )
+  fun sumTokensSince(
+    @Param("hid") hid: UUID,
+    @Param("cap") cap: String,
+    @Param("from") from: java.time.Instant,
+  ): Long
+
+  @Query(
+    """
+    select coalesce(sum(l.costUsd), 0) from InteractionLog l
+    where l.hospitalId = :hid and l.capability = :cap and l.createdAt >= :from
+    """,
+  )
+  fun sumCostSince(
+    @Param("hid") hid: UUID,
+    @Param("cap") cap: String,
+    @Param("from") from: java.time.Instant,
+  ): java.math.BigDecimal
+}
+
+interface GatewayPolicyRepository : JpaRepository<com.squamed.core.ai.domain.GatewayPolicy, UUID> {
+  fun findByHospitalIdAndCapability(
+    hospitalId: UUID,
+    capability: String,
+  ): com.squamed.core.ai.domain.GatewayPolicy?
+
+  fun findByHospitalIdOrderByCapabilityAsc(hospitalId: UUID): List<com.squamed.core.ai.domain.GatewayPolicy>
 }

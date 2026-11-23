@@ -356,6 +356,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/governance/policies/{capability}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updatePolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admissions/{id}/discharge-summary": {
         parameters: {
             query?: never;
@@ -6356,6 +6372,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/governance/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["usage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/governance/policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["policies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admissions/{id}": {
         parameters: {
             query?: never;
@@ -7426,6 +7474,11 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        AiPolicyUpdateRequest: {
+            enabled?: boolean;
+            /** Format: int32 */
+            dailyTokenCap?: number;
         };
         DischargeSummaryUpsertDto: {
             summaryText?: string;
@@ -12079,6 +12132,7 @@ export interface components {
             /** Format: int32 */
             maxTokens?: number;
             isDefault: boolean;
+            costPer1kTokens?: number;
         };
         AiCommandRequest: {
             query: string;
@@ -12116,6 +12170,10 @@ export interface components {
             suggestions: string[];
             /** Format: uuid */
             logId?: string;
+            /** Format: int32 */
+            tokensUsed?: number;
+            costUsd: number;
+            redacted: boolean;
         };
         ApiResponseAiReply: {
             data?: components["schemas"]["AiReply"];
@@ -14065,6 +14123,22 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        AiUsageView: {
+            capability: string;
+            enabled: boolean;
+            /** Format: int32 */
+            dailyTokenCap: number;
+            /** Format: int64 */
+            tokensToday: number;
+            costTodayUsd: number;
+        };
+        ApiResponseListAiUsageView: {
+            data?: components["schemas"]["AiUsageView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListAdmissionView: {
             data?: components["schemas"]["AdmissionView"][];
             success: boolean;
@@ -14873,6 +14947,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseAppointmentView"];
+                };
+            };
+        };
+    };
+    updatePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                capability: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiPolicyUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
                 };
             };
         };
@@ -26364,6 +26464,46 @@ export interface operations {
             };
         };
     };
+    usage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListAiUsageView"];
+                };
+            };
+        };
+    };
+    policies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListMapStringObject"];
+                };
+            };
+        };
+    };
     getAdmission: {
         parameters: {
             query?: never;
@@ -26725,4 +26865,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 33e24f36071d976894ca295152b8509b046cf39f47a1cc8f0614ef353272ac39
+// openapi snapshot sha256: ebfa2520b8616881d192ac0546c35552067b48f792b9bed5e0aa40d3a6691bf2

@@ -29,6 +29,9 @@ class ModelConfig(
   var enabled: Boolean = true,
   @Column(name = "is_default", nullable = false)
   var isDefault: Boolean = false,
+  // 05.01: cost trace per 1k tokens for the routed model.
+  @Column(name = "cost_per_1k_tokens", nullable = false)
+  var costPer1kTokens: java.math.BigDecimal = java.math.BigDecimal.ZERO,
 ) : BaseEntity()
 
 @Entity
@@ -88,4 +91,31 @@ class InteractionLog(
   var latencyMs: Long? = null,
   @Column(name = "tokens_used")
   var tokensUsed: Int? = null,
+  // 05.01 full trace: capability, prompt version, token split, cost, redaction.
+  @Column(name = "capability", nullable = false, length = 30)
+  var capability: String = "chat",
+  @Column(name = "prompt_version", length = 120)
+  var promptVersion: String? = null,
+  @Column(name = "prompt_tokens")
+  var promptTokens: Int? = null,
+  @Column(name = "completion_tokens")
+  var completionTokens: Int? = null,
+  @Column(name = "cost_usd", nullable = false)
+  var costUsd: java.math.BigDecimal = java.math.BigDecimal.ZERO,
+  @Column(name = "redacted", nullable = false)
+  var redacted: Boolean = false,
+) : BaseEntity()
+
+// 05.01 gateway governance: per-hospital, per-capability kill switch + daily token cap.
+@Entity
+@Table(name = "gateway_policy", schema = "ai")
+class GatewayPolicy(
+  @Column(name = "hospital_id", nullable = false)
+  var hospitalId: UUID,
+  @Column(name = "capability", nullable = false, length = 30)
+  var capability: String,
+  @Column(name = "enabled", nullable = false)
+  var enabled: Boolean = true,
+  @Column(name = "daily_token_cap", nullable = false)
+  var dailyTokenCap: Int = 200_000,
 ) : BaseEntity()

@@ -127,6 +127,40 @@ class IcuController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<List<CriticalAlertView>> = ApiResponse.ok(icuService.listAlerts(patientId, status, principal.hospitalId))
 
+  // 04.05 flowsheet read model, fluid-balance totals, SOFA severity score.
+  @GetMapping("/patients/{patientId}/flowsheet")
+  @RequiresPermission("icu:read:icu")
+  @Transactional(readOnly = true)
+  fun flowsheet(
+    @PathVariable patientId: UUID,
+    @RequestParam(name = "hours", required = false) hours: Int?,
+  ): ApiResponse<List<FlowsheetRowView>> = ApiResponse.ok(icuService.flowsheet(patientId, hours ?: 12))
+
+  @GetMapping("/patients/{patientId}/fluid-balance/totals")
+  @RequiresPermission("icu:read:icu")
+  @Transactional(readOnly = true)
+  fun fluidBalanceTotals(
+    @PathVariable patientId: UUID,
+    @RequestParam(name = "hours", required = false) hours: Int?,
+  ): ApiResponse<FluidBalanceTotalsView> = ApiResponse.ok(icuService.fluidBalanceTotals(patientId, hours ?: 24))
+
+  @PostMapping("/severity-scores")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("icu:write:icu")
+  @Transactional
+  fun recordSeverityScore(
+    @RequestBody dto: SeverityScoreRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<SeverityScoreView> =
+    ApiResponse.ok(icuService.recordSeverityScore(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
+
+  @GetMapping("/patients/{patientId}/severity-scores")
+  @RequiresPermission("icu:read:icu")
+  @Transactional(readOnly = true)
+  fun listSeverityScores(
+    @PathVariable patientId: UUID,
+  ): ApiResponse<List<SeverityScoreView>> = ApiResponse.ok(icuService.listSeverityScores(patientId))
+
   @PatchMapping("/alerts/{id}/acknowledge")
   @RequiresPermission("icu:write:icu")
   @Transactional

@@ -88,3 +88,23 @@ class IcuCriticalAlert(
   @Column(name = "acknowledged_at") var acknowledgedAt: Instant? = null,
   @Column(name = "status", nullable = false, length = 20) var status: String = "open",
 ) : BaseEntity()
+
+// 04.05 severity scores (informational): SOFA component points + total.
+@Entity
+@Table(name = "severity_score", schema = "icu")
+class IcuSeverityScore(
+  @Column(name = "hospital_id", nullable = false) var hospitalId: UUID,
+  @Column(name = "patient_id", nullable = false) var patientId: UUID,
+  @Column(name = "admission_id") var admissionId: UUID? = null,
+  @Column(name = "score_type", nullable = false, length = 10) var scoreType: String = "SOFA",
+  @Column(name = "respiration", nullable = false) var respiration: Int = 0,
+  @Column(name = "coagulation", nullable = false) var coagulation: Int = 0,
+  @Column(name = "liver", nullable = false) var liver: Int = 0,
+  @Column(name = "cardiovascular", nullable = false) var cardiovascular: Int = 0,
+  @Column(name = "cns", nullable = false) var cns: Int = 0,
+  @Column(name = "renal", nullable = false) var renal: Int = 0,
+  @Column(name = "total", nullable = false) var total: Int = 0,
+  @Column(name = "inputs_json", columnDefinition = "TEXT") var inputsJson: String? = null,
+  @Column(name = "recorded_by") var recordedBy: UUID? = null,
+  @Column(name = "recorded_at", nullable = false) var recordedAt: Instant = Instant.now(),
+) : BaseEntity()

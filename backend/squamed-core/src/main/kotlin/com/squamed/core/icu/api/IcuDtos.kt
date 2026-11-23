@@ -245,3 +245,68 @@ data class CriticalAlertView(
       )
   }
 }
+
+// 04.05 ICU charting read models + severity scores.
+data class FlowsheetRowView(
+  val hourStart: Instant,
+  val vitals: IcuVitalsView?,
+  val ventilation: VentilationView?,
+  val infusions: List<InfusionView>,
+  val inputMl: Double,
+  val outputMl: Double,
+  val netMl: Double,
+)
+
+data class FluidBalanceTotalsView(
+  val patientId: UUID,
+  val hours: Int,
+  val inputMl: Double,
+  val outputMl: Double,
+  val netMl: Double,
+)
+
+data class SeverityScoreRequestDto(
+  val patientId: UUID,
+  val hospitalId: UUID? = null,
+  val admissionId: UUID? = null,
+  val pao2: Double? = null,
+  val fio2: Double? = null,
+  val ventilated: Boolean? = null,
+  val platelets: Double? = null,
+  val bilirubin: Double? = null,
+  val map: Int? = null,
+  val vasopressor: String? = null,
+  val gcs: Int? = null,
+  val creatinine: Double? = null,
+)
+
+data class SeverityScoreView(
+  val id: UUID?,
+  val patientId: UUID,
+  val scoreType: String,
+  val respiration: Int,
+  val coagulation: Int,
+  val liver: Int,
+  val cardiovascular: Int,
+  val cns: Int,
+  val renal: Int,
+  val total: Int,
+  val recordedAt: Instant?,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.icu.domain.IcuSeverityScore) =
+      SeverityScoreView(
+        entity.id,
+        entity.patientId,
+        entity.scoreType,
+        entity.respiration,
+        entity.coagulation,
+        entity.liver,
+        entity.cardiovascular,
+        entity.cns,
+        entity.renal,
+        entity.total,
+        entity.recordedAt,
+      )
+  }
+}

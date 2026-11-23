@@ -5,28 +5,36 @@ import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.icu.api.CriticalAlertCreateDto
 import com.squamed.core.icu.api.CriticalAlertStatusDto
 import com.squamed.core.icu.api.CriticalAlertView
+import com.squamed.core.icu.api.FlowsheetRowView
 import com.squamed.core.icu.api.FluidBalanceCreateDto
+import com.squamed.core.icu.api.FluidBalanceTotalsView
 import com.squamed.core.icu.api.FluidBalanceView
 import com.squamed.core.icu.api.IcuVitalsCreateDto
 import com.squamed.core.icu.api.IcuVitalsView
 import com.squamed.core.icu.api.InfusionCreateDto
 import com.squamed.core.icu.api.InfusionStatusDto
 import com.squamed.core.icu.api.InfusionView
+import com.squamed.core.icu.api.SeverityScoreRequestDto
+import com.squamed.core.icu.api.SeverityScoreView
 import com.squamed.core.icu.api.VentilationCreateDto
 import com.squamed.core.icu.api.VentilationView
 import com.squamed.core.icu.domain.IcuCriticalAlert
 import com.squamed.core.icu.domain.IcuFluidBalance
 import com.squamed.core.icu.domain.IcuInfusionRecord
+import com.squamed.core.icu.domain.IcuSeverityScore
 import com.squamed.core.icu.domain.IcuVentilationRecord
 import com.squamed.core.icu.domain.IcuVitalsEntry
 import com.squamed.core.icu.repository.IcuCriticalAlertRepository
 import com.squamed.core.icu.repository.IcuFluidBalanceRepository
 import com.squamed.core.icu.repository.IcuInfusionRecordRepository
+import com.squamed.core.icu.repository.IcuSeverityScoreRepository
 import com.squamed.core.icu.repository.IcuVentilationRecordRepository
 import com.squamed.core.icu.repository.IcuVitalsEntryRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Duration
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Service
@@ -36,6 +44,7 @@ class IcuService(
   private val ventilationRepository: IcuVentilationRecordRepository,
   private val infusionRepository: IcuInfusionRecordRepository,
   private val alertRepository: IcuCriticalAlertRepository,
+  private val severityScoreRepository: IcuSeverityScoreRepository,
   private val eventPublisher: DomainEventPublisher,
 ) {
   @Transactional
@@ -313,6 +322,167 @@ class IcuService(
   }
 
   private fun findAlert(id: UUID): IcuCriticalAlert = alertRepository.findById(id).orElseThrow { IllegalArgumentException("ICU_ALERT_NOT_FOUND") }
+
+  // -- 04.05 ICU flowsheet, fluid-balance totals, SOFA severity score --
+
+  @Transactional(readOnly = true)
+  fun flowsheet(
+    patientId: UUID,
+    hours: Int,
+  ): List<FlowsheetRowView> {
+    val window = hours.coerceIn(1, 72)
+    val from = Instant.now().minus(Duration.ofHours(window.toLong()))
+    val vitals = vitalsRepository.findByPatientIdOrderByRecordedAtDesc(patientId, null).filter { !it.recordedAt.isBefore(from) }
+    val ventilation = ventilationRepository.findByPatientIdOrderByRecordedAtDesc(patientId, null).filter { !it.recordedAt.isBefore(from) }
+    val infusions = infusionRepository.findByPatientIdOrderByStartedAtDesc(patientId, null)
+    val fluids = fluidBalanceRepository.findByPatientIdOrderByBalanceAtDesc(patientId, null).filter { !it.balanceAt.isBefore(from) }
+    val hourStarts =
+      (
+        vitals.map { it.recordedAt } + ventilation.map { it.recordedAt } + fluids.map { it.balanceAt } + infusions.map { it.startedAt }
+      ).map { it.truncatedTo(ChronoUnit.HOURS) }.distinct().sortedDescending()
+    return hourStarts.map { hourStart ->
+      val hourEnd = hourStart.plusSeconds(3600)
+      val hourVitals = vitals.filter { it.recordedAt >= hourStart && it.recordedAt < hourEnd }.maxByOrNull { it.recordedAt }
+      val hourVent = ventilation.filter { it.recordedAt >= hourStart && it.recordedAt < hourEnd }.maxByOrNull { it.recordedAt }
+      val hourFluids = fluids.filter { it.balanceAt >= hourStart && it.balanceAt < hourEnd }
+      val input = hourFluids.sumOf { it.inputMl ?: 0.0 }
+      val output = hourFluids.sumOf { it.outputMl ?: 0.0 }
+      FlowsheetRowView(
+        hourStart = hourStart,
+        vitals = hourVitals?.let { IcuVitalsView.from(it) },
+        ventilation = hourVent?.let { VentilationView.from(it) },
+        infusions =
+          infusions
+            .filter { it.startedAt < hourEnd && (it.stoppedAt == null || it.stoppedAt!! >= hourStart) }
+            .map { InfusionView.from(it) },
+        inputMl = input,
+        outputMl = output,
+        netMl = input - output,
+      )
+    }
+  }
+
+  @Transactional(readOnly = true)
+  fun fluidBalanceTotals(
+    patientId: UUID,
+    hours: Int,
+  ): FluidBalanceTotalsView {
+    val window = hours.coerceIn(1, 168)
+    val from = Instant.now().minus(Duration.ofHours(window.toLong()))
+    val rows = fluidBalanceRepository.findByPatientIdOrderByBalanceAtDesc(patientId, null).filter { !it.balanceAt.isBefore(from) }
+    val input = rows.sumOf { it.inputMl ?: 0.0 }
+    val output = rows.sumOf { it.outputMl ?: 0.0 }
+    return FluidBalanceTotalsView(patientId, window, input, output, input - output)
+  }
+
+  @Transactional
+  fun recordSeverityScore(
+    dto: SeverityScoreRequestDto,
+    actorId: UUID,
+  ): SeverityScoreView {
+    val hospitalId = dto.hospitalId ?: throw IllegalArgumentException("ICU_HOSPITAL_REQUIRED")
+    val respiration =
+      if (dto.pao2 != null && dto.fio2 != null && dto.fio2 > 0) {
+        val ratio = dto.pao2 / dto.fio2
+        val supported = dto.ventilated == true
+        // SOFA: 3/4 require respiratory support; below 300 without support stays at 2.
+        when {
+          ratio >= 400 -> 0
+          ratio >= 300 -> 1
+          ratio >= 200 -> 2
+          supported && ratio < 100 -> 4
+          supported -> 3
+          else -> 2
+        }
+      } else {
+        0
+      }
+    val coagulation =
+      dto.platelets?.let { p ->
+        when {
+          p >= 150 -> 0
+          p >= 100 -> 1
+          p >= 50 -> 2
+          p >= 20 -> 3
+          else -> 4
+        }
+      } ?: 0
+    val liver =
+      dto.bilirubin?.let { b ->
+        when {
+          b < 1.2 -> 0
+          b < 2.0 -> 1
+          b < 6.0 -> 2
+          b < 12.0 -> 3
+          else -> 4
+        }
+      } ?: 0
+    val cardiovascular =
+      when (dto.vasopressor?.lowercase()) {
+        "high" -> 4
+        "low" -> 3
+        "moderate" -> 2
+        else -> if ((dto.map ?: 70) < 70) 1 else 0
+      }
+    val cns =
+      dto.gcs?.let { g ->
+        when {
+          g >= 15 -> 0
+          g >= 13 -> 1
+          g >= 10 -> 2
+          g >= 6 -> 3
+          else -> 4
+        }
+      } ?: 0
+    val renal =
+      dto.creatinine?.let { c ->
+        when {
+          c < 1.2 -> 0
+          c < 2.0 -> 1
+          c < 3.5 -> 2
+          c < 5.0 -> 3
+          else -> 4
+        }
+      } ?: 0
+    val total = respiration + coagulation + liver + cardiovascular + cns + renal
+    val saved =
+      severityScoreRepository.save(
+        IcuSeverityScore(
+          hospitalId = hospitalId,
+          patientId = dto.patientId,
+          admissionId = dto.admissionId,
+          scoreType = "SOFA",
+          respiration = respiration,
+          coagulation = coagulation,
+          liver = liver,
+          cardiovascular = cardiovascular,
+          cns = cns,
+          renal = renal,
+          total = total,
+          inputsJson =
+            com.fasterxml.jackson.databind
+              .ObjectMapper()
+              .writeValueAsString(
+                mapOf(
+                  "pao2" to dto.pao2,
+                  "fio2" to dto.fio2,
+                  "platelets" to dto.platelets,
+                  "bilirubin" to dto.bilirubin,
+                  "map" to dto.map,
+                  "vasopressor" to dto.vasopressor,
+                  "gcs" to dto.gcs,
+                  "creatinine" to dto.creatinine,
+                ),
+              ),
+          recordedBy = actorId,
+        ).also { it.createdBy = actorId },
+      )
+    return SeverityScoreView.from(saved)
+  }
+
+  @Transactional(readOnly = true)
+  fun listSeverityScores(patientId: UUID): List<SeverityScoreView> =
+    severityScoreRepository.findByPatientIdOrderByRecordedAtDesc(patientId).map { SeverityScoreView.from(it) }
 
   companion object {
     val INFUSION_STATUSES = setOf("active", "stopped")

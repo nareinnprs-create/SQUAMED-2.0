@@ -2356,6 +2356,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/icu/severity-scores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["recordSeverityScore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/icu/infusions": {
         parameters: {
             query?: never;
@@ -5276,6 +5292,54 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listRolePermissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/icu/patients/{patientId}/severity-scores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSeverityScores"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/icu/patients/{patientId}/fluid-balance/totals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["fluidBalanceTotals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/icu/patients/{patientId}/flowsheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["flowsheet"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9613,6 +9677,60 @@ export interface components {
             /** Format: date-time */
             recordedAt?: string;
         };
+        SeverityScoreRequestDto: {
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
+            admissionId?: string;
+            /** Format: double */
+            pao2?: number;
+            /** Format: double */
+            fio2?: number;
+            ventilated?: boolean;
+            /** Format: double */
+            platelets?: number;
+            /** Format: double */
+            bilirubin?: number;
+            /** Format: int32 */
+            map?: number;
+            vasopressor?: string;
+            /** Format: int32 */
+            gcs?: number;
+            /** Format: double */
+            creatinine?: number;
+        };
+        ApiResponseSeverityScoreView: {
+            data?: components["schemas"]["SeverityScoreView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        SeverityScoreView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            patientId: string;
+            scoreType: string;
+            /** Format: int32 */
+            respiration: number;
+            /** Format: int32 */
+            coagulation: number;
+            /** Format: int32 */
+            liver: number;
+            /** Format: int32 */
+            cardiovascular: number;
+            /** Format: int32 */
+            cns: number;
+            /** Format: int32 */
+            renal: number;
+            /** Format: int32 */
+            total: number;
+            /** Format: date-time */
+            recordedAt?: string;
+        };
         InfusionCreateDto: {
             /** Format: uuid */
             hospitalId?: string;
@@ -12822,6 +12940,52 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseListSeverityScoreView: {
+            data?: components["schemas"]["SeverityScoreView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseFluidBalanceTotalsView: {
+            data?: components["schemas"]["FluidBalanceTotalsView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        FluidBalanceTotalsView: {
+            /** Format: uuid */
+            patientId: string;
+            /** Format: int32 */
+            hours: number;
+            /** Format: double */
+            inputMl: number;
+            /** Format: double */
+            outputMl: number;
+            /** Format: double */
+            netMl: number;
+        };
+        ApiResponseListFlowsheetRowView: {
+            data?: components["schemas"]["FlowsheetRowView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        FlowsheetRowView: {
+            /** Format: date-time */
+            hourStart: string;
+            vitals?: components["schemas"]["IcuVitalsView"];
+            ventilation?: components["schemas"]["VentilationView"];
+            infusions: components["schemas"]["InfusionView"][];
+            /** Format: double */
+            inputMl: number;
+            /** Format: double */
+            outputMl: number;
+            /** Format: double */
+            netMl: number;
         };
         ApiResponseListInfusionView: {
             data?: components["schemas"]["InfusionView"][];
@@ -18808,6 +18972,30 @@ export interface operations {
             };
         };
     };
+    recordSeverityScore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeverityScoreRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSeverityScoreView"];
+                };
+            };
+        };
+    };
     listInfusions: {
         parameters: {
             query?: {
@@ -24395,6 +24583,76 @@ export interface operations {
             };
         };
     };
+    listSeverityScores: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                patientId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListSeverityScoreView"];
+                };
+            };
+        };
+    };
+    fluidBalanceTotals: {
+        parameters: {
+            query?: {
+                hours?: number;
+            };
+            header?: never;
+            path: {
+                patientId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseFluidBalanceTotalsView"];
+                };
+            };
+        };
+    };
+    flowsheet: {
+        parameters: {
+            query?: {
+                hours?: number;
+            };
+            header?: never;
+            path: {
+                patientId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListFlowsheetRowView"];
+                };
+            };
+        };
+    };
     getHospitalTree: {
         parameters: {
             query?: never;
@@ -25846,4 +26104,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 8b65df42bee7e45bba70eb0fd01f978e6b9af45df11b36153d662ad1aa429bcc
+// openapi snapshot sha256: 687eb519e7222522e1a204218ca656b46d9dc093c1b3667e34158ca9c77939fb

@@ -128,3 +128,8 @@ interface IcuCriticalAlertRepository : JpaRepository<IcuCriticalAlert, UUID> {
     @Param("hid") hid: UUID?,
   ): List<IcuCriticalAlert>
 }
+
+// 04.05 severity scores.
+interface IcuSeverityScoreRepository : org.springframework.data.jpa.repository.JpaRepository<com.squamed.core.icu.domain.IcuSeverityScore, java.util.UUID> {
+  fun findByPatientIdOrderByRecordedAtDesc(patientId: java.util.UUID): List<com.squamed.core.icu.domain.IcuSeverityScore>
+}

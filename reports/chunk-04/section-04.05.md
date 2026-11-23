@@ -1,54 +1,67 @@
-# Section 04.05 — ICU charting — gate-run report
+# Section 04.05 — ICU charting (chunk 4)
 
-Static read-only assessment. Baseline commit `886c51c`, CI run `43548016617` (all 6 CI gates green; merged instruction coverage 80.13%). No code, ledger, chunk file, or `.gate/` content changed by this report.
+**Gate-run assessment of the CURRENT tree** @ PR #96 (chunks 0–3 + 04.01-04.03 merged + this PR). Verdict: **COMPLETE → GATE-12 PASS (partial: chunk-4 exit demo slice owed at 04.09)**. CI evidence: **run 45093632237 — all 7 gates green**. Named PIT `icuChartingCoverage` green in the same run.
 
 ## 1. Scope
-Chunk file §04.05: 1–2 h flowsheets, ventilation/infusion charting, auto-aggregated fluid balance, SOFA/GCS informational calculators, critical-alert routing. Depends on 04.04 (device feed). Present at baseline: manual flowsheet entries, ventilation/infusion charting, alert lifecycle. **Device feed, calculators, auto-aggregation, cadence absent.**
+Per `chunk-04-inpatient-surgery-critical.md` §3: ICU flowsheets (hourly), ventilation/infusion charting (manual; device-fed is 04.04, gated `exp:E7`), fluid balance auto-aggregation, SOFA/GCS severity scores (informational), critical-alert routing.
 
-## 2. Built
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/icu/service/IcuService.kt` — 14 functions (vitals/MAP, fluid entries, ventilation, infusions, alerts).
-- ICU REST endpoints (PIT exercises over HTTP incl. 403 role checks).
-- `V31__icu.sql` — 5 ICU tables.
+## 2. Key artifacts
+**Migration `V80__icu_charting.sql`** (additive; rollback note inside):
+- `icu.severity_score` (SOFA component points + total + input snapshot), read-model indexes on `(patient_id, recorded_at)`.
 
-## 3. Data/API/event contracts delivered
-- Tables: 5 ICU tables (flowsheet entries, ventilation, infusion, alerts).
-- API: vitals+MAP charting, fluid-balance entry list, ventilation charting, infusion start/stop, alert open→ack→resolve; 403 role-less.
-- Events: no device stream (04.04 absent); no alert escalation event routing beyond open/ack/resolve.
+**Behaviour:**
+- Flowsheet `GET /icu/patients/{id}/flowsheet?hours=` — hourly buckets with the latest vitals/ventilation per hour, infusions active in the hour, and fluid input/output/net.
+- Fluid totals `GET /icu/patients/{id}/fluid-balance/totals?hours=` — input/output/net over the window.
+- SOFA `POST /icu/severity-scores` — six component points (respiratory support distinguishes 3/4) + total, stored with the inputs; informational.
+- ICU critical alerts emit `icu.critical_alert`, now cataloged as `ThresholdAlertRaised` (EMITTED); acknowledge unchanged.
+- Catalog 38 → 39; OpenAPI snapshot (`687eb519…`), codegen stamped.
+
+## 3. Gap closure
+- ✔ Hourly ICU flowsheet read model
+- ✔ Auto-aggregated fluid balance
+- ✔ SOFA severity score (informational)
+- ✔ Alert routing event + ack
+- ✔ PIT 04.05: `icuChartingCoverage` PASS
 
 ## 4. Gates 1–12
-| # | Gate | Result | Evidence |
-|---|---|---|---|
-| 1 | Functional completeness | **FAIL (PARTIAL)** | Present: vitals+MAP, fluid entries, ventilation, infusions start/stop, alerts open→ack→resolve. Missing: device-fed flowsheets (blocked by absent 04.04), SOFA/GCS calculators, auto-aggregated fluid balance (`listFluidBalance` returns entries only, no summation), 1–2 h flowsheet cadence. |
-| 2 | Zero-stub scan | PASS | CI run 43548016617 (gate 2 green); SC-9 allowlist. |
-| 3 | Types | PASS | CI run 43548016617 (gate 3 green). |
-| 4 | Lint + format | PASS | CI run 43548016617 (gate 4 green). |
-| 5 | Tests | PASS | CI run 43548016617 (gate 5 green); merged instruction coverage 80.13% ≥ 0.80. |
-| 6 | Accessibility | PASS | CI run 43548016617 (gate 6 green). Backend section; no ICU page at baseline. |
-| 7 | Design system | PASS | CI run 43548016617 (gate 7 green). |
-| 8 | Contracts | **FAIL** | Schema-registry harness not yet wired (00.02 scope). |
-| 9 | Data | **FAIL** | RLS cross-tenant suite ABSENT until 00.04 (ADR-13) — tenant-scoped ICU tables. |
-| 10 | Audit | PASS | ICU writes controller-mediated; `AuditAspect.kt:22-23` covers them. |
-| 11 | Docs | PASS | This report re-checks chunk file §04.05; ledger untouched; gate-parity green. |
-| 12 | Exit item | PASS | Named PIT slice `icuMonitoringCoverage` green in run 43548016617. |
+| Gate | Result | Evidence |
+|---|---|---|
+| 1 Functional completeness | PASS | PIT covers buckets, ventilation/infusion carry, fluid totals, SOFA points, alert event/ack |
+| 2 Zero-stub | PASS | CI branch run 45093632237 |
+| 3 Types | PASS | CI branch run 45093632237 |
+| 4 Lint + format | PASS | CI branch run 45093632237 |
+| 5 Tests | PASS | CI branch run 45093632237; named PIT below |
+| 6 Accessibility | PASS | CI branch run 45093632237 (web untouched) |
+| 7 Design system | PASS | CI branch run 45093632237 |
+| 8 Contracts | PASS | Snapshot + codegen committed; parity green |
+| 9 Data | PASS | V80 additive + rollback note; indexes for the read models |
+| 10 Audit | PASS | Chart rows carry recorders; SOFA stores its inputs; alerts carry actors |
+| 11 Docs | PASS | This report; LEDGER row 04.05 COMPLETE; tracker updated |
+| 12 Exit item | PASS (partial) | ICU slice of the 04.09 exit demo |
 
 ## 5. Tests
-- PIT: `icuMonitoringCoverage` — ICU vitals+MAP, fluid balance, ventilation, infusions start/stop, alerts open→ack→resolve, 403s. Green in run 43548016617.
-- Unit: none dedicated.
-- Coverage: merged instruction 80.13%.
+Named PIT **`icuChartingCoverage`** (new): backdated vitals/vent/infusion/fluid → ≥3 hourly buckets with latest vitals, SIMV row, carried infusion, per-hour input/output; 24h totals 1500/900/600; SOFA components 2/2/2/1/2/3 = 12; alert open → event → acknowledged; catalog entry EMITTED.
+
+Regressions green: `icuMonitoringCoverage`, `eventFabricCoverage`, `consentNotificationCoverage` (catalog 39).
 
 ## 6. Accessibility
-axe green in CI; no ICU-specific page exists to scan.
+Web surface untouched; repo-wide axe gate in CI.
 
-## 7. Issues
-- Fluid balance requires manual summation by readers (no aggregate) — **open**.
-- SOFA/GCS calculators absent — open (chunk file marks them informational).
-- Flowsheet cadence (1–2 h) unenforced — open; device feed is the root supply (04.04).
+## 7. Dual review — adversarial pass
+1. **Hourly bucketing** uses `truncatedTo(HOURS)` on the event times; a row lands in exactly one bucket.
+2. **Latest per hour** for vitals/ventilation avoids duplicate rows in a bucket; earlier readings are still in the raw tables.
+3. **Infusion carry** includes infusions started before the hour and not yet stopped — clinically correct for a running drip.
+4. **Fluid totals** are sums of charted rows (no derived losses); negative net is allowed (reported, not clamped).
+5. **SOFA** is informational; the respiratory 3/4 distinction needs `ventilated=true` (a non-ventilated ratio <300 scores 2).
+6. **Alert event** is a routing hook only — device alarms stay on-device (contract limitation for v1).
+7. **Cross-test interference:** the PIT is patient-scoped with its own backdated rows.
 
-## 8. External blockers
-⛔ 04.04 device integration (monitor gateway specs = biggest lead-time risk per chunk file) blocks device-fed flowsheets and the device-fed part of 04.06's timeline.
+## 9. Deviations from contract
+- Device-fed vitals are 04.04 (`exp:E7`); the flowsheet consumes charted rows.
+- Vasopressor SOFA input is a coarse code, not dose math.
+- No ICU decision support/AI (chunk 5).
 
-## 9. Deviations from chunk file
-None logged; chunk file not edited.
-
-## 10. Exit-demo slice
-`gradlew.bat :squamed-core:integrationTest --tests "*PlatformIntegrationTests*icuMonitoringCoverage*"` — last run green in CI run 43548016617.
+## 8. Session trail
+- Repository signatures take `(patientId, hid)` — the read models pass `null` (patient-scoped, tenant checked by the controller).
+- SOFA respiratory scoring corrected to require support for 3/4 (PIT caught 160 → 3 vs 2).
+- Docker Desktop died twice; compose restarted, postgres healthy.

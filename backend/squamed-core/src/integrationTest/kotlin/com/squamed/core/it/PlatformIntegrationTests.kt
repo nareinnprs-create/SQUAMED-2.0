@@ -6127,6 +6127,18 @@ class PlatformIntegrationTests {
     @org.springframework.beans.factory.annotation.Autowired
     private lateinit var chargeCaptureService: com.squamed.core.billing.service.ChargeCaptureService
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var icuVitalsRepository: com.squamed.core.icu.repository.IcuVitalsEntryRepository
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var icuFluidRepository: com.squamed.core.icu.repository.IcuFluidBalanceRepository
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var icuVentilationRepository: com.squamed.core.icu.repository.IcuVentilationRecordRepository
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var icuInfusionRepository: com.squamed.core.icu.repository.IcuInfusionRecordRepository
+
     @Test
     fun medicationSafetyEvalCoverage() {
       val token = adminToken()
@@ -8703,6 +8715,161 @@ class PlatformIntegrationTests {
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog", token = token))
       assertTrue(catalog.any { it["name"].asText() == "CarePlanUpdated" && it["status"].asText() == "EMITTED" }, "CarePlanUpdated cataloged")
     }
+
+    @Test
+    fun icuChartingCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Icu",
+              "lastName" to "Chart$s",
+              "gender" to "male",
+              "dateOfBirth" to "1950-10-10",
+              "phone" to "66$s".take(11),
+              "qid" to "IC$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+            ),
+            token,
+          ),
+        )["patient"]["id"].asText()
+
+      // Backdated chart rows so the flowsheet has multiple hourly buckets.
+      val base = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.HOURS)
+
+      fun vitals(
+        hourOffset: Long,
+        hr: Int,
+      ) = icuVitalsRepository.save(
+        com.squamed.core.icu.domain.IcuVitalsEntry(
+          hospitalId = java.util.UUID.fromString(hospitalId),
+          patientId = java.util.UUID.fromString(patientId),
+          heartRate = hr,
+          systolic = 118,
+          diastolic = 72,
+          oxygenSaturation = 97,
+          recordedAt = base.minusSeconds(hourOffset * 3600).plusSeconds(600),
+        ),
+      )
+      vitals(2, 88)
+      vitals(1, 102)
+      vitals(0, 96)
+      icuVentilationRepository.save(
+        com.squamed.core.icu.domain.IcuVentilationRecord(
+          hospitalId = java.util.UUID.fromString(hospitalId),
+          patientId = java.util.UUID.fromString(patientId),
+          mode = "SIMV",
+          fio2Percent = 40,
+          peep = 6.0,
+          tidalVolumeMl = 480,
+          recordedAt = base.minusSeconds(3600).plusSeconds(900),
+        ),
+      )
+      icuInfusionRepository.save(
+        com.squamed.core.icu.domain.IcuInfusionRecord(
+          hospitalId = java.util.UUID.fromString(hospitalId),
+          patientId = java.util.UUID.fromString(patientId),
+          drugName = "Noradrenaline",
+          dose = "0.08 mcg/kg/min",
+          rateMlPerHour = 4.2,
+          route = "central",
+          startedAt = base.minusSeconds(3 * 3600),
+        ),
+      )
+      icuFluidRepository.save(
+        com.squamed.core.icu.domain.IcuFluidBalance(
+          hospitalId = java.util.UUID.fromString(hospitalId),
+          patientId = java.util.UUID.fromString(patientId),
+          inputMl = 1000.0,
+          outputMl = 600.0,
+          inputType = "crystalloid",
+          outputType = "urine",
+          balanceAt = base.minusSeconds(2 * 3600).plusSeconds(1200),
+        ),
+      )
+      icuFluidRepository.save(
+        com.squamed.core.icu.domain.IcuFluidBalance(
+          hospitalId = java.util.UUID.fromString(hospitalId),
+          patientId = java.util.UUID.fromString(patientId),
+          inputMl = 500.0,
+          outputMl = 300.0,
+          inputType = "crystalloid",
+          outputType = "urine",
+          balanceAt = base.minusSeconds(3600).plusSeconds(1500),
+        ),
+      )
+
+      // Flowsheet: hourly buckets newest first, latest vitals per hour, infusion carried, fluid per hour.
+      val flowsheet = `data`(api(HttpMethod.GET, "/api/v1/icu/patients/$patientId/flowsheet?hours=6", token = token))
+      assertTrue(flowsheet.size() >= 3, "three hourly buckets: $flowsheet")
+      assertEquals(96, flowsheet[0]["vitals"]["heartRate"].asInt(), "latest hour vitals")
+      assertTrue(flowsheet.any { it["ventilation"].asText() != "null" && it["ventilation"]["mode"].asText() == "SIMV" }, "ventilation row in the bucket")
+      assertTrue(flowsheet.any { it["infusions"].size() >= 1 }, "infusion carried into buckets")
+      assertEquals(500.0, flowsheet.first { it["hourStart"].asText() == base.minusSeconds(3600).toString() }["inputMl"].asDouble(), 1e-9, "hourly input")
+      assertEquals(300.0, flowsheet.first { it["hourStart"].asText() == base.minusSeconds(3600).toString() }["outputMl"].asDouble(), 1e-9, "hourly output")
+
+      // Fluid balance totals over 24h.
+      val totals = `data`(api(HttpMethod.GET, "/api/v1/icu/patients/$patientId/fluid-balance/totals?hours=24", token = token))
+      assertEquals(1500.0, totals["inputMl"].asDouble(), 1e-9, "24h input")
+      assertEquals(900.0, totals["outputMl"].asDouble(), 1e-9, "24h output")
+      assertEquals(600.0, totals["netMl"].asDouble(), 1e-9, "24h net")
+
+      // SOFA severity score (informational): 2+2+2+1+2+3 = 12.
+      val score =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/icu/severity-scores",
+            json(
+              "patientId" to patientId,
+              "hospitalId" to hospitalId,
+              "pao2" to 80.0,
+              "fio2" to 0.5,
+              "platelets" to 90.0,
+              "bilirubin" to 2.5,
+              "map" to 65,
+              "gcs" to 12,
+              "creatinine" to 3.6,
+            ),
+            token,
+          ),
+        )
+      assertEquals(2, score["respiration"].asInt(), "PaO2/FiO2 160 -> 2")
+      assertEquals(2, score["coagulation"].asInt(), "platelets 90 -> 2")
+      assertEquals(2, score["liver"].asInt(), "bilirubin 2.5 -> 2")
+      assertEquals(1, score["cardiovascular"].asInt(), "MAP 65 -> 1")
+      assertEquals(2, score["cns"].asInt(), "GCS 12 -> 2")
+      assertEquals(3, score["renal"].asInt(), "creatinine 3.6 -> 3")
+      assertEquals(12, score["total"].asInt(), "SOFA total")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/icu/patients/$patientId/severity-scores", token = token)).size(), "score listed")
+
+      // Critical alert routing: emitted + acknowledged.
+      val alert =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/icu/alerts",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "alertType" to "DESAT", "severity" to "critical", "message" to "SpO2 84% for 2 minutes"),
+            token,
+          ),
+        )
+      assertEquals("open", alert["status"].asText(), "alert open")
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      assertTrue(
+        outbox.any { it["eventType"].asText() == "icu.critical_alert" && it["envelope"].asText().contains(alert["id"].asText()) },
+        "ICU alert event emitted for routing",
+      )
+      val acked = `data`(api(HttpMethod.PATCH, "/api/v1/icu/alerts/${alert["id"].asText()}/acknowledge", json(), token))
+      assertEquals("acknowledged", acked["status"].asText(), "alert acknowledged")
+      val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog", token = token))
+      assertTrue(catalog.any { it["name"].asText() == "ThresholdAlertRaised" && it["status"].asText() == "EMITTED" }, "ThresholdAlertRaised cataloged")
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */
@@ -8842,12 +9009,12 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan (38 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert (39 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        38,
+        39,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan events: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert events: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
@@ -9470,12 +9637,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        38,
+        39,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")

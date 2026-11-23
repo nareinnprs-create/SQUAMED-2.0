@@ -9504,12 +9504,12 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank (42 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action drafts (46 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        42,
+        46,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank events: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action events: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
@@ -10132,12 +10132,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07 + 4 AI action 05.03).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        42,
+        46,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")
@@ -14566,6 +14566,164 @@ class PlatformIntegrationTests {
       assert2xx(local, "self-hosted model registered")
       val localId = `data`(local)["id"].asText()
       assert2xx(api(HttpMethod.DELETE, "/api/v1/ai/models/$localId", token = token), "self-hosted model removed")
+    }
+
+    @Test
+    fun aiCommandBarGroundingCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Cmd Bar $s", "code" to "CB-$s", "country" to "Qatar"),
+            token,
+          ),
+        )["id"].asText()
+
+      fun user(
+        role: String,
+        tag: String,
+      ): String {
+        val email = "$tag.cb.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "Cmd$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))[
+          "accessToken",
+        ].asText()
+      }
+      val govAdmin = user("SYSTEM_ADMIN", "cmdadmin")
+      val doctor = user("DOCTOR", "cmddoc")
+
+      // Grounding: record-backed answers carry citations.
+      val count = `data`(api(HttpMethod.POST, "/api/v1/ai/command", json("query" to "how many patients?"), govAdmin))
+      assertEquals("count", count["intent"].asText(), "count intent")
+      assertTrue(count["citations"].size() >= 1, "count answer cited: $count")
+      assertEquals("aggregate", count["citations"][0]["type"].asText(), "aggregate citation")
+      assertEquals("count.patients", count["citations"][0]["ref"].asText(), "count reference")
+      val analytics = `data`(api(HttpMethod.POST, "/api/v1/ai/command", json("query" to "revenue today"), govAdmin))
+      assertEquals("analytics.overview", analytics["citations"][0]["ref"].asText(), "analytics citation")
+
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Ground$s",
+              "lastName" to "Citation$s",
+              "gender" to "female",
+              "dateOfBirth" to "1980-04-04",
+              "phone" to "67$s".take(11),
+              "qid" to "CB$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]
+      val search = `data`(api(HttpMethod.POST, "/api/v1/ai/command", json("query" to "search patient Ground$s"), govAdmin))
+      assertEquals("search_patients", search["intent"].asText(), "search intent")
+      assertTrue(
+        search["citations"].any { it["type"].asText() == "patient" && it["ref"].asText() == patient["id"].asText() },
+        "patient citation points at the record: $search",
+      )
+
+      // Action drafting: propose -> approval executes through the platform API.
+      val draftTask =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/command",
+            json("query" to "create task Review discharge summary $s"),
+            govAdmin,
+          ),
+        )["draft"]
+      assertEquals("PROPOSED", draftTask["status"].asText(), "task draft proposed")
+      assertEquals("create_task", draftTask["actionType"].asText(), "task draft type")
+      val queue = `data`(api(HttpMethod.GET, "/api/v1/ai/actions?status=PROPOSED", token = govAdmin))
+      assertTrue(queue.any { it["id"].asText() == draftTask["id"].asText() }, "proposal on the approval queue")
+      val approved = `data`(api(HttpMethod.POST, "/api/v1/ai/actions/${draftTask["id"].asText()}/approve", json(), govAdmin))
+      assertEquals("APPROVED", approved["status"].asText(), "task draft approved")
+      assertFalse(approved["resultRef"].isNull, "approval result reference")
+      val tasks = `data`(api(HttpMethod.GET, "/api/v1/tasks", token = govAdmin))
+      assertTrue(tasks.any { it["title"].asText() == "Review discharge summary $s" }, "approved task created")
+
+      // Rejection path.
+      val draftReject = `data`(api(HttpMethod.POST, "/api/v1/ai/command", json("query" to "create task Reject me $s"), govAdmin))["draft"]
+      val rejected =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/actions/${draftReject["id"].asText()}/reject",
+            json("reason" to "not needed"),
+            govAdmin,
+          ),
+        )
+      assertEquals("REJECTED", rejected["status"].asText(), "draft rejected")
+      val approveRejected = api(HttpMethod.POST, "/api/v1/ai/actions/${draftReject["id"].asText()}/approve", json(), govAdmin)
+      assertEquals(409, approveRejected.status, "decided draft cannot be approved")
+      assertTrue(approveRejected.body.contains("AI_ACTION_NOT_PENDING"), "decision guard code")
+
+      // Discharge planning draft executes the IPD API on approval.
+      val ward =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json("name" to "Cmd Ward $s", "code" to "CW-$s", "type" to "general"),
+            token,
+          ),
+        )["id"].asText()
+      val bed =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+            json("label" to "CB-$s", "type" to "standard", "status" to "available", "wardId" to ward),
+            token,
+          ),
+        )["id"].asText()
+      val admission =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json("hospitalId" to hospitalId, "patientId" to patient["id"].asText(), "bedId" to bed, "admissionType" to "elective"),
+            token,
+          ),
+        )
+      val admissionId = admission["id"].asText()
+      val draftDischarge =
+        `data`(api(HttpMethod.POST, "/api/v1/ai/command", json("query" to "prepare discharge $admissionId"), govAdmin))["draft"]
+      assertEquals("plan_discharge", draftDischarge["actionType"].asText(), "discharge draft type")
+      val doctorApprove = api(HttpMethod.POST, "/api/v1/ai/actions/${draftDischarge["id"].asText()}/approve", json(), doctor)
+      assertEquals(403, doctorApprove.status, "approval needs the underlying permission: ${doctorApprove.body.take(200)}")
+      assertTrue(doctorApprove.body.contains("AI_SCOPE_DENIED"), "approval scope guard code")
+      assert2xx(api(HttpMethod.POST, "/api/v1/ai/actions/${draftDischarge["id"].asText()}/approve", json(), govAdmin), "discharge draft approved")
+      val planned = `data`(api(HttpMethod.GET, "/api/v1/admissions/$admissionId", token = token))
+      assertFalse(planned["expectedDischargeAt"].isNull, "expected discharge set by the approved draft")
+
+      // Event trail.
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      listOf("ai.action_proposed", "ai.action_approved", "ai.action_rejected").forEach { wire ->
+        assertTrue(outbox.any { it["eventType"].asText() == wire }, "$wire emitted")
+      }
     }
   }
 }

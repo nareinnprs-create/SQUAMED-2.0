@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
@@ -52,6 +53,15 @@ data class AiPolicyUpdateRequest(
   val dailyTokenCap: Int? = null,
 )
 
+data class AiActionDraftRequest(
+  val actionType: String,
+  val payload: Map<String, Any?> = emptyMap(),
+)
+
+data class AiActionRejectRequest(
+  val reason: String? = null,
+)
+
 data class AiAgentCreateRequest(
   val code: String,
   val name: String,
@@ -67,6 +77,7 @@ data class AiAgentCreateRequest(
 class AiController(
   private val aiService: AiService,
   private val governanceService: com.squamed.core.ai.service.AiGovernanceService,
+  private val actionService: com.squamed.core.ai.service.AiActionService,
   private val tenantResolver: TenantResolver,
 ) {
   @GetMapping("/models")
@@ -266,6 +277,46 @@ class AiController(
   fun usage(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<List<com.squamed.core.ai.service.AiUsageView>> = ApiResponse.ok(governanceService.usage(tenantResolver.pinOrDefault(principal, null)))
+
+  // 05.03 command-bar action drafts: propose -> human approve/reject -> governed platform call.
+  @PostMapping("/actions/draft")
+  @RequiresPermission("ai:chat:agent")
+  fun draftAction(
+    @RequestBody req: AiActionDraftRequest,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.ActionDraftView> =
+    ApiResponse.ok(
+      actionService.propose(
+        principal,
+        tenantResolver.pinOrDefault(principal, null),
+        req.actionType,
+        req.payload,
+      ),
+    )
+
+  @GetMapping("/actions")
+  @RequiresPermission("ai:chat:agent")
+  fun actions(
+    @RequestParam(name = "status", required = false) status: String?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<com.squamed.core.ai.service.ActionDraftView>> = ApiResponse.ok(actionService.list(tenantResolver.pinOrDefault(principal, null), status))
+
+  @PostMapping("/actions/{id}/approve")
+  @RequiresPermission("ai:chat:agent")
+  fun approveAction(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.ActionDraftView> =
+    ApiResponse.ok(actionService.approve(id, principal, tenantResolver.pinOrDefault(principal, null)))
+
+  @PostMapping("/actions/{id}/reject")
+  @RequiresPermission("ai:chat:agent")
+  fun rejectAction(
+    @PathVariable id: UUID,
+    @RequestBody req: AiActionRejectRequest,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.ActionDraftView> =
+    ApiResponse.ok(actionService.reject(id, principal, tenantResolver.pinOrDefault(principal, null), req.reason))
 
   private fun jsonEscape(s: String): String =
     s

@@ -94,6 +94,10 @@ object EventCatalog {
       Entry("CrossmatchRequested", "bloodbank.crossmatch_requested", Status.EMITTED, "Blood unit crossmatch requested for a patient (04.07)."),
       Entry("CrossmatchIssued", "bloodbank.crossmatch_issued", Status.EMITTED, "Compatible unit issued after the bedside two-identifier check (04.07)."),
       Entry("TransfusionReactionReported", "bloodbank.transfusion_reaction", Status.EMITTED, "Transfusion reaction reported with severity (04.07)."),
+      Entry("AiActionProposed", "ai.action_proposed", Status.EMITTED, "Command-bar action drafted for human approval (05.03)."),
+      Entry("AiActionApproved", "ai.action_approved", Status.EMITTED, "Drafted action approved and executed through the platform API (05.03)."),
+      Entry("AiActionRejected", "ai.action_rejected", Status.EMITTED, "Drafted action rejected by a human reviewer (05.03)."),
+      Entry("AiActionExpired", "ai.action_expired", Status.EMITTED, "Drafted action expired before a decision (05.03)."),
     )
 
   fun all(): List<Entry> = entries

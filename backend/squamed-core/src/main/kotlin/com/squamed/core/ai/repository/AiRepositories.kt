@@ -79,3 +79,18 @@ interface GatewayPolicyRepository : JpaRepository<com.squamed.core.ai.domain.Gat
 
   fun findByHospitalIdOrderByCapabilityAsc(hospitalId: UUID): List<com.squamed.core.ai.domain.GatewayPolicy>
 }
+
+// 05.03 command-bar action drafts.
+interface ActionDraftRepository : JpaRepository<com.squamed.core.ai.domain.ActionDraft, UUID> {
+  fun findByIdAndHospitalId(
+    id: UUID,
+    hospitalId: UUID,
+  ): com.squamed.core.ai.domain.ActionDraft?
+
+  fun findByHospitalIdAndStatusOrderByCreatedAtDesc(
+    hospitalId: UUID,
+    status: String,
+  ): List<com.squamed.core.ai.domain.ActionDraft>
+
+  fun findByHospitalIdOrderByCreatedAtDesc(hospitalId: UUID): List<com.squamed.core.ai.domain.ActionDraft>
+}

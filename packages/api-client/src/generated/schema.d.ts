@@ -3876,6 +3876,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/actions/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rejectAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/actions/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["approveAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/actions/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["draftAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admissions": {
         parameters: {
             query?: never;
@@ -6396,6 +6444,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["policies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["actions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -12138,12 +12202,34 @@ export interface components {
             query: string;
             agentCode?: string;
         };
+        ActionDraftView: {
+            /** Format: uuid */
+            id?: string;
+            actionType: string;
+            summary: string;
+            payload: components["schemas"]["JsonNode"];
+            status: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            decidedAt?: string;
+            /** Format: uuid */
+            decidedBy?: string;
+            resultRef?: string;
+        };
+        AiCitation: {
+            type: string;
+            ref: string;
+            label: string;
+        };
         AiCommandOutput: {
             intent: string;
             target?: string;
             detail?: string;
             message: string;
             suggestions: string[];
+            citations: components["schemas"]["AiCitation"][];
+            draft?: components["schemas"]["ActionDraftView"];
         };
         ApiResponseAiCommandOutput: {
             data?: components["schemas"]["AiCommandOutput"];
@@ -12192,6 +12278,22 @@ export interface components {
             /** Format: double */
             temperature?: number;
             enabled?: boolean;
+        };
+        AiActionRejectRequest: {
+            reason?: string;
+        };
+        ApiResponseActionDraftView: {
+            data?: components["schemas"]["ActionDraftView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        AiActionDraftRequest: {
+            actionType: string;
+            payload: {
+                [key: string]: unknown;
+            };
         };
         AdmissionCreateDto: {
             /** Format: uuid */
@@ -14134,6 +14236,13 @@ export interface components {
         };
         ApiResponseListAiUsageView: {
             data?: components["schemas"]["AiUsageView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListActionDraftView: {
+            data?: components["schemas"]["ActionDraftView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -22843,6 +22952,78 @@ export interface operations {
             };
         };
     };
+    rejectAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiActionRejectRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseActionDraftView"];
+                };
+            };
+        };
+    };
+    approveAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseActionDraftView"];
+                };
+            };
+        };
+    };
+    draftAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiActionDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseActionDraftView"];
+                };
+            };
+        };
+    };
     listAdmissions: {
         parameters: {
             query?: {
@@ -26504,6 +26685,28 @@ export interface operations {
             };
         };
     };
+    actions: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListActionDraftView"];
+                };
+            };
+        };
+    };
     getAdmission: {
         parameters: {
             query?: never;
@@ -26865,4 +27068,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: ebfa2520b8616881d192ac0546c35552067b48f792b9bed5e0aa40d3a6691bf2
+// openapi snapshot sha256: d5cdfda5501b3f7e2be25fc1a0341fbe4760bffe73028bd35957d95add02900f

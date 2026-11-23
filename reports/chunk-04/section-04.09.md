@@ -1,6 +1,6 @@
 # Section 04.09 — Chunk-4 exit (IPD, surgery & critical care)
 
-**Verdict: SECTION REVIEW** (never COMPLETE). CI evidence: **run PENDING — all 7 gates green** on the docs branch. Live demo evidence: `scripts/demo-04.09-chunk4-exit.ps1` → **47 passed, 0 failed** against the app on :8080 (2026-11-23). Section carries zero feature code by design: the exit item is the live scenario, the ward rollout runbook, this report and `reports/chunk-04/FINAL.md`.
+**Verdict: SECTION REVIEW** (never COMPLETE). CI evidence: **run 45174556148 — all 7 gates green** on the docs branch. Live demo evidence: `scripts/demo-04.09-chunk4-exit.ps1` → **47 passed, 0 failed** against the app on :8080 (2026-11-23). Section carries zero feature code by design: the exit item is the live scenario, the ward rollout runbook, this report and `reports/chunk-04/FINAL.md`.
 
 ## 1. Scope
 Per `chunk-04-inpatient-surgery-critical.md` §EXIT CRITERIA (L57), TESTS (L50-54), SAFETY (L42-48) and ROLLOUT/ROLLBACK (L59-60).
@@ -36,12 +36,12 @@ Script fixes found during the live run: triage view returns `esiLevel` (registra
 | Gate | Result | Evidence |
 |---|---|---|
 | 1 Functional completeness | PASS | 47/47 live scenario |
-| 2 Zero-stub | PASS | CI docs run PENDING |
-| 3 Types | PASS | CI docs run PENDING |
-| 4 Lint + format | PASS | CI docs run PENDING |
-| 5 Tests | PASS | CI docs run PENDING; chunk named PITs listed in FINAL §5 |
-| 6 Accessibility | PASS | CI docs run PENDING (no UI change) |
-| 7 Design system | PASS | CI docs run PENDING |
+| 2 Zero-stub | PASS | CI docs run 45174556148 |
+| 3 Types | PASS | CI docs run 45174556148 |
+| 4 Lint + format | PASS | CI docs run 45174556148 |
+| 5 Tests | PASS | CI docs run 45174556148; chunk named PITs listed in FINAL §5 |
+| 6 Accessibility | PASS | CI docs run 45174556148 (no UI change) |
+| 7 Design system | PASS | CI docs run 45174556148 |
 | 8 Contracts | PASS | No API change; snapshot `33e24f36…` unchanged |
 | 9 Data | PASS | No migration in this section |
 | 10 Audit | PASS | Demo asserts the audited paths (barcode blocks, med-rec task, housekeeping task, blood-bank issue flags) |

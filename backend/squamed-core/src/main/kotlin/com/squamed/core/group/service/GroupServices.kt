@@ -347,8 +347,9 @@ class GroupShareService(
 
   // The access gate is a denial, not an argument error: outside hospitals are 403.
   private fun groupForAccess(hospitalId: UUID): HospitalGroup {
-    val hospital = hospitalRepository.findById(hospitalId).orElse(null)
-      ?: throw AccessDeniedException("GROUP_ACCESS_DENIED: hospital not found")
+    val hospital =
+      hospitalRepository.findById(hospitalId).orElse(null)
+        ?: throw AccessDeniedException("GROUP_ACCESS_DENIED: hospital not found")
     val groupId = hospital.groupId ?: throw AccessDeniedException("GROUP_ACCESS_DENIED: hospital not in group")
     return groupRepository.findById(groupId).orElse(null)
       ?: throw AccessDeniedException("GROUP_ACCESS_DENIED: group not found")

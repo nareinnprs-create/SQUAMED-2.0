@@ -65,6 +65,9 @@ interface ImplantRecordRepository : JpaRepository<ImplantRecord, UUID> {
 
 interface PreOpChecklistRepository : JpaRepository<PreOpChecklist, UUID> {
   fun findBySurgeryScheduleId(surgeryScheduleId: UUID): List<PreOpChecklist>
+
+  // 04.06 WHO staged checklist ordered by creation.
+  fun findBySurgeryScheduleIdOrderByCreatedAtAsc(surgeryScheduleId: UUID): List<PreOpChecklist>
 }
 
 interface IntraOpRecordRepository : JpaRepository<IntraOpRecord, UUID> {
@@ -73,4 +76,10 @@ interface IntraOpRecordRepository : JpaRepository<IntraOpRecord, UUID> {
 
 interface PostOpRecordRepository : JpaRepository<PostOpRecord, UUID> {
   fun findFirstBySurgeryScheduleIdOrderByRecordedAtDesc(surgeryScheduleId: UUID): PostOpRecord?
+}
+
+// 04.06 consumables.
+interface SurgicalConsumableRepository :
+  org.springframework.data.jpa.repository.JpaRepository<com.squamed.core.surgery.domain.SurgicalConsumable, java.util.UUID> {
+  fun findBySurgeryScheduleIdOrderByRecordedAtDesc(surgeryScheduleId: java.util.UUID): List<com.squamed.core.surgery.domain.SurgicalConsumable>
 }

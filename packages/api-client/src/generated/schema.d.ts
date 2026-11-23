@@ -564,6 +564,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/surgery/schedules/{id}/ssi-flag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["flagSsi"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/surgery/schedules/{id}/post-op": {
         parameters: {
             query?: never;
@@ -644,6 +660,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/surgery/schedules/{id}/consumables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listConsumables"];
+        put?: never;
+        post: operations["addConsumable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/surgery/schedules/{id}/checklist": {
         parameters: {
             query?: never;
@@ -654,6 +686,22 @@ export interface paths {
         get: operations["listChecklist"];
         put?: never;
         post: operations["addChecklistItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/surgery/schedules/{id}/checklist/who": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["seedWhoChecklist"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7420,6 +7468,8 @@ export interface components {
             specialty?: string;
             /** Format: uuid */
             surgeonId?: string;
+            /** Format: uuid */
+            consentId?: string;
             /** Format: date-time */
             scheduledStartAt?: string;
             /** Format: date-time */
@@ -7448,6 +7498,8 @@ export interface components {
             specialty?: string;
             /** Format: uuid */
             surgeonId?: string;
+            /** Format: uuid */
+            consentId?: string;
             status: string;
             /** Format: date-time */
             scheduledStartAt?: string;
@@ -7485,6 +7537,9 @@ export interface components {
             role: string;
             /** Format: date-time */
             joinedAt?: string;
+        };
+        SsiFlagDto: {
+            note: string;
         };
         PostOpCreateDto: {
             patientCondition?: string;
@@ -7635,6 +7690,33 @@ export interface components {
             implantedBy?: string;
             notes?: string;
         };
+        ConsumableRequestDto: {
+            name: string;
+            /** Format: int32 */
+            quantity: number;
+            unitPriceQar?: number;
+        };
+        ApiResponseConsumableView: {
+            data?: components["schemas"]["ConsumableView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ConsumableView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            surgeryScheduleId: string;
+            name: string;
+            /** Format: int32 */
+            quantity: number;
+            unitPriceQar?: number;
+            /** Format: uuid */
+            chargeEventId?: string;
+            /** Format: date-time */
+            recordedAt?: string;
+        };
         ChecklistCreateDto: {
             checklistItem?: string;
             category?: string;
@@ -7660,6 +7742,20 @@ export interface components {
             checkedBy?: string;
             /** Format: date-time */
             checkedAt?: string;
+        };
+        ApiResponseWhoChecklistView: {
+            data?: components["schemas"]["WhoChecklistView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        WhoChecklistView: {
+            /** Format: uuid */
+            scheduleId: string;
+            signIn: components["schemas"]["PreOpChecklistView"][];
+            timeOut: components["schemas"]["PreOpChecklistView"][];
+            signOut: components["schemas"]["PreOpChecklistView"][];
         };
         OtRoomCreateDto: {
             /** Format: uuid */
@@ -12174,6 +12270,13 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListConsumableView: {
+            data?: components["schemas"]["ConsumableView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListPreOpChecklistView: {
             data?: components["schemas"]["PreOpChecklistView"][];
             success: boolean;
@@ -14989,6 +15092,32 @@ export interface operations {
             };
         };
     };
+    flagSsi: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SsiFlagDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
     getPostOp: {
         parameters: {
             query?: never;
@@ -15207,6 +15336,54 @@ export interface operations {
             };
         };
     };
+    listConsumables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListConsumableView"];
+                };
+            };
+        };
+    };
+    addConsumable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsumableRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConsumableView"];
+                };
+            };
+        };
+    };
     listChecklist: {
         parameters: {
             query?: never;
@@ -15251,6 +15428,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponsePreOpChecklistView"];
+                };
+            };
+        };
+    };
+    seedWhoChecklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseWhoChecklistView"];
                 };
             };
         };
@@ -26104,4 +26303,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 687eb519e7222522e1a204218ca656b46d9dc093c1b3667e34158ca9c77939fb
+// openapi snapshot sha256: 34b977bc821fd919dcd6126e8764ca8f78fd8d0423f9499f363641de9fa6eed2

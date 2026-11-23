@@ -17,6 +17,9 @@ data class NursingAssessmentCreateDto(
   val assessmentType: String? = null,
   val findings: String? = null,
   val riskLevel: String? = null,
+  // 04.03: optional configurable form + captured field values.
+  val templateCode: String? = null,
+  val fields: Map<String, String> = emptyMap(),
 )
 
 data class NursingCarePlanCreateDto(
@@ -26,6 +29,7 @@ data class NursingCarePlanCreateDto(
   val title: String? = null,
   val goal: String? = null,
   val interventions: String? = null,
+  val problem: String? = null,
 )
 
 data class NursingCarePlanStatusDto(
@@ -86,6 +90,8 @@ data class RiskAssessmentCreateDto(
   val riskType: String? = null,
   val score: Int? = null,
   val level: String? = null,
+  // 04.03: derive the level from a configured scale.
+  val scaleCode: String? = null,
 )
 
 data class NursingAssessmentView(
@@ -98,6 +104,8 @@ data class NursingAssessmentView(
   val riskLevel: String?,
   val assessedBy: UUID?,
   val assessedAt: Instant?,
+  val templateCode: String?,
+  val fields: Map<String, String>,
 ) {
   companion object {
     fun from(entity: NursingAssessment) =
@@ -111,6 +119,18 @@ data class NursingAssessmentView(
         riskLevel = entity.riskLevel,
         assessedBy = entity.assessedBy,
         assessedAt = entity.assessedAt,
+        templateCode = entity.templateCode,
+        fields =
+          entity.fieldsJson?.let { raw ->
+            val node =
+              com.fasterxml.jackson.databind
+                .ObjectMapper()
+                .readTree(raw)
+            node
+              .fieldNames()
+              .asSequence()
+              .associateWith { node[it].asText() }
+          } ?: emptyMap(),
       )
   }
 }
@@ -126,6 +146,8 @@ data class NursingCarePlanView(
   val status: String,
   val completedAt: Instant?,
   val createdAt: Instant?,
+  val problem: String?,
+  val templateCode: String?,
 ) {
   companion object {
     fun from(entity: NursingCarePlan) =
@@ -140,6 +162,8 @@ data class NursingCarePlanView(
         status = entity.status,
         completedAt = entity.completedAt,
         createdAt = entity.createdAt,
+        problem = entity.problem,
+        templateCode = entity.templateCode,
       )
   }
 }
@@ -292,6 +316,7 @@ data class RiskAssessmentView(
   val level: String?,
   val assessedBy: UUID?,
   val assessedAt: Instant?,
+  val scaleCode: String?,
 ) {
   companion object {
     fun from(entity: RiskAssessment) =
@@ -305,6 +330,7 @@ data class RiskAssessmentView(
         level = entity.level,
         assessedBy = entity.assessedBy,
         assessedAt = entity.assessedAt,
+        scaleCode = entity.scaleCode,
       )
   }
 }
@@ -330,3 +356,67 @@ data class MarOmitDto(
   val reason: String? = null,
   val notifyDoctor: Boolean? = null,
 )
+
+// 04.03 assessments + care plans + risk scores.
+data class AssessmentTemplateDto(
+  val id: UUID? = null,
+  val hospitalId: UUID? = null,
+  val code: String,
+  val name: String,
+  val fields: List<String> = emptyList(),
+  val isActive: Boolean = true,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.nursing.domain.AssessmentTemplate) =
+      AssessmentTemplateDto(
+        entity.id,
+        entity.hospitalId,
+        entity.code,
+        entity.name,
+        com.fasterxml.jackson.databind
+          .ObjectMapper()
+          .readTree(entity.fieldsJson)
+          .map { it.asText() },
+        entity.isActive,
+      )
+  }
+}
+
+data class CarePlanTemplateDto(
+  val id: UUID? = null,
+  val hospitalId: UUID? = null,
+  val code: String,
+  val name: String,
+  val problem: String,
+  val goal: String? = null,
+  val interventions: String? = null,
+  val isActive: Boolean = true,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.nursing.domain.CarePlanTemplate) =
+      CarePlanTemplateDto(entity.id, entity.hospitalId, entity.code, entity.name, entity.problem, entity.goal, entity.interventions, entity.isActive)
+  }
+}
+
+data class CarePlanApplyDto(
+  val patientId: UUID,
+  val templateCode: String,
+  val hospitalId: UUID? = null,
+  val admissionId: UUID? = null,
+)
+
+data class RiskScaleDto(
+  val id: UUID? = null,
+  val hospitalId: UUID? = null,
+  val code: String,
+  val name: String,
+  val minScore: Int = 0,
+  val lowMax: Int,
+  val moderateMax: Int,
+  val isActive: Boolean = true,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.nursing.domain.RiskScale) =
+      RiskScaleDto(entity.id, entity.hospitalId, entity.code, entity.name, entity.minScore, entity.lowMax, entity.moderateMax, entity.isActive)
+  }
+}

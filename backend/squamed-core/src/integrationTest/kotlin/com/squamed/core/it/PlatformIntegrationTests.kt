@@ -8517,6 +8517,192 @@ class PlatformIntegrationTests {
         assertTrue(catalog.any { it["name"].asText() == name && it["status"].asText() == "EMITTED" }, "$name cataloged EMITTED")
       }
     }
+
+    @Test
+    fun nursingAssessmentsCareplansRisksCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Nursing Forms $s", "code" to "NF-$s", "country" to "Qatar"),
+            token,
+          ),
+        )["id"].asText()
+      val nurseEmail = "nurse.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to nurseEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Nur",
+            "lastName" to "Forms$s",
+            "roles" to listOf("NURSE"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register nurse",
+      )
+      val nurse = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to nurseEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Forms",
+              "lastName" to "Coverage$s",
+              "gender" to "female",
+              "dateOfBirth" to "1948-08-08",
+              "phone" to "67$s".take(11),
+              "qid" to "NF$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]["id"].asText()
+
+      // Configurable assessment form: required fields enforced.
+      val templateCode = "ADM-$s"
+      val template =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/assessment-templates",
+            json("hospitalId" to hospitalId, "code" to templateCode, "name" to "Admission assessment", "fields" to listOf("pain", "mobility")),
+            nurse,
+          ),
+        )
+      assertEquals(listOf("pain", "mobility"), template["fields"].map { it.asText() }, "template fields stored")
+      assert2xx(api(HttpMethod.GET, "/api/v1/nursing/assessment-templates", token = nurse), "templates listed")
+      val assessment =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/assessments",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "assessmentType" to "admission",
+              "templateCode" to templateCode,
+              "fields" to mapOf("pain" to "3/10", "mobility" to "assisted"),
+            ),
+            nurse,
+          ),
+        )
+      assertEquals("3/10", assessment["fields"]["pain"].asText(), "captured field values echoed")
+      assertEquals(templateCode, assessment["templateCode"].asText(), "template provenance")
+      val missingField =
+        api(
+          HttpMethod.POST,
+          "/api/v1/nursing/assessments",
+          json(
+            "hospitalId" to hospitalId,
+            "patientId" to patientId,
+            "assessmentType" to "admission",
+            "templateCode" to templateCode,
+            "fields" to mapOf("pain" to "2/10"),
+          ),
+          nurse,
+        )
+      assert4xx(missingField, "missing required field rejected")
+      assertTrue(missingField.body.contains("ASSESSMENT_FIELD_REQUIRED"), "field guard code")
+      val unknownTemplate =
+        api(
+          HttpMethod.POST,
+          "/api/v1/nursing/assessments",
+          json("hospitalId" to hospitalId, "patientId" to patientId, "assessmentType" to "admission", "templateCode" to "NOPE"),
+          nurse,
+        )
+      assert4xx(unknownTemplate, "unknown template rejected")
+      assertTrue(unknownTemplate.body.contains("ASSESSMENT_TEMPLATE_NOT_FOUND"), "template guard code")
+
+      // Care-plan template: problem -> intervention -> goal applied to the patient.
+      val planTemplateCode = "FALLS-$s"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/nursing/careplan-templates",
+          json(
+            "hospitalId" to hospitalId,
+            "code" to planTemplateCode,
+            "name" to "Falls prevention",
+            "problem" to "Risk of falls",
+            "goal" to "No falls during admission",
+            "interventions" to "Bed low, call bell in reach, hourly rounding",
+          ),
+          nurse,
+        ),
+        "care-plan template stored",
+      )
+      assert2xx(api(HttpMethod.GET, "/api/v1/nursing/careplan-templates", token = nurse), "care-plan templates listed")
+      val plan =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/careplans/apply",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "templateCode" to planTemplateCode),
+            nurse,
+          ),
+        )
+      assertEquals("Risk of falls", plan["problem"].asText(), "problem carried from the template")
+      assertEquals("active", plan["status"].asText(), "applied plan active")
+      assertEquals(planTemplateCode, plan["templateCode"].asText(), "template provenance")
+      val completed = `data`(api(HttpMethod.PATCH, "/api/v1/nursing/careplans/${plan["id"].asText()}/status", json("status" to "completed"), nurse))
+      assertEquals("completed", completed["status"].asText(), "plan completed")
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      assertTrue(
+        outbox.any { it["eventType"].asText() == "nursing.careplan_updated" && it["envelope"].asText().contains(plan["id"].asText()) },
+        "CarePlanUpdated emitted",
+      )
+
+      // Configurable risk scale derives the level from the score.
+      val scaleCode = "FALLS-SCALE-$s"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/nursing/risk-scales",
+          json("hospitalId" to hospitalId, "code" to scaleCode, "name" to "Falls scale", "minScore" to 0, "lowMax" to 2, "moderateMax" to 5),
+          nurse,
+        ),
+        "risk scale stored",
+      )
+      assert2xx(api(HttpMethod.GET, "/api/v1/nursing/risk-scales", token = nurse), "risk scales listed")
+
+      fun risk(score: Int) =
+        api(
+          HttpMethod.POST,
+          "/api/v1/nursing/risk-assessments",
+          json("hospitalId" to hospitalId, "patientId" to patientId, "riskType" to "falls", "score" to score, "scaleCode" to scaleCode),
+          nurse,
+        )
+      assertEquals("low", `data`(risk(1))["level"].asText(), "score 1 low")
+      assertEquals("moderate", `data`(risk(4))["level"].asText(), "score 4 moderate")
+      assertEquals("high", `data`(risk(8))["level"].asText(), "score 8 high")
+      val outOfRange = risk(-1)
+      assert4xx(outOfRange, "score below the scale minimum rejected")
+      assertTrue(outOfRange.body.contains("RISK_SCORE_OUT_OF_RANGE"), "scale range guard")
+      val legacy =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/nursing/risk-assessments",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "riskType" to "pressure_ulcer", "score" to 12, "level" to "high"),
+            nurse,
+          ),
+        )
+      assertEquals("high", legacy["level"].asText(), "manual level kept when no scale is used")
+      assertTrue(legacy["scaleCode"].isNull, "no scale recorded on the manual path")
+
+      val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog", token = token))
+      assertTrue(catalog.any { it["name"].asText() == "CarePlanUpdated" && it["status"].asText() == "EMITTED" }, "CarePlanUpdated cataloged")
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */
@@ -8656,12 +8842,12 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR (37 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan (38 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        37,
+        38,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR events: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan events: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
@@ -9284,12 +9470,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        37,
+        38,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")

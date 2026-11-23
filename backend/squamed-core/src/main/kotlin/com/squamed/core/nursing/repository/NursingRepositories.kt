@@ -159,3 +159,32 @@ interface RiskAssessmentRepository : JpaRepository<RiskAssessment, UUID> {
     @Param("hid") hid: UUID?,
   ): List<RiskAssessment>
 }
+
+// 04.03 configurable templates + scales.
+interface AssessmentTemplateRepository :
+  org.springframework.data.jpa.repository.JpaRepository<com.squamed.core.nursing.domain.AssessmentTemplate, java.util.UUID> {
+  fun findByHospitalIdAndCode(
+    hospitalId: java.util.UUID,
+    code: String,
+  ): com.squamed.core.nursing.domain.AssessmentTemplate?
+
+  fun findByHospitalIdOrderByCode(hospitalId: java.util.UUID): List<com.squamed.core.nursing.domain.AssessmentTemplate>
+}
+
+interface CarePlanTemplateRepository : org.springframework.data.jpa.repository.JpaRepository<com.squamed.core.nursing.domain.CarePlanTemplate, java.util.UUID> {
+  fun findByHospitalIdAndCode(
+    hospitalId: java.util.UUID,
+    code: String,
+  ): com.squamed.core.nursing.domain.CarePlanTemplate?
+
+  fun findByHospitalIdOrderByCode(hospitalId: java.util.UUID): List<com.squamed.core.nursing.domain.CarePlanTemplate>
+}
+
+interface RiskScaleRepository : org.springframework.data.jpa.repository.JpaRepository<com.squamed.core.nursing.domain.RiskScale, java.util.UUID> {
+  fun findByHospitalIdAndCode(
+    hospitalId: java.util.UUID,
+    code: String,
+  ): com.squamed.core.nursing.domain.RiskScale?
+
+  fun findByHospitalIdOrderByCode(hospitalId: java.util.UUID): List<com.squamed.core.nursing.domain.RiskScale>
+}

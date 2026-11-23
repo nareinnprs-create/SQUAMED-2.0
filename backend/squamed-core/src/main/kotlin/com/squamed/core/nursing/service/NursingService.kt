@@ -4,6 +4,9 @@ import com.squamed.core.encounter.repository.PrescriptionRepository
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.masterdata.repository.DrugRepository
+import com.squamed.core.nursing.api.AssessmentTemplateDto
+import com.squamed.core.nursing.api.CarePlanApplyDto
+import com.squamed.core.nursing.api.CarePlanTemplateDto
 import com.squamed.core.nursing.api.MarAdministerDto
 import com.squamed.core.nursing.api.MarCreateDto
 import com.squamed.core.nursing.api.MarOmitDto
@@ -21,21 +24,28 @@ import com.squamed.core.nursing.api.NursingNoteCreateDto
 import com.squamed.core.nursing.api.NursingNoteView
 import com.squamed.core.nursing.api.RiskAssessmentCreateDto
 import com.squamed.core.nursing.api.RiskAssessmentView
+import com.squamed.core.nursing.api.RiskScaleDto
 import com.squamed.core.nursing.api.VitalsCreateDto
 import com.squamed.core.nursing.api.VitalsView
+import com.squamed.core.nursing.domain.AssessmentTemplate
+import com.squamed.core.nursing.domain.CarePlanTemplate
 import com.squamed.core.nursing.domain.MedicationAdministrationRecord
 import com.squamed.core.nursing.domain.NursingAssessment
 import com.squamed.core.nursing.domain.NursingCarePlan
 import com.squamed.core.nursing.domain.NursingHandover
 import com.squamed.core.nursing.domain.NursingNote
 import com.squamed.core.nursing.domain.RiskAssessment
+import com.squamed.core.nursing.domain.RiskScale
 import com.squamed.core.nursing.domain.VitalsEntry
+import com.squamed.core.nursing.repository.AssessmentTemplateRepository
+import com.squamed.core.nursing.repository.CarePlanTemplateRepository
 import com.squamed.core.nursing.repository.MedicationAdministrationRecordRepository
 import com.squamed.core.nursing.repository.NursingAssessmentRepository
 import com.squamed.core.nursing.repository.NursingCarePlanRepository
 import com.squamed.core.nursing.repository.NursingHandoverRepository
 import com.squamed.core.nursing.repository.NursingNoteRepository
 import com.squamed.core.nursing.repository.RiskAssessmentRepository
+import com.squamed.core.nursing.repository.RiskScaleRepository
 import com.squamed.core.nursing.repository.VitalsEntryRepository
 import com.squamed.core.task.api.TaskCreateDto
 import com.squamed.core.task.service.TaskService
@@ -54,6 +64,9 @@ class NursingService(
   private val vitalsRepository: VitalsEntryRepository,
   private val marRepository: MedicationAdministrationRecordRepository,
   private val riskAssessmentRepository: RiskAssessmentRepository,
+  private val assessmentTemplateRepository: AssessmentTemplateRepository,
+  private val carePlanTemplateRepository: CarePlanTemplateRepository,
+  private val riskScaleRepository: RiskScaleRepository,
   private val prescriptionRepository: PrescriptionRepository,
   private val drugRepository: DrugRepository,
   private val patientRecordLookup: com.squamed.core.patient.repository.PatientRecordRepository,
@@ -68,6 +81,21 @@ class NursingService(
     val patientId = dto.patientId ?: throw IllegalArgumentException("NURSING_PATIENT_REQUIRED")
     val assessmentType = dto.assessmentType ?: throw IllegalArgumentException("NURSING_ASSESSMENT_TYPE_REQUIRED")
     val hospitalId = dto.hospitalId ?: throw IllegalArgumentException("NURSING_HOSPITAL_REQUIRED")
+    // 04.03: a template (when given) defines the required fields.
+    var templateCode: String? = null
+    var fieldsJson: String? = null
+    if (dto.templateCode != null) {
+      val template =
+        assessmentTemplateRepository.findByHospitalIdAndCode(hospitalId, dto.templateCode)
+          ?: throw IllegalArgumentException("ASSESSMENT_TEMPLATE_NOT_FOUND")
+      if (!template.isActive) throw IllegalArgumentException("ASSESSMENT_TEMPLATE_INACTIVE")
+      val required = OBJECT_MAPPER.readTree(template.fieldsJson).map { it.asText() }
+      required.forEach { field ->
+        if (dto.fields[field].isNullOrBlank()) throw IllegalArgumentException("ASSESSMENT_FIELD_REQUIRED")
+      }
+      templateCode = template.code
+      fieldsJson = OBJECT_MAPPER.writeValueAsString(dto.fields)
+    }
     val assessment =
       assessmentRepository.save(
         NursingAssessment(
@@ -78,10 +106,107 @@ class NursingService(
           findings = dto.findings,
           riskLevel = dto.riskLevel,
           assessedBy = actorId,
+          templateCode = templateCode,
+          fieldsJson = fieldsJson,
         ).also { it.createdBy = actorId },
       )
     return NursingAssessmentView.from(assessment)
   }
+
+  // -- 04.03 configurable assessment forms --
+
+  @Transactional
+  fun upsertAssessmentTemplate(
+    dto: AssessmentTemplateDto,
+    hospitalId: UUID,
+  ): AssessmentTemplateDto {
+    if (dto.code.isBlank() || dto.name.isBlank()) throw IllegalArgumentException("ASSESSMENT_TEMPLATE_FIELDS_REQUIRED")
+    if (dto.fields.isEmpty() || dto.fields.any { it.isBlank() }) throw IllegalArgumentException("ASSESSMENT_TEMPLATE_FIELDS_REQUIRED")
+    val template =
+      assessmentTemplateRepository.findByHospitalIdAndCode(hospitalId, dto.code)
+        ?: AssessmentTemplate(hospitalId = hospitalId, code = dto.code, name = dto.name, fieldsJson = "[]")
+    template.name = dto.name
+    template.fieldsJson = OBJECT_MAPPER.writeValueAsString(dto.fields)
+    template.isActive = dto.isActive
+    return AssessmentTemplateDto.from(assessmentTemplateRepository.save(template))
+  }
+
+  @Transactional(readOnly = true)
+  fun listAssessmentTemplates(hospitalId: UUID): List<AssessmentTemplateDto> =
+    assessmentTemplateRepository.findByHospitalIdOrderByCode(hospitalId).map { AssessmentTemplateDto.from(it) }
+
+  // -- 04.03 care-plan templates (problem -> intervention -> goal) --
+
+  @Transactional
+  fun upsertCarePlanTemplate(
+    dto: CarePlanTemplateDto,
+    hospitalId: UUID,
+  ): CarePlanTemplateDto {
+    if (dto.code.isBlank() || dto.name.isBlank() || dto.problem.isBlank()) throw IllegalArgumentException("CAREPLAN_TEMPLATE_FIELDS_REQUIRED")
+    val template =
+      carePlanTemplateRepository.findByHospitalIdAndCode(hospitalId, dto.code)
+        ?: CarePlanTemplate(hospitalId = hospitalId, code = dto.code, name = dto.name, problem = dto.problem)
+    template.name = dto.name
+    template.problem = dto.problem
+    template.goal = dto.goal
+    template.interventions = dto.interventions
+    template.isActive = dto.isActive
+    return CarePlanTemplateDto.from(carePlanTemplateRepository.save(template))
+  }
+
+  @Transactional(readOnly = true)
+  fun listCarePlanTemplates(hospitalId: UUID): List<CarePlanTemplateDto> =
+    carePlanTemplateRepository.findByHospitalIdOrderByCode(hospitalId).map { CarePlanTemplateDto.from(it) }
+
+  @Transactional
+  fun applyCarePlanTemplate(
+    dto: CarePlanApplyDto,
+    actorId: UUID,
+  ): NursingCarePlanView {
+    val hospitalId = dto.hospitalId ?: throw IllegalArgumentException("NURSING_HOSPITAL_REQUIRED")
+    val template =
+      carePlanTemplateRepository.findByHospitalIdAndCode(hospitalId, dto.templateCode)
+        ?: throw IllegalArgumentException("CAREPLAN_TEMPLATE_NOT_FOUND")
+    if (!template.isActive) throw IllegalArgumentException("CAREPLAN_TEMPLATE_INACTIVE")
+    val plan =
+      carePlanRepository.save(
+        NursingCarePlan(
+          hospitalId = hospitalId,
+          patientId = dto.patientId,
+          admissionId = dto.admissionId,
+          title = template.name,
+          goal = template.goal,
+          interventions = template.interventions,
+          problem = template.problem,
+          templateCode = template.code,
+        ).also { it.createdBy = actorId },
+      )
+    publishCarePlan(plan, "applied")
+    return NursingCarePlanView.from(plan)
+  }
+
+  // -- 04.03 configurable risk scales --
+
+  @Transactional
+  fun upsertRiskScale(
+    dto: RiskScaleDto,
+    hospitalId: UUID,
+  ): RiskScaleDto {
+    if (dto.code.isBlank() || dto.name.isBlank()) throw IllegalArgumentException("RISK_SCALE_FIELDS_REQUIRED")
+    if (dto.lowMax < dto.minScore || dto.moderateMax < dto.lowMax) throw IllegalArgumentException("RISK_SCALE_THRESHOLDS_INVALID")
+    val scale =
+      riskScaleRepository.findByHospitalIdAndCode(hospitalId, dto.code)
+        ?: RiskScale(hospitalId = hospitalId, code = dto.code, name = dto.name, lowMax = dto.lowMax, moderateMax = dto.moderateMax)
+    scale.name = dto.name
+    scale.minScore = dto.minScore
+    scale.lowMax = dto.lowMax
+    scale.moderateMax = dto.moderateMax
+    scale.isActive = dto.isActive
+    return RiskScaleDto.from(riskScaleRepository.save(scale))
+  }
+
+  @Transactional(readOnly = true)
+  fun listRiskScales(hospitalId: UUID): List<RiskScaleDto> = riskScaleRepository.findByHospitalIdOrderByCode(hospitalId).map { RiskScaleDto.from(it) }
 
   @Transactional(readOnly = true)
   fun listAssessments(
@@ -114,8 +239,10 @@ class NursingService(
           title = title,
           goal = dto.goal,
           interventions = dto.interventions,
+          problem = dto.problem,
         ).also { it.createdBy = actorId },
       )
+    publishCarePlan(plan, "created")
     return NursingCarePlanView.from(plan)
   }
 
@@ -151,6 +278,7 @@ class NursingService(
       plan.completedAt = null
     }
     carePlanRepository.save(plan)
+    publishCarePlan(plan, status)
     return NursingCarePlanView.from(plan)
   }
 
@@ -507,6 +635,24 @@ class NursingService(
     val patientId = dto.patientId ?: throw IllegalArgumentException("NURSING_PATIENT_REQUIRED")
     val riskType = dto.riskType ?: throw IllegalArgumentException("NURSING_RISK_TYPE_REQUIRED")
     val hospitalId = dto.hospitalId ?: throw IllegalArgumentException("NURSING_HOSPITAL_REQUIRED")
+    // 04.03: a configured scale derives the level from the score.
+    var level = dto.level
+    var scaleCode: String? = null
+    if (dto.scaleCode != null) {
+      val scale =
+        riskScaleRepository.findByHospitalIdAndCode(hospitalId, dto.scaleCode)
+          ?: throw IllegalArgumentException("RISK_SCALE_NOT_FOUND")
+      if (!scale.isActive) throw IllegalArgumentException("RISK_SCALE_INACTIVE")
+      val score = dto.score ?: throw IllegalArgumentException("RISK_SCORE_REQUIRED")
+      if (score < scale.minScore) throw IllegalArgumentException("RISK_SCORE_OUT_OF_RANGE")
+      level =
+        when {
+          score <= scale.lowMax -> "low"
+          score <= scale.moderateMax -> "moderate"
+          else -> "high"
+        }
+      scaleCode = scale.code
+    }
     val assessment =
       riskAssessmentRepository.save(
         RiskAssessment(
@@ -515,8 +661,9 @@ class NursingService(
           admissionId = dto.admissionId,
           riskType = riskType,
           score = dto.score,
-          level = dto.level,
+          level = level,
           assessedBy = actorId,
+          scaleCode = scaleCode,
         ).also { it.createdBy = actorId },
       )
     return RiskAssessmentView.from(assessment)
@@ -536,7 +683,28 @@ class NursingService(
     return rows.sortedByDescending { it.assessedAt }.map { RiskAssessmentView.from(it) }
   }
 
+  private fun publishCarePlan(
+    plan: NursingCarePlan,
+    change: String,
+  ) {
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "nursing.careplan_updated",
+        occurredAt = Instant.now(),
+        source = "nursing-service",
+        entityType = "nursing_careplan",
+        entityId = plan.id,
+        hospitalId = plan.hospitalId,
+        payload = mapOf("patientId" to plan.patientId, "status" to plan.status, "change" to change),
+      ),
+    )
+  }
+
   companion object {
+    val OBJECT_MAPPER =
+      com.fasterxml.jackson.databind
+        .ObjectMapper()
     val CAREPLAN_STATUSES = setOf("active", "in_progress", "completed", "cancelled")
     val MAR_STATUSES = setOf("scheduled", "administered", "omitted")
     val SHIFTS = setOf("morning", "evening", "night")

@@ -198,4 +198,64 @@ class NursingController(
     @RequestParam(name = "patientId", required = false) patientId: UUID?,
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<List<RiskAssessmentView>> = ApiResponse.ok(nursingService.listRiskAssessments(patientId, principal.hospitalId))
+
+  // 04.03 configurable forms, care-plan templates, risk scales.
+  @PostMapping("/assessment-templates")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("nursing:write:nursing")
+  @Transactional
+  fun upsertAssessmentTemplate(
+    @RequestBody dto: AssessmentTemplateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AssessmentTemplateDto> = ApiResponse.ok(nursingService.upsertAssessmentTemplate(dto, tenantResolver.pinOrDefault(principal, dto.hospitalId)))
+
+  @GetMapping("/assessment-templates")
+  @RequiresPermission("nursing:read:nursing")
+  @Transactional(readOnly = true)
+  fun listAssessmentTemplates(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<AssessmentTemplateDto>> =
+    ApiResponse.ok(nursingService.listAssessmentTemplates(principal.hospitalId ?: tenantResolver.primaryHospitalId()))
+
+  @PostMapping("/careplan-templates")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("nursing:write:nursing")
+  @Transactional
+  fun upsertCarePlanTemplate(
+    @RequestBody dto: CarePlanTemplateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<CarePlanTemplateDto> = ApiResponse.ok(nursingService.upsertCarePlanTemplate(dto, tenantResolver.pinOrDefault(principal, dto.hospitalId)))
+
+  @GetMapping("/careplan-templates")
+  @RequiresPermission("nursing:read:nursing")
+  @Transactional(readOnly = true)
+  fun listCarePlanTemplates(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<CarePlanTemplateDto>> = ApiResponse.ok(nursingService.listCarePlanTemplates(principal.hospitalId ?: tenantResolver.primaryHospitalId()))
+
+  @PostMapping("/careplans/apply")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("nursing:write:nursing")
+  @Transactional
+  fun applyCarePlanTemplate(
+    @RequestBody dto: CarePlanApplyDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<NursingCarePlanView> =
+    ApiResponse.ok(nursingService.applyCarePlanTemplate(dto.copy(hospitalId = tenantResolver.pin(principal, dto.hospitalId)), principal.userId))
+
+  @PostMapping("/risk-scales")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("nursing:write:nursing")
+  @Transactional
+  fun upsertRiskScale(
+    @RequestBody dto: RiskScaleDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<RiskScaleDto> = ApiResponse.ok(nursingService.upsertRiskScale(dto, tenantResolver.pinOrDefault(principal, dto.hospitalId)))
+
+  @GetMapping("/risk-scales")
+  @RequiresPermission("nursing:read:nursing")
+  @Transactional(readOnly = true)
+  fun listRiskScales(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<RiskScaleDto>> = ApiResponse.ok(nursingService.listRiskScales(principal.hospitalId ?: tenantResolver.primaryHospitalId()))
 }

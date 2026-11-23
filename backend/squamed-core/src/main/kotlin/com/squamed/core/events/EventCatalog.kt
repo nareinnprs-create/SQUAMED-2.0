@@ -89,6 +89,7 @@ object EventCatalog {
       Entry("DoseScheduled", "nursing.dose_scheduled", Status.EMITTED, "eMAR dose scheduled from an active prescription (04.02)."),
       Entry("DoseAdministered", "nursing.dose_administered", Status.EMITTED, "eMAR dose administered after barcode verification (04.02)."),
       Entry("DoseOmitted", "nursing.dose_omitted", Status.EMITTED, "eMAR dose omitted with a code + reason, clinician notified (04.02)."),
+      Entry("CarePlanUpdated", "nursing.careplan_updated", Status.EMITTED, "Care plan created/applied or its status changed (04.03)."),
     )
 
   fun all(): List<Entry> = entries

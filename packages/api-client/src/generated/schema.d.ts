@@ -1572,6 +1572,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/nursing/risk-scales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRiskScales"];
+        put?: never;
+        post: operations["upsertRiskScale"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nursing/risk-assessments": {
         parameters: {
             query?: never;
@@ -1700,6 +1716,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/nursing/careplans/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["applyCarePlanTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nursing/careplan-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCarePlanTemplates"];
+        put?: never;
+        post: operations["upsertCarePlanTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nursing/assessments": {
         parameters: {
             query?: never;
@@ -1710,6 +1758,22 @@ export interface paths {
         get: operations["listAssessments"];
         put?: never;
         post: operations["createAssessment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nursing/assessment-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAssessmentTemplates"];
+        put?: never;
+        post: operations["upsertAssessmentTemplate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8575,6 +8639,28 @@ export interface components {
             /** Format: date-time */
             recordedAt?: string;
         };
+        RiskScaleDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            code: string;
+            name: string;
+            /** Format: int32 */
+            minScore: number;
+            /** Format: int32 */
+            lowMax: number;
+            /** Format: int32 */
+            moderateMax: number;
+            isActive: boolean;
+        };
+        ApiResponseRiskScaleDto: {
+            data?: components["schemas"]["RiskScaleDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         RiskAssessmentCreateDto: {
             /** Format: uuid */
             hospitalId?: string;
@@ -8586,6 +8672,7 @@ export interface components {
             /** Format: int32 */
             score?: number;
             level?: string;
+            scaleCode?: string;
         };
         ApiResponseRiskAssessmentView: {
             data?: components["schemas"]["RiskAssessmentView"];
@@ -8611,6 +8698,7 @@ export interface components {
             assessedBy?: string;
             /** Format: date-time */
             assessedAt?: string;
+            scaleCode?: string;
         };
         NursingNoteCreateDto: {
             /** Format: uuid */
@@ -8772,6 +8860,7 @@ export interface components {
             title?: string;
             goal?: string;
             interventions?: string;
+            problem?: string;
         };
         ApiResponseNursingCarePlanView: {
             data?: components["schemas"]["NursingCarePlanView"];
@@ -8797,6 +8886,36 @@ export interface components {
             completedAt?: string;
             /** Format: date-time */
             createdAt?: string;
+            problem?: string;
+            templateCode?: string;
+        };
+        CarePlanApplyDto: {
+            /** Format: uuid */
+            patientId: string;
+            templateCode: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            /** Format: uuid */
+            admissionId?: string;
+        };
+        CarePlanTemplateDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            code: string;
+            name: string;
+            problem: string;
+            goal?: string;
+            interventions?: string;
+            isActive: boolean;
+        };
+        ApiResponseCarePlanTemplateDto: {
+            data?: components["schemas"]["CarePlanTemplateDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
         };
         NursingAssessmentCreateDto: {
             /** Format: uuid */
@@ -8808,6 +8927,10 @@ export interface components {
             assessmentType?: string;
             findings?: string;
             riskLevel?: string;
+            templateCode?: string;
+            fields: {
+                [key: string]: string;
+            };
         };
         ApiResponseNursingAssessmentView: {
             data?: components["schemas"]["NursingAssessmentView"];
@@ -8832,6 +8955,27 @@ export interface components {
             assessedBy?: string;
             /** Format: date-time */
             assessedAt?: string;
+            templateCode?: string;
+            fields: {
+                [key: string]: string;
+            };
+        };
+        AssessmentTemplateDto: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            code: string;
+            name: string;
+            fields: string[];
+            isActive: boolean;
+        };
+        ApiResponseAssessmentTemplateDto: {
+            data?: components["schemas"]["AssessmentTemplateDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
         };
         ApiResponseNotificationView: {
             data?: components["schemas"]["NotificationView"];
@@ -12382,6 +12526,13 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListRiskScaleDto: {
+            data?: components["schemas"]["RiskScaleDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListRiskAssessmentView: {
             data?: components["schemas"]["RiskAssessmentView"][];
             success: boolean;
@@ -12410,8 +12561,22 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListCarePlanTemplateDto: {
+            data?: components["schemas"]["CarePlanTemplateDto"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListNursingAssessmentView: {
             data?: components["schemas"]["NursingAssessmentView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListAssessmentTemplateDto: {
+            data?: components["schemas"]["AssessmentTemplateDto"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -16840,6 +17005,50 @@ export interface operations {
             };
         };
     };
+    listRiskScales: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListRiskScaleDto"];
+                };
+            };
+        };
+    };
+    upsertRiskScale: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskScaleDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRiskScaleDto"];
+                };
+            };
+        };
+    };
     listRiskAssessments: {
         parameters: {
             query?: {
@@ -17146,6 +17355,74 @@ export interface operations {
             };
         };
     };
+    applyCarePlanTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CarePlanApplyDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseNursingCarePlanView"];
+                };
+            };
+        };
+    };
+    listCarePlanTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCarePlanTemplateDto"];
+                };
+            };
+        };
+    };
+    upsertCarePlanTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CarePlanTemplateDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCarePlanTemplateDto"];
+                };
+            };
+        };
+    };
     listAssessments: {
         parameters: {
             query?: {
@@ -17188,6 +17465,50 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseNursingAssessmentView"];
+                };
+            };
+        };
+    };
+    listAssessmentTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListAssessmentTemplateDto"];
+                };
+            };
+        };
+    };
+    upsertAssessmentTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssessmentTemplateDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAssessmentTemplateDto"];
                 };
             };
         };
@@ -25525,4 +25846,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: eb33dfcf174aac08075f5b59fa1c5625f4a6438b7b1acdffaaf3895bf9be4286
+// openapi snapshot sha256: 8b65df42bee7e45bba70eb0fd01f978e6b9af45df11b36153d662ad1aa429bcc

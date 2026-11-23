@@ -9504,12 +9504,12 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action drafts + 05.04 attention rail + 05.07 AI incident (49 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action drafts + 05.04 attention rail + 05.07 AI incident + 06.01 group share/referral (52 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        49,
+        52,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident + 06.01 group: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
@@ -10132,12 +10132,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07 + 4 AI action 05.03 + 2 attention rail 05.04 + 1 AI incident 05.07).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07 + 4 AI action 05.03 + 2 attention rail 05.04 + 1 AI incident 05.07 + 3 group 06.01).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        49,
+        52,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident + 06.01 group: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")
@@ -15182,6 +15182,239 @@ class PlatformIntegrationTests {
         )
       assertEquals(400, unknown.status, "unknown agent rejected")
       assertTrue(unknown.body.contains("AI_AGENT_NOT_FOUND"), "unknown agent guard code")
+    }
+
+    @Test
+    fun multiHospitalGroupCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalA =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Group A $s", "code" to "GA-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      val hospitalB =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Group B $s", "code" to "GB-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      val hospitalC =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Outside C $s", "code" to "GC-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      val group =
+        `data`(api(HttpMethod.POST, "/api/v1/group/groups", json("code" to "GRP-$s", "name" to "Group $s"), token))
+      val groupId = group["id"].asText()
+      assert2xx(api(HttpMethod.POST, "/api/v1/group/groups/$groupId/hospitals/$hospitalA", json(), token), "hospital A attached")
+      assert2xx(api(HttpMethod.POST, "/api/v1/group/groups/$groupId/hospitals/$hospitalB", json(), token), "hospital B attached")
+      val detail = `data`(api(HttpMethod.GET, "/api/v1/group/groups/$groupId", token = token))
+      assertEquals(2, detail["hospitals"].size(), "group lists its hospitals")
+
+      fun groupUser(
+        tag: String,
+        hospitalId: String,
+      ): String {
+        val email = "$tag.grp.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "Group$s",
+              "roles" to listOf("GROUP_ADMIN"),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $tag",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      }
+      val adminA = groupUser("ga", hospitalA)
+      val adminB = groupUser("gb", hospitalB)
+      val adminC = groupUser("gc", hospitalC)
+
+      fun patient(
+        tag: String,
+        hospitalId: String,
+        qid: String,
+      ) = `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json(
+            "firstName" to "Group$tag",
+            "lastName" to "Patient$s",
+            "gender" to "female",
+            "dateOfBirth" to "1985-05-05",
+            "phone" to "69$tag$s".take(11),
+            "qid" to qid,
+            "nationality" to "QA",
+            "city" to "Doha",
+            "hospitalId" to hospitalId,
+          ),
+          token,
+        ),
+      )["patient"]
+      val qid = "GQ$s".take(11)
+      val patientA = patient("a", hospitalA, qid)
+      val patientB = patient("b", hospitalB, qid)
+
+      val consent =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/consents",
+            json(
+              "hospitalId" to hospitalA,
+              "patientId" to patientA["id"].asText(),
+              "purpose" to "data_sharing",
+              "scope" to "cross_hospital",
+              "signedByName" to "Patient",
+            ),
+            token,
+          ),
+        )
+      val wrongPurpose =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/consents",
+            json(
+              "hospitalId" to hospitalA,
+              "patientId" to patientA["id"].asText(),
+              "purpose" to "treatment",
+              "scope" to "procedure",
+              "signedByName" to "Patient",
+            ),
+            token,
+          ),
+        )
+
+      // Group EMPI: the duplicate identity in the other hospital is found by QID.
+      val candidates = `data`(api(HttpMethod.GET, "/api/v1/group/patients/${patientA["id"].asText()}/share-candidates?toHospitalId=$hospitalB", token = adminA))
+      val match = candidates.firstOrNull { it["patientId"].asText() == patientB["id"].asText() }
+      assertNotNull(match, "cross-hospital identity found: $candidates")
+      assertEquals("QID", match!!["matchReason"].asText(), "matched on QID")
+      assertEquals(100, match["score"].asInt(), "QID score")
+
+      // Consent gate: no share -> denied; shared -> allowed; revoked -> denied again.
+      val before = api(HttpMethod.GET, "/api/v1/group/patients/${patientA["id"].asText()}/access?hospitalId=$hospitalB", token = adminB)
+      assertEquals(403, before.status, "no share denies access: ${before.body.take(200)}")
+      assertTrue(before.body.contains("GROUP_ACCESS_DENIED"), "access guard code")
+      val share =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/group/patients/${patientA["id"].asText()}/share",
+            json("toHospitalId" to hospitalB, "consentId" to consent["id"].asText()),
+            adminA,
+          ),
+        )
+      assertEquals("ACTIVE", share["status"].asText(), "share active")
+      val allowed = `data`(api(HttpMethod.GET, "/api/v1/group/patients/${patientA["id"].asText()}/access?hospitalId=$hospitalB", token = adminB))
+      assertTrue(allowed["shared"].asBoolean(), "shared record accessible")
+      assertEquals(patientA["mrn"].asText(), allowed["mrn"].asText(), "shared view carries the MRN")
+      assert2xx(api(HttpMethod.POST, "/api/v1/group/shares/${share["id"].asText()}/revoke", json(), adminA), "share revoked")
+      val after = api(HttpMethod.GET, "/api/v1/group/patients/${patientA["id"].asText()}/access?hospitalId=$hospitalB", token = adminB)
+      assertEquals(403, after.status, "revoked share denies access")
+
+      // Adversarial: outside group, wrong patient consent, wrong purpose.
+      val outside = api(HttpMethod.GET, "/api/v1/group/patients/${patientA["id"].asText()}/access?hospitalId=$hospitalC", token = adminC)
+      assertEquals(403, outside.status, "hospital outside the group is denied")
+      val crossGroupShare =
+        api(
+          HttpMethod.POST,
+          "/api/v1/group/patients/${patientA["id"].asText()}/share",
+          json("toHospitalId" to hospitalC, "consentId" to consent["id"].asText()),
+          adminA,
+        )
+      assertEquals(400, crossGroupShare.status, "cannot share outside the group")
+      assertTrue(crossGroupShare.body.contains("HOSPITAL_NOT_IN_GROUP"), "group guard code")
+      val wrongPatientConsent =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/consents",
+            json(
+              "hospitalId" to hospitalB,
+              "patientId" to patientB["id"].asText(),
+              "purpose" to "data_sharing",
+              "scope" to "cross_hospital",
+              "signedByName" to "Patient",
+            ),
+            token,
+          ),
+        )
+      val consentMismatch =
+        api(
+          HttpMethod.POST,
+          "/api/v1/group/patients/${patientA["id"].asText()}/share",
+          json("toHospitalId" to hospitalB, "consentId" to wrongPatientConsent["id"].asText()),
+          adminA,
+        )
+      assertEquals(400, consentMismatch.status, "consent must belong to the patient")
+      assertTrue(consentMismatch.body.contains("CONSENT_PATIENT_MISMATCH"), "consent patient guard")
+      val purposeDenied =
+        api(
+          HttpMethod.POST,
+          "/api/v1/group/patients/${patientA["id"].asText()}/share",
+          json("toHospitalId" to hospitalB, "consentId" to wrongPurpose["id"].asText()),
+          adminA,
+        )
+      assertEquals(400, purposeDenied.status, "consent purpose must be data_sharing")
+      assertTrue(purposeDenied.body.contains("CONSENT_PURPOSE_INVALID"), "consent purpose guard")
+
+      // Config inheritance: group default -> hospital override.
+      val hours = mapOf("timezone" to "Asia/Qatar", "days" to listOf(mapOf("day" to "mon", "open" to "09:00", "close" to "17:00")))
+      assert2xx(
+        api(HttpMethod.PUT, "/api/v1/group/groups/$groupId/config", json("type" to "working-hours", "content" to hours), adminA),
+        "group default published",
+      )
+      val inherited = `data`(api(HttpMethod.GET, "/api/v1/group/config/working-hours?hospitalId=$hospitalA", token = adminA))
+      assertEquals("group", inherited["source"].asText(), "hospital inherits the group default")
+      assert2xx(
+        api(
+          HttpMethod.PUT,
+          "/api/v1/hospital-config/hospitals/$hospitalA/config/working-hours",
+          """{"timezone":"Asia/Qatar","days":[{"day":"mon","open":"09:00","close":"17:00"}]}""",
+          token,
+        ),
+        "hospital override published",
+      )
+      val overridden = `data`(api(HttpMethod.GET, "/api/v1/group/config/working-hours?hospitalId=$hospitalA", token = adminA))
+      assertEquals("hospital", overridden["source"].asText(), "hospital override wins")
+
+      // Referrals: create -> inbox -> accept -> complete.
+      val referral =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/group/referrals",
+            json("patientId" to patientA["id"].asText(), "toHospitalId" to hospitalB, "reason" to "Cardiology opinion", "notes" to "Bring imaging"),
+            adminA,
+          ),
+        )
+      assertEquals("PENDING", referral["status"].asText(), "referral pending")
+      val inbox = `data`(api(HttpMethod.GET, "/api/v1/group/referrals?box=inbox", token = adminB))
+      assertTrue(inbox.any { it["id"].asText() == referral["id"].asText() }, "referral in the receiving inbox")
+      val accepted = `data`(api(HttpMethod.PATCH, "/api/v1/group/referrals/${referral["id"].asText()}/status", json("status" to "ACCEPTED"), adminB))
+      assertEquals("ACCEPTED", accepted["status"].asText(), "referral accepted")
+      val sent = `data`(api(HttpMethod.GET, "/api/v1/group/referrals?box=sent", token = adminA))
+      assertEquals("ACCEPTED", sent.first { it["id"].asText() == referral["id"].asText() }["status"].asText(), "sender sees the acceptance")
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/group/referrals/${referral["id"].asText()}/status", json("status" to "COMPLETED"), adminB), "referral completed")
+      val again = api(HttpMethod.PATCH, "/api/v1/group/referrals/${referral["id"].asText()}/status", json("status" to "COMPLETED"), adminB)
+      assertEquals(409, again.status, "completed referral is final")
+      assertTrue(again.body.contains("REFERRAL_TRANSITION_INVALID"), "referral transition guard")
+
+      // Group directory spans both hospitals.
+      val directory = `data`(api(HttpMethod.GET, "/api/v1/group/groups/$groupId/directory", token = adminA))
+      assertTrue(directory.size() >= 2, "directory lists both hospitals' users: $directory")
+
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      listOf("record.shared_consented", "group.referral_created", "group.referral_accepted").forEach { wire ->
+        assertTrue(outbox.any { it["eventType"].asText() == wire }, "$wire emitted")
+      }
     }
   }
 }

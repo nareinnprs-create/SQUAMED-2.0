@@ -308,6 +308,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/group/groups/{id}/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["publishConfig_1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/emergency/registrations/{id}/trauma": {
         parameters: {
             query?: never;
@@ -2660,6 +2676,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/group/shares/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/group/referrals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["referrals"];
+        put?: never;
+        post: operations["createReferral"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/group/patients/{patientId}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["share"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/group/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["groups"];
+        put?: never;
+        post: operations["createGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/group/groups/{id}/hospitals/{hospitalId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["attachHospital"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/encounters": {
         parameters: {
             query?: never;
@@ -4692,6 +4788,22 @@ export interface paths {
         patch: operations["updateBedStatus"];
         trace?: never;
     };
+    "/api/v1/group/referrals/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["decideReferral"];
+        trace?: never;
+    };
     "/api/v1/encounters/{id}/complete": {
         parameters: {
             query?: never;
@@ -5740,6 +5852,86 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listAssignments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/group/patients/{patientId}/share-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["shareCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/group/patients/{patientId}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["access"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/group/groups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["group"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/group/groups/{id}/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["directory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/group/config/{type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["resolveConfig"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7527,6 +7719,24 @@ export interface components {
             status: string;
             content: components["schemas"]["JsonNode"];
             createdAt?: string;
+        };
+        GroupConfigPublishDto: {
+            type: string;
+            content: components["schemas"]["JsonNode"];
+        };
+        ApiResponseConfigResolveView: {
+            data?: components["schemas"]["ConfigResolveView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ConfigResolveView: {
+            type: string;
+            source: string;
+            /** Format: int32 */
+            documentVersion: number;
+            content: components["schemas"]["JsonNode"];
         };
         TraumaSurveyDto: {
             surveyPhase?: string;
@@ -10458,6 +10668,93 @@ export interface components {
             /** Format: date-time */
             codedAt: string;
         };
+        ApiResponseShareView: {
+            data?: components["schemas"]["ShareView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ShareView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            fromHospitalId: string;
+            /** Format: uuid */
+            toHospitalId: string;
+            /** Format: uuid */
+            consentId: string;
+            status: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            revokedAt?: string;
+        };
+        ReferralCreateDto: {
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            toHospitalId: string;
+            reason: string;
+            notes?: string;
+        };
+        ApiResponseReferralView: {
+            data?: components["schemas"]["ReferralView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ReferralView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            fromHospitalId: string;
+            /** Format: uuid */
+            toHospitalId: string;
+            reason: string;
+            notes?: string;
+            status: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            decidedAt?: string;
+        };
+        ShareCreateDto: {
+            /** Format: uuid */
+            toHospitalId: string;
+            /** Format: uuid */
+            consentId: string;
+        };
+        GroupCreateDto: {
+            code: string;
+            name: string;
+        };
+        ApiResponseGroupView: {
+            data?: components["schemas"]["GroupView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        GroupHospitalView: {
+            /** Format: uuid */
+            id?: string;
+            name: string;
+            code: string;
+        };
+        GroupView: {
+            /** Format: uuid */
+            id?: string;
+            code: string;
+            name: string;
+            status: string;
+            hospitals: components["schemas"]["GroupHospitalView"][];
+        };
         StartEncounterDto: {
             /** Format: uuid */
             patientId: string;
@@ -10577,31 +10874,6 @@ export interface components {
             urgency?: string;
             notes?: string;
             patientMrn?: string;
-        };
-        ApiResponseReferralView: {
-            data?: components["schemas"]["ReferralView"];
-            success: boolean;
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        ReferralView: {
-            /** Format: uuid */
-            id?: string;
-            /** Format: uuid */
-            encounterId: string;
-            /** Format: uuid */
-            patientId: string;
-            /** Format: uuid */
-            toDepartmentId?: string;
-            toSpecialty?: string;
-            targetFacility?: string;
-            reason: string;
-            urgency: string;
-            status: string;
-            notes?: string;
-            /** Format: date-time */
-            createdAt?: string;
         };
         ProcedureRequestDto: {
             procedureCode?: string;
@@ -12695,6 +12967,9 @@ export interface components {
         BedStatusDto: {
             status?: string;
         };
+        ReferralStatusDto: {
+            status: string;
+        };
         EmergencyStatusDto: {
             status?: string;
             /** Format: uuid */
@@ -13800,6 +14075,72 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListReferralView: {
+            data?: components["schemas"]["ReferralView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListShareCandidateView: {
+            data?: components["schemas"]["ShareCandidateView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ShareCandidateView: {
+            /** Format: uuid */
+            patientId?: string;
+            mrn: string;
+            name: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            hospitalName?: string;
+            matchReason: string;
+            /** Format: int32 */
+            score: number;
+        };
+        AccessView: {
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            hospitalId: string;
+            shared: boolean;
+            /** Format: uuid */
+            shareId?: string;
+            mrn?: string;
+            name?: string;
+        };
+        ApiResponseAccessView: {
+            data?: components["schemas"]["AccessView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListGroupView: {
+            data?: components["schemas"]["GroupView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListDirectoryEntryView: {
+            data?: components["schemas"]["DirectoryEntryView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        DirectoryEntryView: {
+            /** Format: uuid */
+            userId: string;
+            email: string;
+            /** Format: uuid */
+            hospitalId?: string;
+            roles: string[];
+        };
         ApiResponseEncounterDetailView: {
             data?: components["schemas"]["EncounterDetailView"];
             success: boolean;
@@ -13816,13 +14157,6 @@ export interface components {
             prescriptions: components["schemas"]["PrescriptionView"][];
             procedures: components["schemas"]["ProcedureView"][];
             referrals: components["schemas"]["ReferralView"][];
-        };
-        ApiResponseListReferralView: {
-            data?: components["schemas"]["ReferralView"][];
-            success: boolean;
-            meta: {
-                [key: string]: unknown;
-            };
         };
         ApiResponseListProcedureView: {
             data?: components["schemas"]["ProcedureView"][];
@@ -15202,6 +15536,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseConfigDocumentDto"];
+                };
+            };
+        };
+    };
+    publishConfig_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupConfigPublishDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConfigResolveView"];
                 };
             };
         };
@@ -20481,6 +20841,168 @@ export interface operations {
             };
         };
     };
+    revoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseShareView"];
+                };
+            };
+        };
+    };
+    referrals: {
+        parameters: {
+            query?: {
+                box?: string;
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListReferralView"];
+                };
+            };
+        };
+    };
+    createReferral: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReferralCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReferralView"];
+                };
+            };
+        };
+    };
+    share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                patientId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseShareView"];
+                };
+            };
+        };
+    };
+    groups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListGroupView"];
+                };
+            };
+        };
+    };
+    createGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseGroupView"];
+                };
+            };
+        };
+    };
+    attachHospital: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                hospitalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseGroupView"];
+                };
+            };
+        };
+    };
     startEncounter: {
         parameters: {
             query?: never;
@@ -24576,6 +25098,32 @@ export interface operations {
             };
         };
     };
+    decideReferral: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReferralStatusDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReferralView"];
+                };
+            };
+        };
+    };
     completeEncounter: {
         parameters: {
             query?: never;
@@ -26078,6 +26626,122 @@ export interface operations {
             };
         };
     };
+    shareCandidates: {
+        parameters: {
+            query: {
+                toHospitalId: string;
+            };
+            header?: never;
+            path: {
+                patientId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListShareCandidateView"];
+                };
+            };
+        };
+    };
+    access: {
+        parameters: {
+            query?: {
+                hospitalId?: string;
+            };
+            header?: never;
+            path: {
+                patientId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAccessView"];
+                };
+            };
+        };
+    };
+    group: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseGroupView"];
+                };
+            };
+        };
+    };
+    directory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListDirectoryEntryView"];
+                };
+            };
+        };
+    };
+    resolveConfig: {
+        parameters: {
+            query?: {
+                hospitalId?: string;
+            };
+            header?: never;
+            path: {
+                type: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConfigResolveView"];
+                };
+            };
+        };
+    };
     allServiceRequests: {
         parameters: {
             query?: never;
@@ -27527,4 +28191,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 45334cfbd9b529e03b15076d4ce5c6d7cdc577743e484c7e2f0f6cde349fe28a
+// openapi snapshot sha256: 1f78084e117e844a28017eeebd2c7a3e0687989e7e8adf77fec27369677c4be7

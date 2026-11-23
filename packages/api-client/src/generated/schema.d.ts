@@ -1636,6 +1636,214 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ops/procurement/requisitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["requisitions"];
+        put?: never;
+        post: operations["createRequisition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/procurement/requisitions/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["transitionRequisition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/procurement/requisitions/{id}/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["order"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/procurement/orders/{id}/receive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["receive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/facilities/work-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["workOrders"];
+        put?: never;
+        post: operations["openWorkOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/facilities/work-orders/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeWorkOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/facilities/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["assets"];
+        put?: never;
+        post: operations["createAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/ed/encounters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["edEncounters"];
+        put?: never;
+        post: operations["createEdEncounter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/cssd/trays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["trays"];
+        put?: never;
+        post: operations["createTray"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/cssd/trays/{id}/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["returnTray"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/cssd/trays/{id}/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["issueTray"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/cssd/trays/{id}/cycles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["startCycle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/cssd/cycles/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeCycle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nursing/vitals": {
         parameters: {
             query?: never;
@@ -2733,7 +2941,7 @@ export interface paths {
         };
         get: operations["history"];
         put?: never;
-        post: operations["receive"];
+        post: operations["receive_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3885,7 +4093,7 @@ export interface paths {
         };
         get: operations["history_1"];
         put?: never;
-        post: operations["receive_1"];
+        post: operations["receive_2"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4642,6 +4850,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["call"];
+        trace?: never;
+    };
+    "/api/v1/ops/ed/encounters/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["transitionEdEncounter"];
         trace?: never;
     };
     "/api/v1/nursing/mar/{id}/status": {
@@ -5580,6 +5804,86 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getPatient360"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/procurement/vendors/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["vendorPerformance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/procurement/stock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["stock"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/procurement/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["orders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/ed/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["edDashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/cssd/traceability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["traceability"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6571,7 +6875,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["traceability"];
+        get: operations["traceability_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9483,6 +9787,236 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        RequisitionCreateDto: {
+            department: string;
+            notes?: string;
+            lines: components["schemas"]["RequisitionLineDto"][];
+        };
+        RequisitionLineDto: {
+            itemCode: string;
+            itemName: string;
+            /** Format: int32 */
+            quantity: number;
+            unitPriceQar: number;
+        };
+        ApiResponseRequisitionView: {
+            data?: components["schemas"]["RequisitionView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        RequisitionView: {
+            /** Format: uuid */
+            id?: string;
+            number: string;
+            department: string;
+            status: string;
+            notes?: string;
+            lines: components["schemas"]["RequisitionLineDto"][];
+            totalQar: number;
+        };
+        OpsStatusDto: {
+            status: string;
+        };
+        OrderCreateDto: {
+            /** Format: uuid */
+            vendorId?: string;
+        };
+        ApiResponseOrderView: {
+            data?: components["schemas"]["OrderView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        OrderView: {
+            /** Format: uuid */
+            id?: string;
+            number: string;
+            /** Format: uuid */
+            requisitionId: string;
+            /** Format: uuid */
+            vendorId?: string;
+            status: string;
+            totalQar: number;
+            /** Format: date-time */
+            issuedAt?: string;
+        };
+        ReceiptCreateDto: {
+            lines: components["schemas"]["ReceiptLineDto"][];
+            notes?: string;
+        };
+        ReceiptLineDto: {
+            itemCode: string;
+            /** Format: int32 */
+            quantity: number;
+        };
+        ApiResponseReceiptView: {
+            data?: components["schemas"]["ReceiptView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ReceiptView: {
+            /** Format: uuid */
+            id?: string;
+            number: string;
+            /** Format: uuid */
+            poId: string;
+            lines: components["schemas"]["ReceiptLineDto"][];
+        };
+        WorkOrderCreateDto: {
+            /** Format: uuid */
+            assetId: string;
+            type?: string;
+            description: string;
+            /** Format: int32 */
+            downtimeMinutes?: number;
+        };
+        ApiResponseWorkOrderView: {
+            data?: components["schemas"]["WorkOrderView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        WorkOrderView: {
+            /** Format: uuid */
+            id?: string;
+            number: string;
+            /** Format: uuid */
+            assetId: string;
+            type: string;
+            status: string;
+            description: string;
+            /** Format: int32 */
+            downtimeMinutes: number;
+            /** Format: date-time */
+            completedAt?: string;
+        };
+        WorkOrderCompleteDto: {
+            /** Format: int32 */
+            downtimeMinutes?: number;
+        };
+        AssetCreateDto: {
+            code: string;
+            name: string;
+            category?: string;
+            location?: string;
+            /** Format: date */
+            nextPmOn?: string;
+        };
+        ApiResponseAssetView: {
+            data?: components["schemas"]["AssetView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        AssetView: {
+            /** Format: uuid */
+            id?: string;
+            code: string;
+            name: string;
+            category: string;
+            location?: string;
+            status: string;
+            /** Format: date */
+            nextPmOn?: string;
+        };
+        EdEncounterCreateDto: {
+            /** Format: uuid */
+            patientId: string;
+            /** Format: int32 */
+            triageLevel: number;
+            chiefComplaint: string;
+            resusActivated?: boolean;
+        };
+        ApiResponseEdEncounterView: {
+            data?: components["schemas"]["EdEncounterView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        EdEncounterView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: int32 */
+            triageLevel: number;
+            chiefComplaint: string;
+            status: string;
+            resusActivated: boolean;
+            /** Format: date-time */
+            closedAt?: string;
+        };
+        TrayCreateDto: {
+            code: string;
+            name: string;
+        };
+        ApiResponseTrayView: {
+            data?: components["schemas"]["TrayView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        TrayView: {
+            /** Format: uuid */
+            id?: string;
+            code: string;
+            name: string;
+            status: string;
+        };
+        ApiResponseIssueView: {
+            data?: components["schemas"]["IssueView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        IssueView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            trayId: string;
+            /** Format: uuid */
+            surgeryScheduleId?: string;
+            /** Format: date-time */
+            issuedAt?: string;
+            /** Format: date-time */
+            returnedAt?: string;
+        };
+        IssueCreateDto: {
+            /** Format: uuid */
+            surgeryScheduleId?: string;
+        };
+        ApiResponseCycleView: {
+            data?: components["schemas"]["CycleView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CycleView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            trayId: string;
+            /** Format: int32 */
+            cycleNumber: number;
+            status: string;
+            result?: string;
+            /** Format: date-time */
+            completedAt?: string;
+        };
+        CycleCompleteDto: {
+            result: string;
+        };
         VitalsCreateDto: {
             /** Format: uuid */
             hospitalId?: string;
@@ -11311,35 +11845,6 @@ export interface components {
             orderedAt?: string;
             patientMrn?: string;
         };
-        ApiResponseOrderView: {
-            data?: components["schemas"]["OrderView"];
-            success: boolean;
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        OrderView: {
-            /** Format: uuid */
-            id?: string;
-            /** Format: uuid */
-            hospitalId?: string;
-            /** Format: uuid */
-            encounterId?: string;
-            /** Format: uuid */
-            patientId: string;
-            orderType: string;
-            orderCode?: string;
-            orderName: string;
-            status: string;
-            priority: string;
-            instructions?: string;
-            /** Format: uuid */
-            orderedBy?: string;
-            /** Format: date-time */
-            orderedAt?: string;
-            /** Format: date-time */
-            createdAt?: string;
-        };
         ClinicalNoteRequestDto: {
             noteType?: string;
             title?: string;
@@ -11858,44 +12363,6 @@ export interface components {
             releasedAt?: string;
             /** Format: uuid */
             releasedBy?: string;
-        };
-        IssueCreateDto: {
-            /** Format: uuid */
-            hospitalId?: string;
-            /** Format: uuid */
-            patientId?: string;
-            /** Format: uuid */
-            unitId?: string;
-            /** Format: uuid */
-            issuedFor?: string;
-            patientBarcode?: string;
-            confirmPatientName?: string;
-        };
-        ApiResponseIssueView: {
-            data?: components["schemas"]["IssueView"];
-            success: boolean;
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        IssueView: {
-            /** Format: uuid */
-            id?: string;
-            /** Format: uuid */
-            hospitalId?: string;
-            /** Format: uuid */
-            patientId?: string;
-            /** Format: uuid */
-            unitId?: string;
-            /** Format: uuid */
-            issuedFor?: string;
-            status: string;
-            /** Format: uuid */
-            requestedBy?: string;
-            /** Format: uuid */
-            issuedBy?: string;
-            /** Format: date-time */
-            issuedAt?: string;
         };
         GroupingCreateDto: {
             /** Format: uuid */
@@ -13883,6 +14350,115 @@ export interface components {
             /** Format: int32 */
             completed: number;
         };
+        ApiResponseListVendorPerformanceView: {
+            data?: components["schemas"]["VendorPerformanceView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        VendorPerformanceView: {
+            /** Format: uuid */
+            vendorId?: string;
+            /** Format: int32 */
+            orders: number;
+            /** Format: int32 */
+            received: number;
+            totalQar: number;
+            /** Format: double */
+            avgLeadDays?: number;
+        };
+        ApiResponseListStockView: {
+            data?: components["schemas"]["StockView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        StockView: {
+            itemCode: string;
+            itemName: string;
+            /** Format: int32 */
+            quantityOnHand: number;
+            /** Format: int32 */
+            reorderLevel: number;
+        };
+        ApiResponseListRequisitionView: {
+            data?: components["schemas"]["RequisitionView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListOrderView: {
+            data?: components["schemas"]["OrderView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListWorkOrderView: {
+            data?: components["schemas"]["WorkOrderView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListAssetView: {
+            data?: components["schemas"]["AssetView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListEdEncounterView: {
+            data?: components["schemas"]["EdEncounterView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseEdDashboardView: {
+            data?: components["schemas"]["EdDashboardView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        EdDashboardView: {
+            /** Format: int32 */
+            waiting: number;
+            /** Format: int32 */
+            inTreatment: number;
+            /** Format: int32 */
+            resus: number;
+            /** Format: int32 */
+            admitted: number;
+            /** Format: int32 */
+            discharged: number;
+            byTriage: {
+                [key: string]: number;
+            };
+        };
+        ApiResponseListTrayView: {
+            data?: components["schemas"]["TrayView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseTraceabilityView: {
+            data?: components["schemas"]["TraceabilityView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        TraceabilityView: {
+            tray: components["schemas"]["TrayView"];
+            cycles: components["schemas"]["CycleView"][];
+            issues: components["schemas"]["IssueView"][];
+        };
         ApiResponseListVitalsView: {
             data?: components["schemas"]["VitalsView"][];
             success: boolean;
@@ -14568,13 +15144,6 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        ApiResponseListOrderView: {
-            data?: components["schemas"]["OrderView"][];
-            success: boolean;
-            meta: {
-                [key: string]: unknown;
-            };
-        };
         ApiResponseListClinicalNoteView: {
             data?: components["schemas"]["ClinicalNoteView"][];
             success: boolean;
@@ -14715,43 +15284,6 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
-        };
-        ApiResponseTraceabilityView: {
-            data?: components["schemas"]["TraceabilityView"];
-            success: boolean;
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        TraceabilityView: {
-            /** Format: uuid */
-            unitId: string;
-            unitNumber: string;
-            bloodGroup: string;
-            component: string;
-            status: string;
-            screeningStatus: string;
-            /** Format: uuid */
-            donorId?: string;
-            donorName?: string;
-            grouping?: {
-                [key: string]: unknown;
-            };
-            crossmatches: {
-                [key: string]: unknown;
-            }[];
-            reservations: {
-                [key: string]: unknown;
-            }[];
-            issue?: {
-                [key: string]: unknown;
-            };
-            transfusions: {
-                [key: string]: unknown;
-            }[];
-            reactions: {
-                [key: string]: unknown;
-            }[];
         };
         ApiResponseListIssueView: {
             data?: components["schemas"]["IssueView"][];
@@ -18763,6 +19295,428 @@ export interface operations {
             };
         };
     };
+    requisitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListRequisitionView"];
+                };
+            };
+        };
+    };
+    createRequisition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequisitionCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRequisitionView"];
+                };
+            };
+        };
+    };
+    transitionRequisition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpsStatusDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRequisitionView"];
+                };
+            };
+        };
+    };
+    order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseOrderView"];
+                };
+            };
+        };
+    };
+    receive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiptCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReceiptView"];
+                };
+            };
+        };
+    };
+    workOrders: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListWorkOrderView"];
+                };
+            };
+        };
+    };
+    openWorkOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkOrderCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseWorkOrderView"];
+                };
+            };
+        };
+    };
+    completeWorkOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkOrderCompleteDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseWorkOrderView"];
+                };
+            };
+        };
+    };
+    assets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListAssetView"];
+                };
+            };
+        };
+    };
+    createAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAssetView"];
+                };
+            };
+        };
+    };
+    edEncounters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListEdEncounterView"];
+                };
+            };
+        };
+    };
+    createEdEncounter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EdEncounterCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEdEncounterView"];
+                };
+            };
+        };
+    };
+    trays: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListTrayView"];
+                };
+            };
+        };
+    };
+    createTray: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrayCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseTrayView"];
+                };
+            };
+        };
+    };
+    returnTray: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseIssueView"];
+                };
+            };
+        };
+    };
+    issueTray: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseIssueView"];
+                };
+            };
+        };
+    };
+    startCycle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCycleView"];
+                };
+            };
+        };
+    };
+    completeCycle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CycleCompleteDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCycleView"];
+                };
+            };
+        };
+    };
     listVitals: {
         parameters: {
             query?: {
@@ -21363,7 +22317,7 @@ export interface operations {
             };
         };
     };
-    receive: {
+    receive_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -23897,7 +24851,7 @@ export interface operations {
             };
         };
     };
-    receive_1: {
+    receive_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -25329,6 +26283,32 @@ export interface operations {
             };
         };
     };
+    transitionEdEncounter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpsStatusDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEdEncounterView"];
+                };
+            };
+        };
+    };
     updateMarStatus: {
         parameters: {
             query?: never;
@@ -26753,6 +27733,108 @@ export interface operations {
             };
         };
     };
+    vendorPerformance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListVendorPerformanceView"];
+                };
+            };
+        };
+    };
+    stock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListStockView"];
+                };
+            };
+        };
+    };
+    orders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListOrderView"];
+                };
+            };
+        };
+    };
+    edDashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEdDashboardView"];
+                };
+            };
+        };
+    };
+    traceability: {
+        parameters: {
+            query: {
+                trayId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseTraceabilityView"];
+                };
+            };
+        };
+    };
     listNotifications: {
         parameters: {
             query?: {
@@ -28067,7 +29149,7 @@ export interface operations {
             };
         };
     };
-    traceability: {
+    traceability_1: {
         parameters: {
             query: {
                 unitId: string;
@@ -28928,4 +30010,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 9d8a47678c900527830dfe9ba85bba4b584eef022756dcb15cad054ecd01bad1
+// openapi snapshot sha256: af1ccec255e4fd072209fb9937f9bc5c44c127cad278b3ec806f3f812c2f52b4

@@ -2500,6 +2500,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/hr/rosters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["rosters"];
+        put?: never;
+        post: operations["createRoster"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hr/rosters/{id}/shifts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["addShift"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hr/rosters/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publishRoster"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hr/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["leave"];
+        put?: never;
+        post: operations["requestLeave"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hr/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["credentials"];
+        put?: never;
+        post: operations["createCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hr/credentials/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["scanCredentials"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hr/attendance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["attendance"];
+        put?: never;
+        post: operations["recordAttendance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/hospital-config/hospitals": {
         parameters: {
             query?: never;
@@ -4772,6 +4884,22 @@ export interface paths {
         patch: operations["acknowledgeAlert"];
         trace?: never;
     };
+    "/api/v1/hr/leave/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["decideLeave"];
+        trace?: never;
+    };
     "/api/v1/hospital-config/hospitals/{hospitalId}/beds/{id}/status": {
         parameters: {
             query?: never;
@@ -5740,6 +5868,54 @@ export interface paths {
             cookie?: never;
         };
         get: operations["flowsheet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hr/rosters/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["roster"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hr/ratio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ratio"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/hr/payroll/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["payrollExport"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10521,6 +10697,158 @@ export interface components {
             acknowledgedAt?: string;
             status: string;
         };
+        RosterCreateDto: {
+            /** Format: uuid */
+            wardId?: string;
+            /** Format: date */
+            weekStart: string;
+        };
+        ApiResponseRosterView: {
+            data?: components["schemas"]["RosterView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        RosterView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            wardId?: string;
+            /** Format: date */
+            weekStart: string;
+            status: string;
+            shifts: components["schemas"]["ShiftView"][];
+        };
+        ShiftView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            employeeId: string;
+            /** Format: date */
+            shiftDate: string;
+            shiftCode: string;
+            role: string;
+            /** Format: uuid */
+            wardId?: string;
+        };
+        ShiftCreateDto: {
+            /** Format: uuid */
+            employeeId: string;
+            /** Format: date */
+            shiftDate: string;
+            shiftCode: string;
+            role: string;
+            /** Format: uuid */
+            wardId?: string;
+        };
+        ApiResponseShiftView: {
+            data?: components["schemas"]["ShiftView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        LeaveCreateDto: {
+            /** Format: uuid */
+            employeeId: string;
+            leaveType: string;
+            /** Format: date */
+            fromDate: string;
+            /** Format: date */
+            toDate: string;
+            reason?: string;
+        };
+        ApiResponseLeaveView: {
+            data?: components["schemas"]["LeaveView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        LeaveView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            employeeId: string;
+            leaveType: string;
+            /** Format: date */
+            fromDate: string;
+            /** Format: date */
+            toDate: string;
+            reason?: string;
+            status: string;
+            /** Format: date-time */
+            decidedAt?: string;
+        };
+        CredentialCreateDto: {
+            /** Format: uuid */
+            employeeId: string;
+            credentialType: string;
+            identifier?: string;
+            /** Format: date */
+            expiresOn: string;
+        };
+        ApiResponseCredentialView: {
+            data?: components["schemas"]["CredentialView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CredentialView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            employeeId: string;
+            credentialType: string;
+            identifier?: string;
+            /** Format: date */
+            expiresOn: string;
+            status: string;
+            /** Format: uuid */
+            renewalTaskId?: string;
+        };
+        ApiResponseListCredentialView: {
+            data?: components["schemas"]["CredentialView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        AttendanceDto: {
+            /** Format: uuid */
+            employeeId: string;
+            /** Format: date */
+            workDate: string;
+            /** Format: date-time */
+            checkInAt?: string;
+            /** Format: date-time */
+            checkOutAt?: string;
+            status?: string;
+        };
+        ApiResponseAttendanceView: {
+            data?: components["schemas"]["AttendanceView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        AttendanceView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            employeeId: string;
+            /** Format: date */
+            workDate: string;
+            /** Format: date-time */
+            checkInAt?: string;
+            /** Format: date-time */
+            checkOutAt?: string;
+            status: string;
+        };
         WardDto: {
             /** Format: uuid */
             id?: string;
@@ -12964,6 +13292,9 @@ export interface components {
         CriticalAlertStatusDto: {
             status?: string;
         };
+        LeaveDecisionDto: {
+            status: string;
+        };
         BedStatusDto: {
             status?: string;
         };
@@ -13918,6 +14249,71 @@ export interface components {
         };
         ApiResponseListCriticalAlertView: {
             data?: components["schemas"]["CriticalAlertView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListRosterView: {
+            data?: components["schemas"]["RosterView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListRatioRowView: {
+            data?: components["schemas"]["RatioRowView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        RatioRowView: {
+            /** Format: uuid */
+            wardId?: string;
+            wardName?: string;
+            /** Format: int32 */
+            patients: number;
+            /** Format: int32 */
+            nurses: number;
+            /** Format: double */
+            patientsPerNurse?: number;
+        };
+        ApiResponsePayrollExportView: {
+            data?: components["schemas"]["PayrollExportView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PayrollExportView: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            rows: components["schemas"]["PayrollRowView"][];
+        };
+        PayrollRowView: {
+            /** Format: uuid */
+            employeeId: string;
+            employeeCode: string;
+            name: string;
+            /** Format: int32 */
+            shifts: number;
+            /** Format: int32 */
+            hours: number;
+            /** Format: int64 */
+            leaveDays: number;
+        };
+        ApiResponseListLeaveView: {
+            data?: components["schemas"]["LeaveView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListAttendanceView: {
+            data?: components["schemas"]["AttendanceView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -20379,6 +20775,254 @@ export interface operations {
             };
         };
     };
+    rosters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListRosterView"];
+                };
+            };
+        };
+    };
+    createRoster: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RosterCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRosterView"];
+                };
+            };
+        };
+    };
+    addShift: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShiftCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseShiftView"];
+                };
+            };
+        };
+    };
+    publishRoster: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRosterView"];
+                };
+            };
+        };
+    };
+    leave: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListLeaveView"];
+                };
+            };
+        };
+    };
+    requestLeave: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaveCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseLeaveView"];
+                };
+            };
+        };
+    };
+    credentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCredentialView"];
+                };
+            };
+        };
+    };
+    createCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CredentialCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCredentialView"];
+                };
+            };
+        };
+    };
+    scanCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCredentialView"];
+                };
+            };
+        };
+    };
+    attendance: {
+        parameters: {
+            query?: {
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListAttendanceView"];
+                };
+            };
+        };
+    };
+    recordAttendance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttendanceDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAttendanceView"];
+                };
+            };
+        };
+    };
     listHospitals: {
         parameters: {
             query?: never;
@@ -25071,6 +25715,32 @@ export interface operations {
             };
         };
     };
+    decideLeave: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaveDecisionDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseLeaveView"];
+                };
+            };
+        };
+    };
     updateBedStatus: {
         parameters: {
             query?: never;
@@ -26471,6 +27141,73 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListFlowsheetRowView"];
+                };
+            };
+        };
+    };
+    roster: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRosterView"];
+                };
+            };
+        };
+    };
+    ratio: {
+        parameters: {
+            query?: {
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListRatioRowView"];
+                };
+            };
+        };
+    };
+    payrollExport: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePayrollExportView"];
                 };
             };
         };
@@ -28191,4 +28928,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 1f78084e117e844a28017eeebd2c7a3e0687989e7e8adf77fec27369677c4be7
+// openapi snapshot sha256: 9d8a47678c900527830dfe9ba85bba4b584eef022756dcb15cad054ecd01bad1

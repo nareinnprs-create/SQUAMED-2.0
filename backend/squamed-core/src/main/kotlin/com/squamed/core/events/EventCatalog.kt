@@ -109,6 +109,8 @@ object EventCatalog {
       ),
       Entry("ReferralCreated", "group.referral_created", Status.EMITTED, "Cross-hospital referral created inside a group (06.01)."),
       Entry("ReferralAccepted", "group.referral_accepted", Status.EMITTED, "Cross-hospital referral accepted by the receiving hospital (06.01)."),
+      Entry("RosterPublished", "hr.roster_published", Status.EMITTED, "Workforce roster published for a week (06.04)."),
+      Entry("CredentialExpiring", "hr.credential_expiring", Status.EMITTED, "Credential inside the renewal window with a renewal task (06.04)."),
     )
 
   fun all(): List<Entry> = entries

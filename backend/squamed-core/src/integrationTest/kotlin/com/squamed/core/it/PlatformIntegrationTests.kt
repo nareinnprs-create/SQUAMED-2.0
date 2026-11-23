@@ -9507,7 +9507,7 @@ class PlatformIntegrationTests {
       // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action drafts + 05.04 attention rail + 05.07 AI incident + 06.01 group share/referral (52 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        52,
+        54,
         catalog.size(),
         "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident + 06.01 group: $catalog",
       )
@@ -10135,7 +10135,7 @@ class PlatformIntegrationTests {
       // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07 + 4 AI action 05.03 + 2 attention rail 05.04 + 1 AI incident 05.07 + 3 group 06.01).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        52,
+        54,
         catalog.size(),
         "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident + 06.01 group: $catalog",
       )
@@ -15413,6 +15413,260 @@ class PlatformIntegrationTests {
 
       val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
       listOf("record.shared_consented", "group.referral_created", "group.referral_accepted").forEach { wire ->
+        assertTrue(outbox.any { it["eventType"].asText() == wire }, "$wire emitted")
+      }
+    }
+
+    @Test
+    fun workforceHrCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "HR $s", "code" to "HR-$s", "country" to "Qatar"),
+            token,
+          ),
+        )["id"].asText()
+      val email = "hr.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "hr",
+            "lastName" to "Admin$s",
+            "roles" to listOf("HR_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register HR admin",
+      )
+      val hr = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+
+      fun employee(
+        tag: String,
+        designation: String,
+      ) = `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/master-data/employees",
+          json(
+            "hospitalId" to hospitalId,
+            "code" to "E-$tag-$s",
+            "firstName" to "Hr$tag",
+            "lastName" to "Staff$s",
+            "designation" to designation,
+            "department" to "Nursing",
+            "isActive" to true,
+          ),
+          token,
+        ),
+      )["id"].asText()
+      val nurse1 = employee("n1", "Staff Nurse")
+      val nurse2 = employee("n2", "Staff Nurse")
+      val doctor = employee("d1", "Consultant")
+
+      val today = java.time.LocalDate.now()
+      val weekStart = today.with(java.time.DayOfWeek.MONDAY)
+      val roster =
+        `data`(api(HttpMethod.POST, "/api/v1/hr/rosters", json("weekStart" to weekStart.toString()), hr))
+      val rosterId = roster["id"].asText()
+      assertEquals("DRAFT", roster["status"].asText(), "roster starts as a draft")
+      val duplicateRoster = api(HttpMethod.POST, "/api/v1/hr/rosters", json("weekStart" to weekStart.toString()), hr)
+      assertEquals(409, duplicateRoster.status, "one roster per week")
+      assertTrue(duplicateRoster.body.contains("ROSTER_ALREADY_EXISTS"), "roster duplicate guard")
+
+      fun shift(
+        employeeId: String,
+        code: String,
+        role: String,
+        wardId: String? = null,
+      ) = `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/hr/rosters/$rosterId/shifts",
+          json(
+            "employeeId" to employeeId,
+            "shiftDate" to today.toString(),
+            "shiftCode" to code,
+            "role" to role,
+            "wardId" to wardId,
+          ),
+          hr,
+        ),
+      )
+      val ward =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json("name" to "HR Ward $s", "code" to "HW-$s", "type" to "general"),
+            token,
+          ),
+        )["id"].asText()
+      shift(nurse1, "EARLY", "NURSE", ward)
+      shift(nurse2, "LATE", "NURSE", ward)
+      shift(doctor, "EARLY", "DOCTOR", ward)
+      val duplicateShift =
+        api(
+          HttpMethod.POST,
+          "/api/v1/hr/rosters/$rosterId/shifts",
+          json("employeeId" to nurse1, "shiftDate" to today.toString(), "shiftCode" to "EARLY", "role" to "NURSE"),
+          hr,
+        )
+      assertEquals(409, duplicateShift.status, "duplicate shift rejected")
+      assertTrue(duplicateShift.body.contains("SHIFT_DUPLICATE"), "shift duplicate guard")
+      val published = `data`(api(HttpMethod.POST, "/api/v1/hr/rosters/$rosterId/publish", json(), hr))
+      assertEquals("PUBLISHED", published["status"].asText(), "roster published")
+      assertEquals(3, published["shifts"].size(), "roster carries its shifts")
+      val lateShift =
+        api(
+          HttpMethod.POST,
+          "/api/v1/hr/rosters/$rosterId/shifts",
+          json("employeeId" to doctor, "shiftDate" to today.toString(), "shiftCode" to "NIGHT", "role" to "DOCTOR"),
+          hr,
+        )
+      assertEquals(409, lateShift.status, "published roster is frozen")
+      assertTrue(lateShift.body.contains("ROSTER_NOT_DRAFT"), "roster freeze guard")
+
+      // Leave request -> approve; a second one rejected; list by status.
+      val leave =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hr/leave",
+            json(
+              "employeeId" to nurse1,
+              "leaveType" to "annual",
+              "fromDate" to today.plusDays(7).toString(),
+              "toDate" to today.plusDays(9).toString(),
+              "reason" to "family",
+            ),
+            hr,
+          ),
+        )
+      assertEquals("PENDING", leave["status"].asText(), "leave pending")
+      val approved = `data`(api(HttpMethod.PATCH, "/api/v1/hr/leave/${leave["id"].asText()}", json("status" to "APPROVED"), hr))
+      assertEquals("APPROVED", approved["status"].asText(), "leave approved")
+      val again = api(HttpMethod.PATCH, "/api/v1/hr/leave/${leave["id"].asText()}", json("status" to "REJECTED"), hr)
+      assertEquals(409, again.status, "decided leave is final")
+      assertTrue(again.body.contains("LEAVE_NOT_PENDING"), "leave decision guard")
+      val leaveList = `data`(api(HttpMethod.GET, "/api/v1/hr/leave?status=APPROVED", token = hr))
+      assertTrue(leaveList.any { it["id"].asText() == leave["id"].asText() }, "approved leave listed")
+
+      // Attendance: record then update the check-out (upsert, no duplicate row).
+      val att =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hr/attendance",
+            json(
+              "employeeId" to nurse1,
+              "workDate" to today.toString(),
+              "checkInAt" to
+                java.time.Instant
+                  .now()
+                  .toString(),
+            ),
+            hr,
+          ),
+        )
+      assertTrue(att["checkOutAt"].isNull, "no check-out yet")
+      val attUpdated =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hr/attendance",
+            json(
+              "employeeId" to nurse1,
+              "workDate" to today.toString(),
+              "checkOutAt" to
+                java.time.Instant
+                  .now()
+                  .toString(),
+            ),
+            hr,
+          ),
+        )
+      assertEquals(att["id"].asText(), attUpdated["id"].asText(), "attendance upserted in place")
+      assertFalse(attUpdated["checkOutAt"].isNull, "check-out recorded")
+
+      // Credential inside the renewal window -> one renewal task + event.
+      val credential =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hr/credentials",
+            json("employeeId" to doctor, "credentialType" to "Medical license", "identifier" to "LIC-$s", "expiresOn" to today.plusDays(10).toString()),
+            hr,
+          ),
+        )
+      val scanned = `data`(api(HttpMethod.POST, "/api/v1/hr/credentials/scan", json(), hr))
+      val scannedCredential = scanned.first { it["id"].asText() == credential["id"].asText() }
+      assertFalse(scannedCredential["renewalTaskId"].isNull, "renewal task linked")
+      `data`(api(HttpMethod.POST, "/api/v1/hr/credentials/scan", json(), hr))
+      val tasks = `data`(api(HttpMethod.GET, "/api/v1/tasks", token = token))
+      val renewalTasks = tasks.filter { it["relatedType"].asText() == "CREDENTIAL" && it["relatedId"].asText() == credential["id"].asText() }
+      assertEquals(1, renewalTasks.size, "renewal task created once")
+
+      // Nurse-patient ratio for the ward: 1 admitted patient / 2 nurses.
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Ratio$s",
+              "lastName" to "Patient",
+              "gender" to "male",
+              "dateOfBirth" to "1975-05-05",
+              "phone" to "68$s".take(11),
+              "qid" to "HR$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]
+      val bed =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+            json("label" to "HR-$s", "type" to "standard", "status" to "available", "wardId" to ward),
+            token,
+          ),
+        )["id"].asText()
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/admissions",
+          json("hospitalId" to hospitalId, "patientId" to patient["id"].asText(), "bedId" to bed, "admissionType" to "elective"),
+          token,
+        ),
+        "patient admitted",
+      )
+      val ratio = `data`(api(HttpMethod.GET, "/api/v1/hr/ratio?date=$today", token = hr))
+      val wardRatio = ratio.first { it["wardId"].asText() == ward }
+      assertEquals(1, wardRatio["patients"].asInt(), "one patient in the ward")
+      assertEquals(2, wardRatio["nurses"].asInt(), "two nurses on shift")
+      assertEquals(0.5, wardRatio["patientsPerNurse"].asDouble(), 1e-9, "patients per nurse")
+
+      // Payroll export (external payroll consumes this; no payroll engine here).
+      val payroll = `data`(api(HttpMethod.GET, "/api/v1/hr/payroll/export?from=$today&to=$today", token = hr))
+      val nurseRow = payroll["rows"].firstOrNull { it["employeeId"].asText() == nurse1 }
+      assertNotNull(nurseRow, "payroll row for the rostered nurse: $payroll")
+      assertEquals(1, nurseRow!!["shifts"].asInt(), "one shift exported")
+      assertEquals(8, nurseRow["hours"].asInt(), "8 hours per shift")
+
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      listOf("hr.roster_published", "hr.credential_expiring").forEach { wire ->
         assertTrue(outbox.any { it["eventType"].asText() == wire }, "$wire emitted")
       }
     }

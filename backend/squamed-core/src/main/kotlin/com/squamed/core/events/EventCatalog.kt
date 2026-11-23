@@ -111,6 +111,12 @@ object EventCatalog {
       Entry("ReferralAccepted", "group.referral_accepted", Status.EMITTED, "Cross-hospital referral accepted by the receiving hospital (06.01)."),
       Entry("RosterPublished", "hr.roster_published", Status.EMITTED, "Workforce roster published for a week (06.04)."),
       Entry("CredentialExpiring", "hr.credential_expiring", Status.EMITTED, "Credential inside the renewal window with a renewal task (06.04)."),
+      Entry("POIssued", "ops.po_issued", Status.EMITTED, "Purchase order issued from an approved requisition (06.05)."),
+      Entry("GoodsReceived", "ops.goods_received", Status.EMITTED, "Goods receipt booked and stock incremented (06.05)."),
+      Entry("SterilizationCycleCompleted", "ops.sterilization_completed", Status.EMITTED, "CSSD sterilization cycle completed with its result (06.05)."),
+      Entry("WorkOrderCreated", "ops.work_order_created", Status.EMITTED, "Facilities work order opened for an asset (06.05)."),
+      Entry("WorkOrderCompleted", "ops.work_order_completed", Status.EMITTED, "Facilities work order completed with downtime (06.05)."),
+      Entry("EDEncounterClosed", "ops.ed_encounter_closed", Status.EMITTED, "ED encounter closed with a disposition (06.05)."),
     )
 
   fun all(): List<Entry> = entries

@@ -9507,7 +9507,7 @@ class PlatformIntegrationTests {
       // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action drafts + 05.04 attention rail + 05.07 AI incident + 06.01 group share/referral (52 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        54,
+        60,
         catalog.size(),
         "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident + 06.01 group: $catalog",
       )
@@ -10135,7 +10135,7 @@ class PlatformIntegrationTests {
       // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07 + 4 AI action 05.03 + 2 attention rail 05.04 + 1 AI incident 05.07 + 3 group 06.01).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        54,
+        60,
         catalog.size(),
         "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident + 06.01 group: $catalog",
       )
@@ -15667,6 +15667,250 @@ class PlatformIntegrationTests {
 
       val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
       listOf("hr.roster_published", "hr.credential_expiring").forEach { wire ->
+        assertTrue(outbox.any { it["eventType"].asText() == wire }, "$wire emitted")
+      }
+    }
+
+    @Test
+    fun opsModulesCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Ops $s", "code" to "OP-$s", "country" to "Qatar"),
+            token,
+          ),
+        )["id"].asText()
+
+      fun opsUser(
+        role: String,
+        tag: String,
+      ): String {
+        val email = "$tag.ops.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "Ops$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      }
+      val ops = opsUser("SYSTEM_ADMIN", "opsadmin")
+      val procurement = opsUser("PROCUREMENT_OFFICER", "proc")
+
+      // Procurement: indent -> submit -> approve -> PO -> GRN -> stock.
+      val requisition =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ops/procurement/requisitions",
+            json(
+              "department" to "Theatre",
+              "notes" to "Restock",
+              "lines" to
+                listOf(
+                  mapOf("itemCode" to "GLOVE-$s", "itemName" to "Sterile gloves", "quantity" to 10, "unitPriceQar" to 5.0),
+                  mapOf("itemCode" to "SUT-$s", "itemName" to "Suture pack", "quantity" to 4, "unitPriceQar" to 25.0),
+                ),
+            ),
+            procurement,
+          ),
+        )
+      val reqId = requisition["id"].asText()
+      assertEquals("DRAFT", requisition["status"].asText(), "requisition draft")
+      assertEquals(150.0, requisition["totalQar"].asDouble(), 1e-9, "requisition total")
+      val earlyOrder = api(HttpMethod.POST, "/api/v1/ops/procurement/requisitions/$reqId/order", json(), procurement)
+      assertEquals(409, earlyOrder.status, "order before approval blocked")
+      assertTrue(earlyOrder.body.contains("REQUISITION_NOT_APPROVED"), "requisition approval guard")
+      assert2xx(api(HttpMethod.POST, "/api/v1/ops/procurement/requisitions/$reqId/status", json("status" to "SUBMITTED"), procurement), "submitted")
+      assert2xx(api(HttpMethod.POST, "/api/v1/ops/procurement/requisitions/$reqId/status", json("status" to "APPROVED"), procurement), "approved")
+      val order = `data`(api(HttpMethod.POST, "/api/v1/ops/procurement/requisitions/$reqId/order", json(), procurement))
+      assertEquals("ISSUED", order["status"].asText(), "purchase order issued")
+      assertEquals(150.0, order["totalQar"].asDouble(), 1e-9, "PO total")
+      val receipt =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ops/procurement/orders/${order["id"].asText()}/receive",
+            json("lines" to listOf(mapOf("itemCode" to "GLOVE-$s", "quantity" to 10), mapOf("itemCode" to "SUT-$s", "quantity" to 4)), "notes" to "full"),
+            procurement,
+          ),
+        )
+      assertEquals(2, receipt["lines"].size(), "GRN lines")
+      val stock = `data`(api(HttpMethod.GET, "/api/v1/ops/procurement/stock", token = procurement))
+      assertEquals(10, stock.first { it["itemCode"].asText() == "GLOVE-$s" }["quantityOnHand"].asInt(), "gloves stocked")
+      val secondReceipt =
+        api(
+          HttpMethod.POST,
+          "/api/v1/ops/procurement/orders/${order["id"].asText()}/receive",
+          json("lines" to listOf(mapOf("itemCode" to "GLOVE-$s", "quantity" to 1))),
+          procurement,
+        )
+      assertEquals(409, secondReceipt.status, "received PO is closed")
+      assertTrue(secondReceipt.body.contains("ORDER_NOT_OPEN"), "order state guard")
+      val performance = `data`(api(HttpMethod.GET, "/api/v1/ops/procurement/vendors/performance", token = procurement))
+      assertTrue(performance.any { it["orders"].asInt() >= 1 && it["received"].asInt() >= 1 }, "vendor performance counted: $performance")
+
+      // CSSD: cycle before issue, issue to an OT case, return, traceability.
+      val tray = `data`(api(HttpMethod.POST, "/api/v1/ops/cssd/trays", json("code" to "TRAY-$s", "name" to "Laparotomy tray"), ops))
+      val trayId = tray["id"].asText()
+      val cycle = `data`(api(HttpMethod.POST, "/api/v1/ops/cssd/trays/$trayId/cycles", json(), ops))
+      val issueInCycle = api(HttpMethod.POST, "/api/v1/ops/cssd/trays/$trayId/issue", json(), ops)
+      assertEquals(409, issueInCycle.status, "tray in cycle cannot be issued")
+      assertTrue(issueInCycle.body.contains("TRAY_NOT_AVAILABLE"), "tray state guard")
+      val completed = `data`(api(HttpMethod.POST, "/api/v1/ops/cssd/cycles/${cycle["id"].asText()}/complete", json("result" to "PASS"), ops))
+      assertEquals("COMPLETED", completed["status"].asText(), "cycle completed")
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Ops$s",
+              "lastName" to "Patient",
+              "gender" to "male",
+              "dateOfBirth" to "1972-02-02",
+              "phone" to "67$s".take(11),
+              "qid" to "OP$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]
+      val consent =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/consents",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patient["id"].asText(),
+              "purpose" to "treatment",
+              "scope" to "procedure",
+              "signedByName" to "Patient",
+            ),
+            token,
+          ),
+        )
+      val schedule =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patient["id"].asText(),
+              "procedureName" to "Ops case $s",
+              "procedureCode" to "OP-01",
+              "consentId" to consent["id"].asText(),
+              "scheduledStartAt" to
+                java.time.Instant
+                  .now()
+                  .plusSeconds(3600)
+                  .toString(),
+            ),
+            token,
+          ),
+        )
+      val issued = `data`(api(HttpMethod.POST, "/api/v1/ops/cssd/trays/$trayId/issue", json("surgeryScheduleId" to schedule["id"].asText()), ops))
+      assertEquals(schedule["id"].asText(), issued["surgeryScheduleId"].asText(), "tray linked to the OT case")
+      val trace = `data`(api(HttpMethod.GET, "/api/v1/ops/cssd/traceability?trayId=$trayId", token = ops))
+      assertEquals(1, trace["cycles"].size(), "cycle in the trace")
+      assertEquals(1, trace["issues"].size(), "issue in the trace")
+      val returned = `data`(api(HttpMethod.POST, "/api/v1/ops/cssd/trays/$trayId/return", json(), ops))
+      assertFalse(returned["returnedAt"].isNull, "tray returned")
+
+      // Facilities: asset -> work order -> complete with downtime.
+      val asset =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ops/facilities/assets",
+            json(
+              "code" to "AST-$s",
+              "name" to "Ventilator",
+              "category" to "equipment",
+              "location" to "ICU",
+              "nextPmOn" to
+                java.time.LocalDate
+                  .now()
+                  .plusDays(30)
+                  .toString(),
+            ),
+            ops,
+          ),
+        )
+      val wo =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ops/facilities/work-orders",
+            json(
+              "assetId" to asset["id"].asText(),
+              "type" to "CORRECTIVE",
+              "description" to "Flow sensor fault",
+              "downtimeMinutes" to 45,
+            ),
+            ops,
+          ),
+        )
+      assertEquals("OPEN", wo["status"].asText(), "work order open")
+      val assetBusy = `data`(api(HttpMethod.GET, "/api/v1/ops/facilities/assets", token = ops)).first { it["id"].asText() == asset["id"].asText() }
+      assertEquals("UNDER_MAINTENANCE", assetBusy["status"].asText(), "asset down during the work order")
+      val woDone = `data`(api(HttpMethod.POST, "/api/v1/ops/facilities/work-orders/${wo["id"].asText()}/complete", json("downtimeMinutes" to 50), ops))
+      assertEquals("COMPLETED", woDone["status"].asText(), "work order completed")
+      assertEquals(50, woDone["downtimeMinutes"].asInt(), "downtime recorded")
+
+      // ED: triage -> resus -> treatment -> discharge, dashboard.
+      val ed =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ops/ed/encounters",
+            json(
+              "patientId" to patient["id"].asText(),
+              "triageLevel" to 2,
+              "chiefComplaint" to "Chest pain",
+            ),
+            ops,
+          ),
+        )
+      assertEquals("RESUS", ed["status"].asText(), "ESI 2 starts in resus")
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/ops/ed/encounters/${ed["id"].asText()}/status", json("status" to "IN_TREATMENT"), ops), "moved to treatment")
+      val closed = `data`(api(HttpMethod.PATCH, "/api/v1/ops/ed/encounters/${ed["id"].asText()}/status", json("status" to "DISCHARGED"), ops))
+      assertEquals("DISCHARGED", closed["status"].asText(), "ED encounter closed")
+      val reopen = api(HttpMethod.PATCH, "/api/v1/ops/ed/encounters/${ed["id"].asText()}/status", json("status" to "IN_TREATMENT"), ops)
+      assertEquals(409, reopen.status, "closed ED encounter is final")
+      val dashboard = `data`(api(HttpMethod.GET, "/api/v1/ops/ed/dashboard", token = ops))
+      assertEquals(1, dashboard["discharged"].asInt(), "dashboard counts the discharge")
+
+      // Permission split: a procurement officer cannot run CSSD.
+      val cssdDenied = api(HttpMethod.POST, "/api/v1/ops/cssd/trays", json("code" to "X-$s", "name" to "nope"), procurement)
+      assertEquals(403, cssdDenied.status, "procurement officer lacks CSSD write")
+
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      listOf(
+        "ops.po_issued",
+        "ops.goods_received",
+        "ops.sterilization_completed",
+        "ops.work_order_created",
+        "ops.work_order_completed",
+        "ops.ed_encounter_closed",
+      ).forEach { wire ->
         assertTrue(outbox.any { it["eventType"].asText() == wire }, "$wire emitted")
       }
     }

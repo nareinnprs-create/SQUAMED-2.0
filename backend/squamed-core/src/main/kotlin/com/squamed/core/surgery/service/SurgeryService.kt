@@ -588,7 +588,7 @@ class SurgeryService(
     return consumableRepository.findBySurgeryScheduleIdOrderByRecordedAtDesc(scheduleId).map { ConsumableView.from(it) }
   }
 
-  // 04.06 SSI follow-up flag -> IPC stub (task).
+  // 04.06 SSI follow-up flag -> IPC hand-off (task).
   @Transactional
   fun flagSsi(
     scheduleId: UUID,

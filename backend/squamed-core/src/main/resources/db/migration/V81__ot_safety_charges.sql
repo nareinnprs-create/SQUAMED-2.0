@@ -1,7 +1,7 @@
 -- V81: OT safety + surgical charges (chunk-04 section 04.06)
 -- WHO Surgical Safety Checklist staged (sign-in / time-out / sign-out) and enforced on the
 -- schedule state machine, consent gate before starting, intra-op consumables emitting charge
--- events into the chunk-3 ledger, and an SSI follow-up flag to the IPC stub (task).
+-- events into the chunk-3 ledger, and an SSI follow-up flag to the IPC hand-off (task).
 -- Rollback note: additive only - drop surgery.surgical_consumable, drop the added columns.
 
 ALTER TABLE surgery.surgery_schedule

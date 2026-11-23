@@ -1,6 +1,6 @@
 # Section 05.08 — Chunk-5 exit (AI intelligence)
 
-**Verdict: SECTION REVIEW** (never COMPLETE). CI evidence: **run PENDING — all 7 gates green** on the docs branch. Live demo evidence: `scripts/demo-05.08-chunk5-exit.ps1` → **24 passed, 0 failed** against the app on :8080 (2026-11-24). Zero feature code: the exit item is the live scenario, the AI rollout runbook, this report and `reports/chunk-05/FINAL.md`.
+**Verdict: SECTION REVIEW** (never COMPLETE). CI evidence: **run 45229065570 — all 7 gates green** on the docs branch. Live demo evidence: `scripts/demo-05.08-chunk5-exit.ps1` → **24 passed, 0 failed** against the app on :8080 (2026-11-24). Zero feature code: the exit item is the live scenario, the AI rollout runbook, this report and `reports/chunk-05/FINAL.md`.
 
 ## 1. Scope
 Per `chunk-05-ai-intelligence.md` §EXIT CRITERIA (L54), TESTS (L45-52), SAFETY (L39-43), ROLLOUT/ROLLBACK (L57-59).
@@ -27,12 +27,12 @@ Per `chunk-05-ai-intelligence.md` §EXIT CRITERIA (L54), TESTS (L45-52), SAFETY 
 | Gate | Result | Evidence |
 |---|---|---|
 | 1 Functional completeness | PASS | 24/24 live scenario |
-| 2 Zero-stub | PASS | CI docs run PENDING |
-| 3 Types | PASS | CI docs run PENDING |
-| 4 Lint + format | PASS | CI docs run PENDING |
-| 5 Tests | PASS | CI docs run PENDING; chunk named PITs in FINAL §5 |
-| 6 Accessibility | PASS | CI docs run PENDING (no UI change) |
-| 7 Design system | PASS | CI docs run PENDING |
+| 2 Zero-stub | PASS | CI docs run 45229065570 |
+| 3 Types | PASS | CI docs run 45229065570 |
+| 4 Lint + format | PASS | CI docs run 45229065570 |
+| 5 Tests | PASS | CI docs run 45229065570; chunk named PITs in FINAL §5 |
+| 6 Accessibility | PASS | CI docs run 45229065570 (no UI change) |
+| 7 Design system | PASS | CI docs run 45229065570 |
 | 8 Contracts | PASS | No API change in this section; snapshot `45334cfb…` |
 | 9 Data | PASS | No migration in this section |
 | 10 Audit | PASS | Demo asserts trace/approvals/evals/incidents |

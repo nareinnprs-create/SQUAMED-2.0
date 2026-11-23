@@ -53,6 +53,9 @@ class AgentConfig(
   var temperature: Double = 0.2,
   @Column(name = "enabled", nullable = false)
   var enabled: Boolean = true,
+  // 05.07: the permission set an agent may act with (CSV of permission codes).
+  @Column(name = "scopes", length = 500)
+  var scopes: String? = null,
 ) : BaseEntity()
 
 @Entity
@@ -147,4 +150,58 @@ class ActionDraft(
   var decisionReason: String? = null,
   @Column(name = "result_ref", length = 120)
   var resultRef: String? = null,
+) : BaseEntity()
+
+// 05.07 governance: eval results attached to a release subject (agent@version / model).
+@Entity
+@Table(name = "eval_run", schema = "ai")
+class EvalRun(
+  @Column(name = "hospital_id", nullable = false)
+  var hospitalId: UUID,
+  @Column(name = "capability", nullable = false, length = 30)
+  var capability: String,
+  @Column(name = "subject", nullable = false, length = 160)
+  var subject: String,
+  @Column(name = "suite_name", nullable = false, length = 160)
+  var suiteName: String,
+  @Column(name = "cases_passed", nullable = false)
+  var casesPassed: Int,
+  @Column(name = "cases_total", nullable = false)
+  var casesTotal: Int,
+  @Column(name = "score", nullable = false)
+  var score: java.math.BigDecimal,
+  @Column(name = "verdict", nullable = false, length = 20)
+  var verdict: String,
+  @Column(name = "notes", length = 400)
+  var notes: String? = null,
+  @Column(name = "recorded_by")
+  var recordedBy: UUID? = null,
+  @Column(name = "recorded_at", nullable = false)
+  var recordedAt: java.time.Instant = java.time.Instant.now(),
+) : BaseEntity()
+
+// 05.07 governance: the AI incident register.
+@Entity
+@Table(name = "incident", schema = "ai")
+class AiIncident(
+  @Column(name = "hospital_id", nullable = false)
+  var hospitalId: UUID,
+  @Column(name = "capability", nullable = false, length = 30)
+  var capability: String,
+  @Column(name = "severity", nullable = false, length = 20)
+  var severity: String,
+  @Column(name = "summary", nullable = false, length = 300)
+  var summary: String,
+  @Column(name = "detail", columnDefinition = "TEXT")
+  var detail: String? = null,
+  @Column(name = "status", nullable = false, length = 20)
+  var status: String = "OPEN",
+  @Column(name = "reported_by")
+  var reportedBy: UUID? = null,
+  @Column(name = "reported_at", nullable = false)
+  var reportedAt: java.time.Instant = java.time.Instant.now(),
+  @Column(name = "closed_at")
+  var closedAt: java.time.Instant? = null,
+  @Column(name = "resolution", length = 400)
+  var resolution: String? = null,
 ) : BaseEntity()

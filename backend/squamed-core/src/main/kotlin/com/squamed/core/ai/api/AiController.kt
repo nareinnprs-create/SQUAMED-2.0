@@ -70,6 +70,28 @@ data class AiAgentCreateRequest(
   val modelId: UUID? = null,
   val temperature: Double? = null,
   val enabled: Boolean? = null,
+  val scopes: String? = null,
+)
+
+data class AiEvalRequest(
+  val capability: String,
+  val subject: String,
+  val suiteName: String,
+  val casesPassed: Int,
+  val casesTotal: Int,
+  val notes: String? = null,
+)
+
+data class AiIncidentRequest(
+  val capability: String,
+  val severity: String,
+  val summary: String,
+  val detail: String? = null,
+)
+
+data class AiIncidentUpdateRequest(
+  val status: String? = null,
+  val resolution: String? = null,
 )
 
 @RestController
@@ -131,6 +153,7 @@ class AiController(
         req.modelId,
         req.temperature,
         req.enabled,
+        req.scopes,
       )
     return ApiResponse.ok(mapOf("id" to agent.id, "code" to agent.code, "name" to agent.name))
   }
@@ -318,6 +341,90 @@ class AiController(
   ): ApiResponse<com.squamed.core.ai.service.ActionDraftView> =
     ApiResponse.ok(actionService.reject(id, principal, tenantResolver.pinOrDefault(principal, null), req.reason))
 
+  // 05.07 governance registry: evals on releases, incident register, cost dashboard.
+  @PostMapping("/governance/evals")
+  @RequiresPermission("ai:manage:agent")
+  fun recordEval(
+    @RequestBody req: AiEvalRequest,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.EvalRunView> =
+    ApiResponse.ok(
+      governanceService.recordEval(
+        tenantResolver.pinOrDefault(principal, null),
+        req.capability,
+        req.subject,
+        req.suiteName,
+        req.casesPassed,
+        req.casesTotal,
+        req.notes,
+        principal.userId,
+      ),
+    )
+
+  @GetMapping("/governance/evals")
+  @RequiresPermission("ai:read:agent")
+  fun evals(
+    @RequestParam(name = "subject", required = false) subject: String?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<com.squamed.core.ai.service.EvalRunView>> = ApiResponse.ok(governanceService.evals(tenantResolver.pinOrDefault(principal, null), subject))
+
+  @PostMapping("/governance/incidents")
+  @RequiresPermission("ai:chat:agent")
+  fun reportIncident(
+    @RequestBody req: AiIncidentRequest,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.AiIncidentView> =
+    ApiResponse.ok(
+      governanceService.reportIncident(
+        tenantResolver.pinOrDefault(principal, null),
+        req.capability,
+        req.severity,
+        req.summary,
+        req.detail,
+        principal.userId,
+      ),
+    )
+
+  @GetMapping("/governance/incidents")
+  @RequiresPermission("ai:read:agent")
+  fun incidents(
+    @RequestParam(name = "status", required = false) status: String?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<com.squamed.core.ai.service.AiIncidentView>> =
+    ApiResponse.ok(governanceService.incidents(tenantResolver.pinOrDefault(principal, null), status))
+
+  @PatchMapping("/governance/incidents/{id}")
+  @RequiresPermission("ai:manage:agent")
+  fun updateIncident(
+    @PathVariable id: UUID,
+    @RequestBody req: AiIncidentUpdateRequest,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.AiIncidentView> =
+    ApiResponse.ok(
+      governanceService.updateIncident(
+        id,
+        tenantResolver.pinOrDefault(principal, null),
+        req.status,
+        req.resolution,
+        principal.userId,
+      ),
+    )
+
+  @GetMapping("/governance/costs")
+  @RequiresPermission("ai:read:agent")
+  fun costs(
+    @RequestParam(name = "from", required = false) from: String?,
+    @RequestParam(name = "to", required = false) to: String?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.CostDashboardView> =
+    ApiResponse.ok(
+      governanceService.costs(
+        tenantResolver.pinOrDefault(principal, null),
+        from?.takeIf { it.isNotBlank() }?.let { java.time.Instant.parse(it) },
+        to?.takeIf { it.isNotBlank() }?.let { java.time.Instant.parse(it) },
+      ),
+    )
+
   private fun jsonEscape(s: String): String =
     s
       .replace("\\", "\\\\")
@@ -351,5 +458,6 @@ private fun com.squamed.core.ai.domain.AgentConfig.toMap(): Map<String, Any?> =
     "modelId" to modelId,
     "temperature" to temperature,
     "enabled" to enabled,
+    "scopes" to scopes,
     "createdAt" to createdAt,
   )

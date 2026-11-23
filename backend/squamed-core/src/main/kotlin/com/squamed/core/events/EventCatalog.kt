@@ -98,6 +98,7 @@ object EventCatalog {
       Entry("AiActionApproved", "ai.action_approved", Status.EMITTED, "Drafted action approved and executed through the platform API (05.03)."),
       Entry("AiActionRejected", "ai.action_rejected", Status.EMITTED, "Drafted action rejected by a human reviewer (05.03)."),
       Entry("AiActionExpired", "ai.action_expired", Status.EMITTED, "Drafted action expired before a decision (05.03)."),
+      Entry("AiIncidentReported", "ai.incident_reported", Status.EMITTED, "AI incident reported to the governance register (05.07)."),
     )
 
   fun all(): List<Entry> = entries

@@ -1,11 +1,15 @@
 package com.squamed.core.ipd.service
 
+import com.squamed.core.billing.api.PostChargeDto
 import com.squamed.core.billing.repository.InvoiceRepository
+import com.squamed.core.billing.repository.TariffItemRepository
+import com.squamed.core.billing.service.BillingService
 import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.hospitalconfig.domain.Bed
 import com.squamed.core.hospitalconfig.repository.BedRepository
+import com.squamed.core.identity.security.SquamedPrincipal
 import com.squamed.core.ipd.api.AdmissionCreateDto
 import com.squamed.core.ipd.api.AdmissionDischargeDto
 import com.squamed.core.ipd.api.AdmissionTransferDto
@@ -14,10 +18,14 @@ import com.squamed.core.ipd.api.AdmissionView
 import com.squamed.core.ipd.api.AttendantCreateDto
 import com.squamed.core.ipd.api.AttendantView
 import com.squamed.core.ipd.api.BedBoardRowView
+import com.squamed.core.ipd.api.DietManifestRowView
+import com.squamed.core.ipd.api.DietOrderRequestDto
+import com.squamed.core.ipd.api.DietOrderView
 import com.squamed.core.ipd.api.DischargeChecklistView
 import com.squamed.core.ipd.api.DischargeSummaryUpsertDto
 import com.squamed.core.ipd.api.DischargeSummaryView
 import com.squamed.core.ipd.api.PlanDischargeDto
+import com.squamed.core.ipd.api.RoomChargeRequestDto
 import com.squamed.core.ipd.api.SummarySignDto
 import com.squamed.core.ipd.domain.Admission
 import com.squamed.core.ipd.domain.AdmissionTransfer
@@ -44,8 +52,12 @@ class AdmissionService(
   private val dischargeSummaryRepository: DischargeSummaryRepository,
   private val attendantRepository: AttendantRepository,
   private val dischargeChecklistRepository: DischargeChecklistRepository,
+  private val dietOrderRepository: com.squamed.core.ipd.repository.DietOrderRepository,
   private val bedRepository: BedRepository,
   private val invoiceRepository: InvoiceRepository,
+  private val tariffItemRepository: TariffItemRepository,
+  private val billingService: BillingService,
+  private val allergyRepository: com.squamed.core.patient.repository.AllergyRepository,
   private val patientRecordRepository: PatientRecordRepository,
   private val taskService: TaskService,
   private val eventPublisher: DomainEventPublisher,
@@ -283,6 +295,24 @@ class AdmissionService(
         checklist.finalBillVerified = true
       }
 
+      // 04.08: the medication-reconciliation review opens a task for the attending doctor.
+      "med_rec" -> {
+        checklist.medRecDone = true
+        checklist.medRecAt = Instant.now()
+        taskService.createTask(
+          TaskCreateDto(
+            hospitalId = admission.hospitalId,
+            title = "Medication reconciliation review",
+            description = "Review the discharge medication list before the summary is signed (admission ${admission.id})",
+            assigneeId = admission.attendingDoctorId,
+            priority = "normal",
+            relatedType = "DISCHARGE",
+            relatedId = admission.id,
+          ),
+          actorId,
+        )
+      }
+
       else -> {
         throw IllegalArgumentException("DISCHARGE_CHECKLIST_ITEM_INVALID")
       }
@@ -300,6 +330,9 @@ class AdmissionService(
     dto: SummarySignDto,
     actorId: UUID,
   ): DischargeSummaryView {
+    // 04.08: the summary cannot finalize before the medication-reconciliation review.
+    val checklist = dischargeChecklistRepository.findByAdmissionId(admissionId).orElse(null)
+    if (checklist?.medRecDone != true) throw IllegalStateException("DISCHARGE_MEDREC_REQUIRED")
     val summary = dischargeSummaryRepository.findByAdmissionId(admissionId).orElseThrow { IllegalArgumentException("ADMISSION_SUMMARY_MISSING") }
     if (summary.status == "SIGNED") throw IllegalArgumentException("SUMMARY_ALREADY_SIGNED")
     if (dto.icdCodes.isEmpty() || dto.icdCodes.any { it.isBlank() }) throw IllegalArgumentException("SUMMARY_ICD_REQUIRED")
@@ -508,6 +541,108 @@ class AdmissionService(
       ),
     )
   }
+
+  // -- 04.08 room charges, interim bills, dietary --
+
+  @Transactional
+  fun postRoomCharge(
+    admissionId: UUID,
+    dto: RoomChargeRequestDto,
+    principal: SquamedPrincipal,
+  ): com.squamed.core.billing.api.ChargeView {
+    val admission = findAdmission(admissionId)
+    val bed = admission.bedId?.let { bedRepository.findById(it).orElse(null) }
+    val end = admission.dischargedAt ?: Instant.now()
+    val start = admission.admittedAt ?: end
+    val hours =
+      dto.hours ?: kotlin.math
+        .ceil(
+          java.time.Duration
+            .between(start, end)
+            .toMinutes() / 60.0,
+        ).toInt()
+        .coerceAtLeast(1)
+    if (hours <= 0) throw IllegalArgumentException("ROOM_CHARGE_HOURS_INVALID")
+    val roomCode = "ROOM-" + (bed?.type ?: "standard").uppercase()
+    val rate =
+      dto.unitPriceQar
+        ?: tariffItemRepository.findByCode(admission.hospitalId, roomCode).firstOrNull { it.isActive }?.priceQar
+        ?: throw IllegalArgumentException("ROOM_RATE_NOT_CONFIGURED")
+    return billingService.postCharge(
+      PostChargeDto(
+        patientId = admission.patientId,
+        hospitalId = admission.hospitalId,
+        chargeCode = roomCode,
+        chargeName = "IPD room charge (${bed?.type ?: "standard"})",
+        category = "room",
+        quantity = hours,
+        unitPriceQar = rate,
+        reason = "IPD room charge: $hours hour(s) at $rate",
+      ),
+      principal.userId,
+      admission.hospitalId,
+    )
+  }
+
+  @Transactional
+  fun interimBill(
+    admissionId: UUID,
+    principal: SquamedPrincipal,
+  ): com.squamed.core.billing.api.InvoiceDetailView {
+    val admission = findAdmission(admissionId)
+    return billingService.issueInvoice(admission.patientId, null, null, null, null, principal, admission.hospitalId)
+  }
+
+  @Transactional
+  fun createDietOrder(
+    admissionId: UUID,
+    dto: DietOrderRequestDto,
+    principal: SquamedPrincipal,
+  ): DietOrderView {
+    val admission = findAdmission(admissionId)
+    if (admission.status != "admitted") throw IllegalArgumentException("ADMISSION_NOT_ADMITTED")
+    if (dto.dietType.isBlank()) throw IllegalArgumentException("DIET_TYPE_REQUIRED")
+    // 04.08: allergy-aware diet orders.
+    val haystack = (dto.dietType + " " + (dto.restrictions ?: "")).lowercase()
+    val conflict =
+      allergyRepository.findByPatientIdAndIsActiveTrue(admission.patientId).any { allergy ->
+        val allergen = allergy.allergen.trim().lowercase()
+        allergen.isNotEmpty() && allergen != "nka" && allergen.length >= 4 && haystack.contains(allergen)
+      }
+    if (conflict) throw IllegalArgumentException("DIET_ALLERGEN_CONFLICT")
+    dietOrderRepository.findByAdmissionIdAndIsActiveTrue(admissionId).forEach {
+      it.isActive = false
+      dietOrderRepository.save(it)
+    }
+    val saved =
+      dietOrderRepository.save(
+        com.squamed.core.ipd.domain
+          .DietOrder(
+            hospitalId = admission.hospitalId,
+            admissionId = admissionId,
+            patientId = admission.patientId,
+            dietType = dto.dietType.trim(),
+            restrictions = dto.restrictions,
+            notes = dto.notes,
+            orderedBy = principal.userId,
+          ).also { it.createdBy = principal.userId },
+      )
+    return DietOrderView.from(saved)
+  }
+
+  @Transactional(readOnly = true)
+  fun dietManifest(hospitalId: UUID): List<DietManifestRowView> =
+    dietOrderRepository.findActiveForHospital(hospitalId).map { order ->
+      val patient = patientRecordRepository.findById(order.patientId).orElse(null)
+      DietManifestRowView(
+        admissionId = order.admissionId,
+        patientId = order.patientId,
+        patientName = listOfNotNull(patient?.firstName, patient?.lastName).joinToString(" ").ifBlank { "Unknown" },
+        dietType = order.dietType,
+        restrictions = order.restrictions,
+        notes = order.notes,
+      )
+    }
 
   private fun findAdmission(id: UUID): Admission = admissionRepository.findById(id).orElseThrow { IllegalArgumentException("ADMISSION_NOT_FOUND") }
 

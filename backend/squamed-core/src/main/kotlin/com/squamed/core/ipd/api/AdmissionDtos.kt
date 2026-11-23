@@ -223,3 +223,51 @@ data class BedBoardRowView(
   val patientId: UUID?,
   val admittedAt: Instant?,
 )
+
+// 04.08 IPD billing + dietary.
+data class RoomChargeRequestDto(
+  val hours: Int? = null,
+  val unitPriceQar: java.math.BigDecimal? = null,
+)
+
+data class DietOrderRequestDto(
+  val dietType: String,
+  val restrictions: String? = null,
+  val notes: String? = null,
+)
+
+data class DietOrderView(
+  val id: UUID?,
+  val hospitalId: UUID,
+  val admissionId: UUID,
+  val patientId: UUID,
+  val dietType: String,
+  val restrictions: String?,
+  val notes: String?,
+  val isActive: Boolean,
+  val orderedAt: Instant?,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.ipd.domain.DietOrder) =
+      DietOrderView(
+        entity.id,
+        entity.hospitalId,
+        entity.admissionId,
+        entity.patientId,
+        entity.dietType,
+        entity.restrictions,
+        entity.notes,
+        entity.isActive,
+        entity.orderedAt,
+      )
+  }
+}
+
+data class DietManifestRowView(
+  val admissionId: UUID,
+  val patientId: UUID,
+  val patientName: String,
+  val dietType: String,
+  val restrictions: String?,
+  val notes: String?,
+)

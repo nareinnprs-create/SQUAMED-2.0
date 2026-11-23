@@ -1,54 +1,62 @@
-# Section 05.03 — Command bar (⌘K) — gate-run report
+# Section 05.03 — Command bar (?K) (chunk 5)
 
-Static read-only assessment. Baseline commit `886c51c`, CI run `43548016617` (all 6 CI gates green; merged instruction coverage 80.13%). No code, ledger, chunk file, or `.gate/` content changed by this report.
+**Verdict: COMPLETE → GATE-12 PASS (partial: intelligence rail 05.04 and eval suite 05.02 separate)**. Gate-run assessment of the CURRENT tree @ PR #104 (chunks 0–4 + 05.01 merged + this PR). CI evidence: **run 45196111696 — all 7 gates green**. Named PIT `aiCommandBarGroundingCoverage` green in the same run.
 
 ## 1. Scope
-Chunk file §05.03: intent routing — navigation / permission-aware retrieval **with citations (grounding mandatory)** / action-drafting → approval UI; **no ungrounded clinical answers possible**. Present at baseline: 7-intent router returning structured results + text. **Grounding/citations enforcement and approval UI absent.**
+Per `chunk-05-ai-intelligence.md` §2: intent routing (navigation, permission-aware retrieval with citations, action-drafting as draft proposal → approval UI), and the "no ungrounded clinical answers possible" rule (§SAFETY rule 3).
 
-## 2. Built
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/ai/service/AiService.kt` — `command()` intent router.
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/ai/api/AiController.kt` — command endpoint.
-- `apps/web` command bar + `command-bar.test.tsx` (6 its).
+## 2. Key artifacts
+**Migration `V86__ai_action_drafts.sql`** (additive; rollback note inside): `ai.action_draft` + queue index.
 
-## 3. Data/API/event contracts delivered
-- API: command endpoint; intents NAVIGATE / COUNT / SEARCH_PATIENTS / WORKFLOW / ANALYTICS / HELP / CHAT; structured results (page labels, counts, analytics snapshot, search hits).
-- Events: command() does **not** write InteractionLog (chunk-5 deferral comment at PIT:982-985).
+**Backend:** `AiActions.kt` (propose/approve/reject/list, TTL, scope check, governed execution, events), `AiIntentService.kt` (citations, DRAFT_TASK/DRAFT_DISCHARGE intents, draft render branches), `AiService.kt` (grounding guard, draft path, command trace), `AiController.kt` (draft/queue/approve/reject endpoints), `EventCatalog.kt` (4 AI action events).
+
+**Web:** `command-bar.tsx` (Sources line, Draft proposal panel with Approve/Reject, inline decision errors), `command-bar.test.tsx` (8 its).
+
+## 3. Gap closure (from the gate-run report §7)
+- ✔ No citations/grounding → every record-backed intent carries citations; `AI_UNGROUNDED_ANSWER` if absent.
+- ✔ No approval UI → inline draft panel; approval executes through `TaskService` / `AdmissionService` with the approver's scopes.
+- ✔ Commands not logged → command capability trace (05.01) with redaction.
 
 ## 4. Gates 1–12
-| # | Gate | Result | Evidence |
-|---|---|---|---|
-| 1 | Functional completeness | **FAIL (PARTIAL)** | Present: 7 intents — navigate w/ page label, count/analytics snapshot, search_patients, workflow, help capabilities, chat. Missing: citations/grounding enforcement on retrieval, approval UI for action-drafting (command returns text only), ungrounded-answer guarantee. |
-| 2 | Zero-stub scan | PASS | CI run 43548016617 (gate 2 green); SC-9 allowlist. |
-| 3 | Types | PASS | CI run 43548016617 (gate 3 green). |
-| 4 | Lint + format | PASS | CI run 43548016617 (gate 4 green). |
-| 5 | Tests | PASS | CI run 43548016617 (gate 5 green); merged instruction coverage 80.13% ≥ 0.80. |
-| 6 | Accessibility | PASS | CI run 43548016617 (gate 6 green). Caveat: ai page not in axe `SCAN_ROUTES`; ⌘K keyboard path covered only by `command-bar.test.tsx` unit tests. |
-| 7 | Design system | PASS | CI run 43548016617 (gate 7 green). |
-| 8 | Contracts | **FAIL** | Schema-registry harness not yet wired (00.02 scope). |
-| 9 | Data | **FAIL** | RLS cross-tenant suite ABSENT until 00.04 (ADR-13) — command reads tenant-scoped data. |
-| 10 | Audit | PASS | Command endpoint controller-mediated; `AuditAspect.kt:22-23` covers it; note: InteractionLog write for commands deferred (§9). |
-| 11 | Docs | PASS | This report re-checks chunk file §05.03; ledger untouched; gate-parity green. |
-| 12 | Exit item | PASS | Named PIT slice `aiGatewayAndInteropJourney` command leg + `AiIntentServiceTest` green in run 43548016617. |
+| Gate | Result | Evidence |
+|---|---|---|
+| 1 Functional completeness | PASS | PIT: citations, draft → queue → approval/rejection, governed execution, scope denial, events |
+| 2 Zero-stub | PASS | CI branch run 45196111696 |
+| 3 Types | PASS | CI branch run 45196111696 (`tsc --noEmit` clean locally) |
+| 4 Lint + format | PASS | CI branch run 45196111696 |
+| 5 Tests | PASS | CI branch run 45196111696; named PIT below |
+| 6 Accessibility | PASS (caveat) | Draft panel is keyboard-reachable buttons with an aria-label; the /ai page remains outside the axe `SCAN_ROUTES` set (unchanged caveat) |
+| 7 Design system | PASS | Uses @squamed/ui Button/Badge tokens |
+| 8 Contracts | PASS | Snapshot `d5cdfda5…` + codegen committed; parity green |
+| 9 Data | PASS | V86 additive; hospital-scoped drafts; queue index |
+| 10 Audit | PASS | Draft decisions are controller-mediated (AuditAspect); events carry actor + result ref |
+| 11 Docs | PASS | This report; LEDGER row 05.03 COMPLETE; chunk-05 tracker |
+| 12 Exit item | PASS (partial) | Command-bar slice of the chunk-5 exit demo; rail/eval owed |
 
 ## 5. Tests
-- PIT: `aiGatewayAndInteropJourney` — command intents navigate/count/workflow/analytics/search_patients. Green in run 43548016617.
-- Unit: `AiIntentServiceTest` (10 tests, incl. `help intent exposes capabilities`, `open laboratory resolves to navigate with page label`, `revenue today produces analytics snapshot`). Green in run 43548016617.
-- Frontend: `command-bar.test.tsx` (6 its).
-- Coverage: merged instruction 80.13%.
+Named PIT **`aiCommandBarGroundingCoverage`** (fresh hospital): count/analytics citations (`count.patients`, `analytics.overview`), patient search cites the record id, `create task` draft on the approval queue, doctor approving a discharge plan 403 `AI_SCOPE_DENIED`, admin approval creates the task and sets `expectedDischargeAt`, reject recorded + re-approve 409 `AI_ACTION_NOT_PENDING`, outbox has `ai.action_proposed/approved/rejected`.
+
+Regressions: `aiGatewayGovernanceCoverage`, `aiGatewayAndInteropJourney`, `eventFabricCoverage` (catalog 46), `consentNotificationCoverage`.
 
 ## 6. Accessibility
-axe green in CI; ai page outside scan scope; keyboard ⌘K path exercised in `command-bar.test.tsx` but not axe-audited on-page.
+Draft panel: `role="group"` + aria-label, real buttons, no colour-only status (status text rendered). The page-level axe scan still does not include /ai.
 
-## 7. Issues
-- No citations/grounding enforcement — chunk file's "no ungrounded clinical answers possible" is not implemented — **open** (clinical-safety).
-- No approval UI for action-drafting — open.
-- `command()` skips InteractionLog write — deferral logged in PIT comment (root: logging funnel deferred within chunk 5) — open.
+## 7. Dual review — adversarial pass
+1. **Grounding guard placement** — after parsing, before render; a record-backed intent without citations throws instead of returning prose.
+2. **Negative answers** — an empty patient search cites the search query itself, so "no matches" is grounded too.
+3. **Approval is the trust boundary** — proposal is open to `ai:chat` users; approval re-checks the underlying permission (`task:manage:task`, `ipd:write:admission`), so an assistant cannot escalate.
+4. **Idempotence/decision race** — only `PROPOSED` can be decided; a second decision is 409.
+5. **Expiry** — TTL 24 h, enforced on decision (lazy sweeper not built); expired drafts emit `ai.action_expired`.
+6. **Payload trust** — approve reads only known keys and parses UUIDs/instants defensively; unknown keys are ignored.
+7. **Tenant isolation** — drafts are found by id **and** hospital; a foreign id is 404.
+8. **Trace** — commands log capability `command`, redacted text, 0 tokens (no model call).
 
-## 8. External blockers
-None.
+## 8. Deviations from contract
+- Drafts expire lazily (no scheduled sweeper).
+- Citations are record references, not sentence-level spans.
+- The approval UI is inline in the command bar; the dedicated /ai workspace is unchanged.
 
-## 9. Deviations from chunk file
-InteractionLog write for commands deferred with an in-code comment (PIT:982-985); not logged as a chunk-file scope change — flagged here for ledger follow-up.
-
-## 10. Exit-demo slice
-`gradlew.bat :squamed-core:integrationTest --tests "*PlatformIntegrationTests*aiGatewayAndInteropJourney*"` + `gradlew.bat :squamed-core:test --tests "*AiIntentServiceTest*"` — last run green in CI run 43548016617.
+## 9. Session trail
+- The first PIT used a doctor to prove the approval denial, but DOCTOR/NURSE hold `task:manage:task` (V50), so the denial moved to the discharge plan (DOCTOR lacks `ipd:write:admission`).
+- Draft titles initially lost case (the parser lowercases for matching); the title now comes from the original query.
+- Docker Desktop dropped once; compose restarted before the PIT run.

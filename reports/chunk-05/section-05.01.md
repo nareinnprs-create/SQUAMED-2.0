@@ -1,57 +1,67 @@
-# Section 05.01 — AI gateway — gate-run report
+# Section 05.01 — AI gateway (chunk 5)
 
-Static read-only assessment. Baseline commit `886c51c`, CI run `43548016617` (all 6 CI gates green; merged instruction coverage 80.13%). No code, ledger, chunk file, or `.gate/` content changed by this report.
+**Verdict: COMPLETE → GATE-12 PASS (partial: eval framework is 05.02, cost dashboard is 05.07)**. Gate-run assessment of the CURRENT tree @ PR #103 (chunks 0–4 merged + this PR). CI evidence: **run 45181226944 (attempt 2) — all 7 gates green**. Named PIT `aiGatewayGovernanceCoverage` green in the same run.
 
 ## 1. Scope
-Chunk file (`18-CHUNK5-SECTIONS.md` §05.01): OIDC client identity, effective-scope enforcement, prompt redaction layer, provider router (cloud/India-region **+ custom/self-hosted OpenAI-compatible endpoints as first-class targets**), token budgets, daily tenant caps **hard-cut at 100%**, full trace (model/prompt version/tokens/cost/latency), kill switch <1 min. Present at baseline: provider router + registries + trace table. **Identity, scopes, redaction, budgets/caps, kill switch absent.**
+Per `chunk-05-ai-intelligence.md` §1 (single entry point: OIDC client identity, effective-scope enforcement, prompt redaction, provider router incl. custom/self-hosted, token budgets + daily tenant caps, full trace, kill switch) and `03-BUILD-PROTOCOL.md` §7.
 
-## 2. Built
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/ai/api/AiController.kt` — chat/SSE/model/agent/tool/command endpoints.
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/ai/service/AiService.kt` — gateway orchestration.
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/ai/service/AiProviders.kt` — Echo + OpenAI-compatible providers; **custom/self-hosted LOCAL endpoints first-class** (config `squamed.ai.*`).
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/ai/domain/AiEntities.kt` — model_config, agent_config, tool_config, interaction_log.
-- `V27__ai.sql` — ai schema (4 tables).
+## 2. Key artifacts
+**Migration `V85__ai_gateway_governance.sql`** (additive; rollback note inside):
+- `ai.gateway_policy` (hospital, capability, enabled, daily_token_cap; unique per hospital+capability).
+- `ai.interaction_log` += `capability`, `prompt_version`, `prompt_tokens`, `completion_tokens`, `cost_usd`, `redacted`; index (hospital, capability, created_at).
+- `ai.model_config` += `cost_per_1k_tokens`.
+- `ai:chat:agent` granted to DOCTOR and NURSE.
 
-## 3. Data/API/event contracts delivered
-- Tables: model_config / agent_config / tool_config / interaction_log.
-- API: chat + SSE streaming (token+done events), model create/delete, agent/tool config endpoints.
-- Provider contract: Echo default; any OpenAI-compatible base URL incl. self-hosted.
-- Trace: interaction_log rows; **tokensUsed always null** (no usage parsing).
+**Code:** `AiGovernance.kt` (PromptRedactor + AiGovernanceService), `AiProviders.kt` (AiCompletion with usage), `AiService.kt` (governance gate, redaction, trace, scope map), `AiController.kt` (governance policies/usage endpoints, trace fields in logs).
+
+## 3. Gap closure (from the gate-run report §7)
+- ✔ `tokensUsed` always null → provider usage parsed (prompt/completion split), character-estimate fallback; cost from the model price.
+- ✔ No tenant-cap hard-cut → daily cap per hospital+capability, checked before dispatch (`AI_DAILY_TOKEN_CAP_REACHED`).
+- ✔ No kill switch → per-capability policy read fresh per request (`AI_CAPABILITY_DISABLED`); flip is effective on the next request.
+- ✔ No prompt redaction → email/MRN/QID/phone stripped before dispatch; the log keeps the redacted text only.
+- ✔ Effective-scope enforcement → intent→permission map through the platform evaluator (`AI_SCOPE_DENIED`).
+- ✔ Custom/self-hosted OpenAI-compatible endpoints stay first-class routing targets.
 
 ## 4. Gates 1–12
-| # | Gate | Result | Evidence |
-|---|---|---|---|
-| 1 | Functional completeness | **FAIL (PARTIAL)** | Present: provider router (Echo + OpenAI-compatible, self-hosted first-class), SSE streaming, model/agent/tool registries, interaction_log trace rows. Missing: OIDC client identity, effective-scope enforcement, prompt redaction layer, token budgets + daily tenant cap hard-cut, kill switch <1 min, full trace (tokens/cost null). |
-| 2 | Zero-stub scan | PASS | CI run 43548016617 (gate 2 green); SC-9 allowlist. |
-| 3 | Types | PASS | CI run 43548016617 (gate 3 green). |
-| 4 | Lint + format | PASS | CI run 43548016617 (gate 4 green). |
-| 5 | Tests | PASS | CI run 43548016617 (gate 5 green); merged instruction coverage 80.13% ≥ 0.80. |
-| 6 | Accessibility | PASS | CI run 43548016617 (gate 6 green). Caveat: ai page (1012 LOC) **not** in axe `SCAN_ROUTES`. |
-| 7 | Design system | PASS | CI run 43548016617 (gate 7 green). |
-| 8 | Contracts | **FAIL** | Schema-registry harness not yet wired (00.02 scope). |
-| 9 | Data | **FAIL** | RLS cross-tenant suite ABSENT until 00.04 (ADR-13) — tenant-scoped ai tables. |
-| 10 | Audit | PASS | AI writes (model/agent/tool config, interactions) controller-mediated; `AuditAspect.kt:22-23` covers them. |
-| 11 | Docs | PASS | This report re-checks chunk file §05.01; ledger untouched; gate-parity green. |
-| 12 | Exit item | PASS | Named PIT slice `aiGatewayAndInteropJourney` gateway leg (:889-1038) green in run 43548016617. |
+| Gate | Result | Evidence |
+|---|---|---|
+| 1 Functional completeness | PASS | PIT covers redaction, trace, scopes, kill switch, cap, usage, cost, self-hosted model |
+| 2 Zero-stub | PASS | CI branch run 45181226944 |
+| 3 Types | PASS | CI branch run 45181226944 |
+| 4 Lint + format | PASS | CI branch run 45181226944 |
+| 5 Tests | PASS | CI branch run 45181226944; named PIT below |
+| 6 Accessibility | PASS | CI branch run 45181226944 (web untouched) |
+| 7 Design system | PASS | CI branch run 45181226944 |
+| 8 Contracts | PASS | Snapshot `ebfa2520…` + codegen committed; parity green |
+| 9 Data | PASS | V85 additive + rollback note; policy unique per hospital+capability |
+| 10 Audit | PASS | Governance writes are controller-mediated (AuditAspect); interactions trace user/capability/model/cost |
+| 11 Docs | PASS | This report; LEDGER row 05.01 COMPLETE; chunk-05 tracker |
+| 12 Exit item | PASS (partial) | Gateway slice of the chunk-5 exit demo; eval framework (05.02) and cost dashboard (05.07) owed |
 
 ## 5. Tests
-- PIT: `aiGatewayAndInteropJourney` :889-1038 — ECHO default provider, ops agent + tools ≥5, model create/delete, chat, SSE token+done. Green in run 43548016617.
-- Unit: `AiIntentServiceTest` (10 tests — gateway-adjacent intent layer). Green in run 43548016617.
-- Coverage: merged instruction 80.13%.
+Named PIT **`aiGatewayGovernanceCoverage`** (fresh hospital; SYSTEM_ADMIN/DOCTOR/NURSE users): redacted chat logs `[QID]`/`[MRN]` with no raw digits, token split + `ops@N` prompt version + `chat` capability; doctor count allowed, nurse count 403 `AI_SCOPE_DENIED`; kill switch off → 409 → on → 200; cap 1 → 409 → restored; usage dashboard 4 capabilities with today's tokens and cap; priced model → `costUsd > 0` (agent model restored in `finally`); self-hosted model registered/removed.
+
+Regression: `aiGatewayAndInteropJourney` green (FHIR/HL7/MLLP, chat/SSE, command intents, model create/delete).
 
 ## 6. Accessibility
-axe green in CI; ai page outside `SCAN_ROUTES` — not page-axe-verified.
+Web surface untouched; repo-wide axe gate in CI.
 
-## 7. Issues
-- `tokensUsed` always null → cost/latency trace incomplete (root: provider usage field not parsed) — **open**.
-- No tenant-cap hard-cut or kill switch — security dual-review item open (chunk file demands both).
-- No prompt redaction before provider dispatch — open (PHI-to-provider risk).
+## 7. Dual review — adversarial pass
+1. **Redaction ordering** — email → MRN → QID → phone; the QID is masked before the phone pattern can eat 8-digit fragments.
+2. **False positives** — the phone pattern needs 8 digits (with optional +974) and a digit boundary, so ordinary numbers in prose are left alone; names are deliberately kept (ops answers about them) and documented.
+3. **Log privacy** — only the redacted text is persisted; the raw prompt never reaches the log or the provider.
+4. **Cap accounting** — counts `tokensUsed` since UTC midnight; a single request can overshoot the cap (checked before dispatch), which is the standard hard-cut trade-off.
+5. **Kill switch latency** — no cache: each request reads the policy row, so the flip applies immediately.
+6. **Scope map completeness** — unknown count labels map to no permission (fail-open for informational counts); patient/encounter/appointment/queue/lab/invoice/workflow/task/analytics map explicitly. A new tool must be added to the map.
+7. **Test isolation** — the PIT uses a hospital-scoped SYSTEM_ADMIN so caps/kill switch never leak into the primary hospital; the priced-model agent pin is restored in `finally`.
+8. **Cost** — configured per-model rate, not provider billing; the 05.07 dashboard reconciles against invoices.
 
-## 8. External blockers
-None hard: Echo default + self-hosted OpenAI-compatible config keep build unblocked; cloud provider contracts (procurement) remain open for production keys.
+## 8. Deviations from contract
+- OIDC client identity is the platform JWT identity (single service, no separate AI service account yet).
+- Cost is model-rate based, not provider-invoice based (05.07).
+- Command calls trace 0 tokens (no model call).
+- Eval-gating (05.02) and the agent registry (05.07) are separate sections.
 
-## 9. Deviations from chunk file
-None logged; chunk file not edited.
-
-## 10. Exit-demo slice
-`gradlew.bat :squamed-core:integrationTest --tests "*PlatformIntegrationTests*aiGatewayAndInteropJourney*"` — last run green in CI run 43548016617.
+## 9. Session trail
+- The exact `--tests` class filter failed to match; the wildcard form (`*aiGatewayGovernanceCoverage*`) found the test inside `OpdEmrCoreTests`.
+- Docker Desktop dropped once; compose restarted, postgres healthy before the PIT run.

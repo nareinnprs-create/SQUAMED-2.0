@@ -119,3 +119,32 @@ class GatewayPolicy(
   @Column(name = "daily_token_cap", nullable = false)
   var dailyTokenCap: Int = 200_000,
 ) : BaseEntity()
+
+// 05.03 command bar: an AI proposal a human must approve before any platform action runs.
+@Entity
+@Table(name = "action_draft", schema = "ai")
+class ActionDraft(
+  @Column(name = "hospital_id", nullable = false)
+  var hospitalId: UUID,
+  @Column(name = "proposed_by", nullable = false)
+  var proposedBy: UUID,
+  @Column(name = "action_type", nullable = false, length = 40)
+  var actionType: String,
+  @Column(name = "summary", nullable = false, length = 400)
+  var summary: String,
+  @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+  @Column(name = "payload", columnDefinition = "jsonb", nullable = false)
+  var payload: com.fasterxml.jackson.databind.JsonNode,
+  @Column(name = "status", nullable = false, length = 20)
+  var status: String = "PROPOSED",
+  @Column(name = "expires_at", nullable = false)
+  var expiresAt: java.time.Instant,
+  @Column(name = "decided_at")
+  var decidedAt: java.time.Instant? = null,
+  @Column(name = "decided_by")
+  var decidedBy: UUID? = null,
+  @Column(name = "decision_reason", length = 400)
+  var decisionReason: String? = null,
+  @Column(name = "result_ref", length = 120)
+  var resultRef: String? = null,
+) : BaseEntity()

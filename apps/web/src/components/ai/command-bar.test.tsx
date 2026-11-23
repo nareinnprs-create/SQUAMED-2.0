@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { renderMessage, targetRoute } from './command-bar'
+import { describeCitations, renderMessage, targetRoute } from './command-bar'
 
 describe('targetRoute', () => {
   it('maps known targets to page routes', () => {
@@ -36,6 +36,22 @@ describe('renderMessage', () => {
 
   it('returns a single span when there is no markdown', () => {
     expect(renderMessage('plain text')).toHaveLength(1)
+  })
+})
+
+describe('describeCitations', () => {
+  it('lists the record sources behind an answer', () => {
+    expect(
+      describeCitations([
+        { type: 'aggregate', ref: 'count.patients', label: 'patients' },
+        { type: 'patient', ref: 'p1', label: 'MRN MQ-0001-0001' },
+      ]),
+    ).toBe('Sources: patients · MRN MQ-0001-0001')
+  })
+
+  it('returns empty when an answer has no record source', () => {
+    expect(describeCitations(undefined)).toBe('')
+    expect(describeCitations([])).toBe('')
   })
 })
 

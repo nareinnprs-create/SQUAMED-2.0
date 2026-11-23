@@ -37,6 +37,9 @@ data class AiCommandOutput(
   val detail: String?,
   val message: String,
   val suggestions: List<String>,
+  // 05.03: grounded answers cite what they read; drafts await human approval.
+  val citations: List<AiCitation> = emptyList(),
+  val draft: ActionDraftView? = null,
 )
 
 @Service
@@ -50,6 +53,7 @@ class AiService(
   private val governanceService: AiGovernanceService,
   private val redactor: PromptRedactor,
   private val permissionEvaluator: SquamedPermissionEvaluator,
+  private val actionService: AiActionService,
 ) {
   @Transactional(readOnly = true)
   fun models(): List<ModelConfig> = modelRepository.findAllByOrderByCreatedAtAsc()
@@ -233,7 +237,35 @@ class AiService(
     val redaction = redactor.redact(query)
     val intent = intentService.parse(redaction.text, hospitalId)
     requireScope(principal, intent)
-    val message = intentService.render(intent, redaction.text, hospitalId)
+    val draft =
+      when (intent.type) {
+        AiIntentType.DRAFT_TASK -> {
+          val title = intent.detail ?: throw IllegalArgumentException("AI_ACTION_TITLE_REQUIRED")
+          actionService.propose(principal, hid, "create_task", mapOf("title" to title))
+        }
+
+        AiIntentType.DRAFT_DISCHARGE -> {
+          val admissionId = intent.target ?: throw IllegalArgumentException("AI_ACTION_ADMISSION_REQUIRED")
+          actionService.propose(principal, hid, "plan_discharge", mapOf("admissionId" to admissionId))
+        }
+
+        else -> {
+          null
+        }
+      }
+    // 05.03: record-backed answers cannot exist without citations.
+    if (draft == null &&
+      intent.type in setOf(AiIntentType.COUNT, AiIntentType.ANALYTICS, AiIntentType.SEARCH_PATIENTS, AiIntentType.WORKFLOW) &&
+      intent.citations.isEmpty()
+    ) {
+      throw IllegalStateException("AI_UNGROUNDED_ANSWER")
+    }
+    val message =
+      when {
+        draft != null -> "Draft proposal: ${draft.summary}. Approve to run it through the platform API."
+        intent.note != null && intent.detail == null -> intent.note!!
+        else -> intentService.render(intent, redaction.text, hospitalId)
+      }
     logRepository.save(
       InteractionLog(
         hospitalId = hospitalId,
@@ -253,6 +285,8 @@ class AiService(
       detail = (intent.detail ?: intent.note)?.let { it },
       message = message,
       suggestions = intentService.suggestions(),
+      citations = intent.citations,
+      draft = draft,
     )
   }
 

@@ -5,12 +5,34 @@ import { useRouter } from 'next/navigation'
 import { Badge, Button, Spinner, Stack } from '@squamed/ui'
 import { useApi } from '@/lib/use-api'
 
+interface Citation {
+  type: string
+  ref: string
+  label: string
+}
+
+interface ActionDraft {
+  id: string
+  actionType: string
+  summary: string
+  status: string
+  expiresAt: string
+  resultRef: string | null
+}
+
 interface CommandOutput {
   intent: string
   target: string | null
   detail: string | null
   message: string
   suggestions: string[]
+  citations?: Citation[]
+  draft?: ActionDraft | null
+}
+
+export function describeCitations(citations?: Citation[]): string {
+  if (!citations || citations.length === 0) return ''
+  return `Sources: ${citations.map((citation) => citation.label).join(' · ')}`
 }
 
 const ROUTE_BY_TARGET: Record<string, string> = {
@@ -86,6 +108,8 @@ export function CommandBar() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<CommandOutput | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [decisionBusy, setDecisionBusy] = useState(false)
+  const [decisionError, setDecisionError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -131,6 +155,7 @@ export function CommandBar() {
       if (!q) return
       setLoading(true)
       setError(null)
+      setDecisionError(null)
       try {
         const output = await apiFetch<CommandOutput>('/ai/command', {
           method: 'POST',
@@ -141,6 +166,25 @@ export function CommandBar() {
         setError(e instanceof Error ? e.message : 'Command failed')
       } finally {
         setLoading(false)
+      }
+    },
+    [apiFetch],
+  )
+
+  const decide = useCallback(
+    async (draft: ActionDraft, decision: 'approve' | 'reject') => {
+      setDecisionBusy(true)
+      setDecisionError(null)
+      try {
+        const updated = await apiFetch<ActionDraft>(`/ai/actions/${draft.id}/${decision}`, {
+          method: 'POST',
+          body: JSON.stringify(decision === 'reject' ? { reason: 'Rejected in the command bar' } : {}),
+        })
+        setResult((previous) => (previous ? { ...previous, draft: updated } : previous))
+      } catch (e) {
+        setDecisionError(e instanceof Error ? e.message : 'Decision failed')
+      } finally {
+        setDecisionBusy(false)
       }
     },
     [apiFetch],
@@ -237,6 +281,38 @@ export function CommandBar() {
                 >
                   {renderMessage(result.message)}
                 </div>
+                {describeCitations(result.citations) ? (
+                  <div style={{ fontSize: 11, color: 'var(--sq-fg-muted)' }}>{describeCitations(result.citations)}</div>
+                ) : null}
+                {result.draft ? (
+                  <div
+                    role="group"
+                    aria-label="Draft proposal"
+                    style={{
+                      border: '1px solid var(--sq-border)',
+                      borderRadius: 8,
+                      padding: '10px 12px',
+                      fontSize: 12,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>Draft proposal · {result.draft.status}</span>
+                    <span style={{ color: 'var(--sq-fg-muted)' }}>{result.draft.summary}</span>
+                    {result.draft.status === 'PROPOSED' ? (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <Button size="sm" disabled={decisionBusy} onClick={() => void decide(result.draft!, 'approve')}>
+                          Approve
+                        </Button>
+                        <Button size="sm" variant="secondary" disabled={decisionBusy} onClick={() => void decide(result.draft!, 'reject')}>
+                          Reject
+                        </Button>
+                      </div>
+                    ) : null}
+                    {decisionError ? <span style={{ color: 'var(--sq-critical)' }}>{decisionError}</span> : null}
+                  </div>
+                ) : null}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Badge variant={intentVariants[result.intent] ?? 'neutral'} size="sm">
                     {result.intent}

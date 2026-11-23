@@ -7,7 +7,14 @@ import jakarta.persistence.PersistenceContext
 import org.springframework.stereotype.Service
 import java.util.UUID
 
-enum class AiIntentType { NAVIGATE, COUNT, SEARCH_PATIENTS, WORKFLOW, ANALYTICS, HELP, CHAT }
+enum class AiIntentType { NAVIGATE, COUNT, SEARCH_PATIENTS, WORKFLOW, ANALYTICS, HELP, CHAT, DRAFT_TASK, DRAFT_DISCHARGE }
+
+// 05.03 grounding: every record-backed answer carries references to what it read.
+data class AiCitation(
+  val type: String,
+  val ref: String,
+  val label: String,
+)
 
 data class AiIntent(
   val type: AiIntentType,
@@ -16,6 +23,7 @@ data class AiIntent(
   val count: Long? = null,
   val detail: String? = null,
   val note: String? = null,
+  val citations: List<AiCitation> = emptyList(),
 )
 
 @Service
@@ -94,6 +102,25 @@ class AiIntentService(
       return AiIntent(AiIntentType.HELP)
     }
 
+    // 05.03 action drafting: the assistant proposes; a human approves.
+    if (q.startsWith("create task") || q.startsWith("draft task") || q.startsWith("assign task")) {
+      val title = query.trim().replace(Regex("(?i)^(create|draft|assign) task"), "").trim()
+      return if (title.isEmpty()) {
+        AiIntent(AiIntentType.DRAFT_TASK, note = "Say \"create task <title>\" to draft a task for approval.")
+      } else {
+        AiIntent(AiIntentType.DRAFT_TASK, detail = title)
+      }
+    }
+
+    if (q.contains("prepare discharge") || q.contains("draft discharge") || q.contains("plan discharge")) {
+      val admissionId = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").find(q)?.value
+      return if (admissionId == null) {
+        AiIntent(AiIntentType.DRAFT_DISCHARGE, note = "Include the admission id: \"prepare discharge <admissionId>\".")
+      } else {
+        AiIntent(AiIntentType.DRAFT_DISCHARGE, target = admissionId)
+      }
+    }
+
     if (q.startsWith("open ") || q.startsWith("go to ") || q.startsWith("navigate to ") || q.startsWith("take me to ")) {
       val target = q.substringAfterLast(" to ").substringAfter("open ").trim()
       return navigate(target) ?: AiIntent(
@@ -111,6 +138,7 @@ class AiIntentService(
         AiIntentType.WORKFLOW,
         count = pending,
         detail = "$pending workflow approval(s) currently waiting.",
+        citations = listOf(AiCitation("aggregate", "workflow.instances", "workflow instances pending")),
       )
     }
 
@@ -205,6 +233,14 @@ class AiIntentService(
 
       AiIntentType.CHAT -> {
         themedResponse(query, hospitalId)
+      }
+
+      AiIntentType.DRAFT_TASK -> {
+        intent.note ?: "Drafting a task proposal for approval: ${intent.detail}."
+      }
+
+      AiIntentType.DRAFT_DISCHARGE -> {
+        intent.note ?: "Drafting a discharge plan proposal for approval: ${intent.target}."
       }
     }
 
@@ -317,7 +353,12 @@ class AiIntentService(
           key to 0L
         }
       }
-    return AiIntent(AiIntentType.COUNT, entityLabel = label, count = value)
+    return AiIntent(
+      AiIntentType.COUNT,
+      entityLabel = label,
+      count = value,
+      citations = listOf(AiCitation("aggregate", "count.$key", label)),
+    )
   }
 
   private fun analyze(hospitalId: UUID?): AiIntent {
@@ -333,7 +374,7 @@ class AiIntentService(
         appendLine("- Lab: **${o.labOrdersToday} orders** today, **${o.labPending} pending**.")
         appendLine("- Revenue today: **QR ${"%.2f".format(o.revenueTodayQar)}**; outstanding: **QR ${"%.2f".format(o.amountDueQar)}**.")
       }
-    return AiIntent(AiIntentType.ANALYTICS, detail = detail)
+    return AiIntent(AiIntentType.ANALYTICS, detail = detail, citations = listOf(AiCitation("aggregate", "analytics.overview", "operational overview (today)")))
   }
 
   private fun searchPatients(
@@ -349,7 +390,11 @@ class AiIntentService(
     }
     val matches = patientService.search(q, hospitalId).take(8)
     return if (matches.isEmpty()) {
-      AiIntent(AiIntentType.SEARCH_PATIENTS, detail = "No patients matched \"$q\".")
+      AiIntent(
+        AiIntentType.SEARCH_PATIENTS,
+        detail = "No patients matched \"$q\".",
+        citations = listOf(AiCitation("query", "patients.search", "search \"$q\" (0 matches)")),
+      )
     } else {
       val lines =
         matches
@@ -361,6 +406,7 @@ class AiIntentService(
         AiIntentType.SEARCH_PATIENTS,
         target = matches.first().id?.toString(),
         detail = "Found **${matches.size}** patient(s) for \"$q\":\n$lines",
+        citations = matches.map { AiCitation("patient", it.id?.toString() ?: "unknown", "MRN ${it.mrn ?: "—"}") },
       )
     }
   }

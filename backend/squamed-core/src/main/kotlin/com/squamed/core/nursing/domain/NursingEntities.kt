@@ -18,6 +18,9 @@ class NursingAssessment(
   @Column(name = "risk_level", length = 20) var riskLevel: String? = null,
   @Column(name = "assessed_by") var assessedBy: UUID? = null,
   @Column(name = "assessed_at", nullable = false) var assessedAt: Instant = Instant.now(),
+  // 04.03 configurable forms.
+  @Column(name = "template_code", length = 40) var templateCode: String? = null,
+  @Column(name = "fields_json", columnDefinition = "TEXT") var fieldsJson: String? = null,
 ) : BaseEntity()
 
 @Entity
@@ -31,6 +34,9 @@ class NursingCarePlan(
   @Column(name = "interventions") var interventions: String? = null,
   @Column(name = "status", nullable = false, length = 20) var status: String = "active",
   @Column(name = "completed_at") var completedAt: Instant? = null,
+  // 04.03 problem -> intervention -> goal with template provenance.
+  @Column(name = "problem", length = 400) var problem: String? = null,
+  @Column(name = "template_code", length = 40) var templateCode: String? = null,
 ) : BaseEntity()
 
 @Entity
@@ -112,4 +118,41 @@ class RiskAssessment(
   @Column(name = "level", length = 20) var level: String? = null,
   @Column(name = "assessed_by") var assessedBy: UUID? = null,
   @Column(name = "assessed_at", nullable = false) var assessedAt: Instant = Instant.now(),
+  // 04.03 configurable scale used to derive the level.
+  @Column(name = "scale_code", length = 40) var scaleCode: String? = null,
+) : BaseEntity()
+
+// 04.03 configurable templates + scales.
+@Entity
+@Table(name = "assessment_template", schema = "nursing")
+class AssessmentTemplate(
+  @Column(name = "hospital_id", nullable = false) var hospitalId: UUID,
+  @Column(name = "code", nullable = false, length = 40) var code: String,
+  @Column(name = "name", nullable = false, length = 200) var name: String,
+  @Column(name = "fields_json", nullable = false, columnDefinition = "TEXT") var fieldsJson: String,
+  @Column(name = "is_active", nullable = false) var isActive: Boolean = true,
+) : BaseEntity()
+
+@Entity
+@Table(name = "careplan_template", schema = "nursing")
+class CarePlanTemplate(
+  @Column(name = "hospital_id", nullable = false) var hospitalId: UUID,
+  @Column(name = "code", nullable = false, length = 40) var code: String,
+  @Column(name = "name", nullable = false, length = 200) var name: String,
+  @Column(name = "problem", nullable = false, length = 400) var problem: String,
+  @Column(name = "goal", length = 400) var goal: String? = null,
+  @Column(name = "interventions", length = 800) var interventions: String? = null,
+  @Column(name = "is_active", nullable = false) var isActive: Boolean = true,
+) : BaseEntity()
+
+@Entity
+@Table(name = "risk_scale", schema = "nursing")
+class RiskScale(
+  @Column(name = "hospital_id", nullable = false) var hospitalId: UUID,
+  @Column(name = "code", nullable = false, length = 40) var code: String,
+  @Column(name = "name", nullable = false, length = 200) var name: String,
+  @Column(name = "min_score", nullable = false) var minScore: Int = 0,
+  @Column(name = "low_max", nullable = false) var lowMax: Int,
+  @Column(name = "moderate_max", nullable = false) var moderateMax: Int,
+  @Column(name = "is_active", nullable = false) var isActive: Boolean = true,
 ) : BaseEntity()

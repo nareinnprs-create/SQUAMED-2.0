@@ -8979,6 +8979,217 @@ class PlatformIntegrationTests {
       assertEquals(400, blocked.status, "withdrawn consent blocks the start: ${blocked.body.take(200)}")
       assertTrue(blocked.body.contains("SURGERY_CONSENT_WITHDRAWN"), "consent guard code")
     }
+
+    @Test
+    fun bloodBankSafetyCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+      val today = java.time.LocalDate.now()
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Transfuse",
+              "lastName" to "Safety$s",
+              "gender" to "male",
+              "dateOfBirth" to "1971-01-01",
+              "phone" to "64$s".take(11),
+              "qid" to "BB$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]
+      val patientId = patient["id"].asText()
+      val mrn = patient["mrn"].asText()
+      val fullName = "Transfuse Safety$s"
+
+      val donor =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/donors",
+            json("hospitalId" to hospitalId, "donorNumber" to "BD-$s", "fullName" to "Safety Donor", "bloodGroup" to "O+", "gender" to "male"),
+            token,
+          ),
+        )
+      val donorId = donor["id"].asText()
+
+      // Deferral blocks unit creation; reactivation re-enables it.
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/donors/$donorId/defer",
+          json(
+            "reason" to "recent tattoo",
+            "until" to today.plusMonths(6).toString() + "T00:00:00Z",
+          ),
+          token,
+        ),
+        "donor deferred",
+      )
+      val deferredUnit =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/units",
+          json(
+            "hospitalId" to hospitalId,
+            "unitNumber" to "BU-D1-$s",
+            "bloodGroup" to "O+",
+            "component" to "prbc",
+            "expiryDate" to today.plusDays(35).toString(),
+            "donorId" to donorId,
+          ),
+          token,
+        )
+      assert4xx(deferredUnit, "deferred donor cannot donate")
+      assertTrue(deferredUnit.body.contains("DONOR_DEFERRED"), "deferral guard code")
+      assert2xx(api(HttpMethod.POST, "/api/v1/blood-bank/donors/$donorId/reactivate", json(), token), "donor reactivated")
+      val unit =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/units",
+            json(
+              "hospitalId" to hospitalId,
+              "unitNumber" to "BU-1-$s",
+              "bloodGroup" to "O+",
+              "component" to "prbc",
+              "expiryDate" to today.plusDays(35).toString(),
+              "donorId" to donorId,
+            ),
+            token,
+          ),
+        )
+      val unitId = unit["id"].asText()
+      assertEquals("PENDING", unit["screeningStatus"].asText(), "unit starts unscreened")
+      val secondDonation =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/units",
+          json(
+            "hospitalId" to hospitalId,
+            "unitNumber" to "BU-2-$s",
+            "bloodGroup" to "O+",
+            "component" to "prbc",
+            "expiryDate" to today.plusDays(35).toString(),
+            "donorId" to donorId,
+          ),
+          token,
+        )
+      assert4xx(secondDonation, "90-day donation interval enforced")
+      assertTrue(secondDonation.body.contains("DONOR_INTERVAL_NOT_MET"), "interval guard code")
+
+      // Screening gate + compatible crossmatch + bedside identity check.
+      val grouping =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/grouping",
+            json("hospitalId" to hospitalId, "unitId" to unitId, "aboResult" to "O", "rhResult" to "positive"),
+            token,
+          ),
+        )
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/blood-bank/grouping/${grouping["id"].asText()}/confirm", json(), token), "grouping confirmed")
+      val crossmatch =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/crossmatch",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitId, "technique" to "gel"),
+            token,
+          ),
+        )
+      assert2xx(
+        api(HttpMethod.PATCH, "/api/v1/blood-bank/crossmatch/${crossmatch["id"].asText()}/result", json("compatibility" to "compatible"), token),
+        "crossmatch compatible",
+      )
+      val notScreened =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/issues",
+          json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitId, "patientBarcode" to mrn, "confirmPatientName" to fullName),
+          token,
+        )
+      assert4xx(notScreened, "unscreened unit blocked")
+      assertTrue(notScreened.body.contains("BLOOD_UNIT_NOT_SCREENED"), "screening guard code")
+      val screened = `data`(api(HttpMethod.POST, "/api/v1/blood-bank/units/$unitId/screening", json("ttiResult" to "CLEARED", "natResult" to "CLEARED"), token))
+      assertEquals("CLEARED", screened["screeningStatus"].asText(), "unit cleared")
+      val wrongBarcode =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/issues",
+          json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitId, "patientBarcode" to "MQ-0000-0001", "confirmPatientName" to fullName),
+          token,
+        )
+      assertEquals(409, wrongBarcode.status, "wrong wristband blocks: ${wrongBarcode.body.take(200)}")
+      assertTrue(wrongBarcode.body.contains("BLOOD_IDENTITY_MISMATCH"), "barcode guard code")
+      val wrongName =
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/issues",
+          json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitId, "patientBarcode" to mrn, "confirmPatientName" to "Someone Else"),
+          token,
+        )
+      assertEquals(409, wrongName.status, "wrong second identifier blocks")
+      val issue =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/issues",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitId, "patientBarcode" to mrn, "confirmPatientName" to fullName),
+            token,
+          ),
+        )
+      assertNotNull(issue["id"], "identity-verified issue succeeds")
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      assertTrue(outbox.any { it["eventType"].asText() == "bloodbank.crossmatch_requested" }, "crossmatch requested event")
+      assertTrue(outbox.any { it["eventType"].asText() == "bloodbank.crossmatch_issued" && it["envelope"].asText().contains(unitId) }, "issue event")
+
+      // Transfusion + reaction + regulatory traceability.
+      val transfusion =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/transfusions",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitId, "volumeMl" to 280),
+            token,
+          ),
+        )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/transfusions/${transfusion["id"].asText()}/reactions",
+          json("reactionType" to "febrile", "severity" to "mild", "symptoms" to "rigors after 15 minutes"),
+          token,
+        ),
+        "reaction reported",
+      )
+      assertTrue(
+        `data`(
+          api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token),
+        ).any { it["eventType"].asText() == "bloodbank.transfusion_reaction" },
+        "reaction event emitted",
+      )
+      val trace = `data`(api(HttpMethod.GET, "/api/v1/blood-bank/traceability?unitId=$unitId", token = token))
+      assertEquals(unitId, trace["unitId"].asText(), "trace starts at the unit")
+      assertEquals("Safety Donor", trace["donorName"].asText(), "donor in the trace")
+      assertFalse(trace["grouping"].isNull, "grouping in the trace")
+      assertTrue(trace["crossmatches"].size() >= 1, "crossmatch in the trace")
+      assertFalse(trace["issue"].isNull, "issue in the trace")
+      assertTrue(trace["transfusions"].size() >= 1, "transfusion in the trace")
+      assertTrue(trace["reactions"].size() >= 1, "reaction in the trace")
+
+      val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog", token = token))
+      listOf("CrossmatchRequested", "CrossmatchIssued", "TransfusionReactionReported").forEach { name ->
+        assertTrue(catalog.any { it["name"].asText() == name && it["status"].asText() == "EMITTED" }, "$name cataloged EMITTED")
+      }
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */
@@ -9118,12 +9329,12 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert (39 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank (42 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        39,
+        42,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert events: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank events: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
@@ -9746,12 +9957,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        39,
+        42,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")
@@ -11376,12 +11587,26 @@ class PlatformIntegrationTests {
       val released = `data`(api(HttpMethod.POST, "/api/v1/blood-bank/reservations/$unitCId/release", token = token))
       assertEquals("released", released["status"].asText(), "reservation released")
 
+      // 04.07: screening must clear before issue; the bedside check needs the MRN + patient name.
+      val patientRecord = `data`(api(HttpMethod.GET, "/api/v1/patients/$patientId", token = token))
+      val patientMrn = patientRecord["mrn"].asText()
+      val patientFullName = "${patientRecord["firstName"].asText()} ${patientRecord["lastName"].asText()}"
+      assert2xx(api(HttpMethod.POST, "/api/v1/blood-bank/units/$unitAId/screening", json("ttiResult" to "CLEARED"), token), "screen unit A")
+      val unscreenedIssue =
+        api(HttpMethod.POST, "/api/v1/blood-bank/issues", json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitCId), token)
+      assertEquals(400, unscreenedIssue.status, "unscreened unit cannot be issued")
       val issue =
         `data`(
           api(
             HttpMethod.POST,
             "/api/v1/blood-bank/issues",
-            json("hospitalId" to hospitalId, "patientId" to patientId, "unitId" to unitAId),
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "unitId" to unitAId,
+              "patientBarcode" to patientMrn,
+              "confirmPatientName" to patientFullName,
+            ),
             token,
           ),
         )

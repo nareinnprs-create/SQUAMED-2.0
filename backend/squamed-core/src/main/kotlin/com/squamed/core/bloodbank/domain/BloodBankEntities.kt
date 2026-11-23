@@ -20,6 +20,9 @@ class BloodDonor(
   @Column(name = "phone", length = 30) var phone: String? = null,
   @Column(name = "last_donation_at") var lastDonationAt: Instant? = null,
   @Column(name = "status", nullable = false, length = 20) var status: String = "active",
+  // 04.07 donor deferral.
+  @Column(name = "deferral_reason", length = 400) var deferralReason: String? = null,
+  @Column(name = "deferred_until") var deferredUntil: Instant? = null,
   @Column(name = "notes") var notes: String? = null,
 ) : BaseEntity()
 
@@ -37,6 +40,10 @@ class BloodUnit(
   @Column(name = "donor_id") var donorId: UUID? = null,
   @Column(name = "storage_location", length = 50) var storageLocation: String? = null,
   @Column(name = "received_at", nullable = false) var receivedAt: Instant = Instant.now(),
+  // 04.07 screening hand-off (ttI / NAT).
+  @Column(name = "screening_status", nullable = false, length = 10) var screeningStatus: String = "PENDING",
+  @Column(name = "tti_result", length = 20) var ttiResult: String? = null,
+  @Column(name = "nat_result", length = 20) var natResult: String? = null,
 ) : BaseEntity()
 
 @Entity
@@ -92,6 +99,9 @@ class BloodIssue(
   @Column(name = "requested_by") var requestedBy: UUID? = null,
   @Column(name = "issued_by") var issuedBy: UUID? = null,
   @Column(name = "issued_at", nullable = false) var issuedAt: Instant = Instant.now(),
+  // 04.07 bedside identity check recorded on issue.
+  @Column(name = "patient_barcode_verified", nullable = false) var patientBarcodeVerified: Boolean = false,
+  @Column(name = "second_identifier_verified", nullable = false) var secondIdentifierVerified: Boolean = false,
 ) : BaseEntity()
 
 @Entity

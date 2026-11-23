@@ -3012,6 +3012,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/blood-bank/units/{id}/screening": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["screenUnit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/blood-bank/transfusions": {
         parameters: {
             query?: never;
@@ -3118,6 +3134,38 @@ export interface paths {
         get: operations["listDonors"];
         put?: never;
         post: operations["createDonor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blood-bank/donors/{id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reactivateDonor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blood-bank/donors/{id}/defer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["deferDonor"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5948,6 +5996,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getChannel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blood-bank/traceability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["traceability"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10785,6 +10849,11 @@ export interface components {
             storageLocation?: string;
             /** Format: date-time */
             receivedAt?: string;
+            screeningStatus: string;
+        };
+        UnitScreeningDto: {
+            ttiResult: string;
+            natResult?: string;
         };
         TransfusionCreateDto: {
             /** Format: uuid */
@@ -10906,6 +10975,8 @@ export interface components {
             unitId?: string;
             /** Format: uuid */
             issuedFor?: string;
+            patientBarcode?: string;
+            confirmPatientName?: string;
         };
         ApiResponseIssueView: {
             data?: components["schemas"]["IssueView"];
@@ -11002,6 +11073,14 @@ export interface components {
             lastDonationAt?: string;
             status: string;
             notes?: string;
+            deferralReason?: string;
+            /** Format: date-time */
+            deferredUntil?: string;
+        };
+        DonorDeferralDto: {
+            reason: string;
+            /** Format: date-time */
+            until?: string;
         };
         CrossmatchCreateDto: {
             /** Format: uuid */
@@ -13448,6 +13527,43 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseTraceabilityView: {
+            data?: components["schemas"]["TraceabilityView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        TraceabilityView: {
+            /** Format: uuid */
+            unitId: string;
+            unitNumber: string;
+            bloodGroup: string;
+            component: string;
+            status: string;
+            screeningStatus: string;
+            /** Format: uuid */
+            donorId?: string;
+            donorName?: string;
+            grouping?: {
+                [key: string]: unknown;
+            };
+            crossmatches: {
+                [key: string]: unknown;
+            }[];
+            reservations: {
+                [key: string]: unknown;
+            }[];
+            issue?: {
+                [key: string]: unknown;
+            };
+            transfusions: {
+                [key: string]: unknown;
+            }[];
+            reactions: {
+                [key: string]: unknown;
+            }[];
         };
         ApiResponseListIssueView: {
             data?: components["schemas"]["IssueView"][];
@@ -20664,6 +20780,32 @@ export interface operations {
             };
         };
     };
+    screenUnit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnitScreeningDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseUnitView"];
+                };
+            };
+        };
+    };
     listTransfusions: {
         parameters: {
             query?: {
@@ -20934,6 +21076,54 @@ export interface operations {
         responses: {
             /** @description Created */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDonorView"];
+                };
+            };
+        };
+    };
+    reactivateDonor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDonorView"];
+                };
+            };
+        };
+    };
+    deferDonor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DonorDeferralDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -25591,6 +25781,28 @@ export interface operations {
             };
         };
     };
+    traceability: {
+        parameters: {
+            query: {
+                unitId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseTraceabilityView"];
+                };
+            };
+        };
+    };
     listRefunds: {
         parameters: {
             query?: never;
@@ -26303,4 +26515,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 34b977bc821fd919dcd6126e8764ca8f78fd8d0423f9499f363641de9fa6eed2
+// openapi snapshot sha256: b6bef6b122e315b0fe85a91e2dfe7a8b8103039dd521f668647009cdb301eedd

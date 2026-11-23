@@ -45,6 +45,41 @@ class BloodBankController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<DonorView> = ApiResponse.ok(bloodBankService.updateDonorStatus(id, dto, principal.userId, principal.hospitalId))
 
+  // 04.07 donor deferral + unit screening + traceability.
+  @PostMapping("/donors/{id}/defer")
+  @RequiresPermission("bloodbank:write:bloodbank")
+  @Transactional
+  fun deferDonor(
+    @PathVariable id: UUID,
+    @RequestBody dto: DonorDeferralDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DonorView> = ApiResponse.ok(bloodBankService.deferDonor(id, dto, principal.userId, principal.hospitalId))
+
+  @PostMapping("/donors/{id}/reactivate")
+  @RequiresPermission("bloodbank:write:bloodbank")
+  @Transactional
+  fun reactivateDonor(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DonorView> = ApiResponse.ok(bloodBankService.reactivateDonor(id, principal.userId, principal.hospitalId))
+
+  @PostMapping("/units/{id}/screening")
+  @RequiresPermission("bloodbank:write:bloodbank")
+  @Transactional
+  fun screenUnit(
+    @PathVariable id: UUID,
+    @RequestBody dto: UnitScreeningDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<UnitView> = ApiResponse.ok(bloodBankService.screenUnit(id, dto, principal.userId, principal.hospitalId))
+
+  @GetMapping("/traceability")
+  @RequiresPermission("bloodbank:read:bloodbank")
+  @Transactional(readOnly = true)
+  fun traceability(
+    @RequestParam(name = "unitId") unitId: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<TraceabilityView> = ApiResponse.ok(bloodBankService.traceability(unitId, principal.hospitalId))
+
   @GetMapping("/donors")
   @RequiresPermission("bloodbank:read:bloodbank")
   @Transactional(readOnly = true)

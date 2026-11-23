@@ -91,6 +91,9 @@ object EventCatalog {
       Entry("DoseOmitted", "nursing.dose_omitted", Status.EMITTED, "eMAR dose omitted with a code + reason, clinician notified (04.02)."),
       Entry("CarePlanUpdated", "nursing.careplan_updated", Status.EMITTED, "Care plan created/applied or its status changed (04.03)."),
       Entry("ThresholdAlertRaised", "icu.critical_alert", Status.EMITTED, "ICU threshold/critical alert raised for routing (04.05)."),
+      Entry("CrossmatchRequested", "bloodbank.crossmatch_requested", Status.EMITTED, "Blood unit crossmatch requested for a patient (04.07)."),
+      Entry("CrossmatchIssued", "bloodbank.crossmatch_issued", Status.EMITTED, "Compatible unit issued after the bedside two-identifier check (04.07)."),
+      Entry("TransfusionReactionReported", "bloodbank.transfusion_reaction", Status.EMITTED, "Transfusion reaction reported with severity (04.07)."),
     )
 
   fun all(): List<Entry> = entries

@@ -3924,6 +3924,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/agents/{code}/propose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["proposeAsAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/actions/{id}/reject": {
         parameters: {
             query?: never;
@@ -12463,16 +12479,16 @@ export interface components {
             enabled?: boolean;
             scopes?: string;
         };
+        AiActionDraftRequest: {
+            actionType: string;
+            payload: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseActionDraftView: {
             data?: components["schemas"]["ActionDraftView"];
             success: boolean;
             meta: {
-                [key: string]: unknown;
-            };
-        };
-        AiActionDraftRequest: {
-            actionType: string;
-            payload: {
                 [key: string]: unknown;
             };
         };
@@ -23300,6 +23316,32 @@ export interface operations {
             };
         };
     };
+    proposeAsAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiActionDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseActionDraftView"];
+                };
+            };
+        };
+    };
     rejectAction: {
         parameters: {
             query?: never;
@@ -27485,4 +27527,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: b8a7baa65ba5cad1e82ec9a80254c4c72c3fc4567a5b4bc224cbfaa83ecc4acd
+// openapi snapshot sha256: 45334cfbd9b529e03b15076d4ce5c6d7cdc577743e484c7e2f0f6cde349fe28a

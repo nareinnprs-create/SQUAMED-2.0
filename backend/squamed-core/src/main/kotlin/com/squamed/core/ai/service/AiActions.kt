@@ -51,6 +51,7 @@ data class ActionDraftView(
 @Service
 class AiActionService(
   private val draftRepository: ActionDraftRepository,
+  private val agentRepository: com.squamed.core.ai.repository.AgentConfigRepository,
   private val taskService: TaskService,
   private val admissionService: AdmissionService,
   private val permissionEvaluator: SquamedPermissionEvaluator,
@@ -210,6 +211,37 @@ class AiActionService(
         draftRepository.findByHospitalIdAndStatusOrderByCreatedAtDesc(hospitalId, status.uppercase())
       }
     return rows.map(ActionDraftView::from)
+  }
+
+  // 05.06: an agent persona may only propose what its role allows; the human approval still runs
+  // through the governed platform API with the approver's own scopes.
+  @Transactional
+  fun proposeAsAgent(
+    agentCode: String,
+    principal: SquamedPrincipal,
+    hospitalId: UUID,
+    actionType: String,
+    payload: Map<String, Any?>,
+  ): ActionDraftView {
+    val agent = agentRepository.findByCodeIgnoreCase(agentCode) ?: throw IllegalArgumentException("AI_AGENT_NOT_FOUND")
+    if (!agent.enabled) throw IllegalStateException("AI_AGENT_DISABLED")
+    agent.scopes
+      ?.split(",")
+      ?.map { it.trim() }
+      ?.filter { it.isNotEmpty() }
+      ?.firstOrNull { !permissionEvaluator.check(principal, it) }
+      ?.let { throw AccessDeniedException("AI_SCOPE_DENIED: $it") }
+    val type = actionType.trim().lowercase()
+    val relatedType = payload["relatedType"]?.toString()
+    val allowed =
+      when (agent.code.lowercase()) {
+        "ops" -> type in setOf("create_task", "plan_discharge")
+        "revenue" -> type == "create_task" && relatedType == "REVENUE"
+        "patient_comms" -> type == "create_task" && relatedType == "PATIENT_COMMS"
+        else -> type == "create_task"
+      }
+    if (!allowed) throw IllegalArgumentException("AI_AGENT_ACTION_NOT_ALLOWED")
+    return propose(principal, hospitalId, type, payload + mapOf("agentCode" to agent.code))
   }
 
   private fun find(

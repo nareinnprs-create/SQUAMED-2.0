@@ -318,6 +318,24 @@ class AiController(
       ),
     )
 
+  // 05.06: an agent persona proposes; a human still approves.
+  @PostMapping("/agents/{code}/propose")
+  @RequiresPermission("ai:chat:agent")
+  fun proposeAsAgent(
+    @PathVariable code: String,
+    @RequestBody req: AiActionDraftRequest,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.ActionDraftView> =
+    ApiResponse.ok(
+      actionService.proposeAsAgent(
+        code,
+        principal,
+        tenantResolver.pinOrDefault(principal, null),
+        req.actionType,
+        req.payload,
+      ),
+    )
+
   @GetMapping("/actions")
   @RequiresPermission("ai:chat:agent")
   fun actions(

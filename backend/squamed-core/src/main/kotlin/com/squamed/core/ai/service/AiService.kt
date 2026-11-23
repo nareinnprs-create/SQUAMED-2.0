@@ -108,6 +108,7 @@ class AiService(
     modelId: UUID?,
     temperature: Double?,
     enabled: Boolean?,
+    scopes: String? = null,
   ): AgentConfig {
     if (agentRepository.findByCodeIgnoreCase(code) != null) throw IllegalArgumentException("AI_AGENT_CODE_EXISTS")
     return agentRepository.save(
@@ -119,6 +120,7 @@ class AiService(
         modelId = modelId,
         temperature = temperature ?: 0.2,
         enabled = enabled ?: true,
+        scopes = scopes,
       ),
     )
   }
@@ -135,6 +137,7 @@ class AiService(
     patch["modelId"]?.let { agent.modelId = UUID.fromString(it.toString()) }
     patch["temperature"]?.let { agent.temperature = (it as Number).toDouble() }
     patch["enabled"]?.let { agent.enabled = it as Boolean }
+    patch["scopes"]?.let { agent.scopes = it.toString() }
     return agentRepository.save(agent)
   }
 
@@ -170,6 +173,13 @@ class AiService(
     // 05.01: kill switch + hard daily cap are read fresh on every request.
     governanceService.assertAllowed(hid, "chat")
     val agent = resolveAgent(agentCode)
+    // 05.07: an agent may only act with scopes its caller also holds.
+    agent.scopes
+      ?.split(",")
+      ?.map { it.trim() }
+      ?.filter { it.isNotEmpty() }
+      ?.firstOrNull { !permissionEvaluator.check(principal, it) }
+      ?.let { throw AccessDeniedException("AI_SCOPE_DENIED: $it") }
     val model = resolveModel(agent.modelId)
     val provider = router.providerFor(model.provider)
     // 05.01: direct identifiers never reach the provider; the redacted text is what we log too.

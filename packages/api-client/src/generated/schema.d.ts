@@ -3812,6 +3812,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/governance/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["incidents"];
+        put?: never;
+        post: operations["reportIncident"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/governance/evals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["evals"];
+        put?: never;
+        post: operations["recordEval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/command": {
         parameters: {
             query?: never;
@@ -4802,6 +4834,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["confirmEvaluation"];
+        trace?: never;
+    };
+    "/api/v1/ai/governance/incidents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateIncident"];
         trace?: never;
     };
     "/api/v1/ai/agents/{id}": {
@@ -6444,6 +6492,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["policies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/governance/costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["costs"];
         put?: never;
         post?: never;
         delete?: never;
@@ -12198,6 +12262,66 @@ export interface components {
             isDefault: boolean;
             costPer1kTokens?: number;
         };
+        AiIncidentRequest: {
+            capability: string;
+            severity: string;
+            summary: string;
+            detail?: string;
+        };
+        AiIncidentView: {
+            /** Format: uuid */
+            id?: string;
+            capability: string;
+            severity: string;
+            summary: string;
+            detail?: string;
+            status: string;
+            /** Format: date-time */
+            reportedAt: string;
+            /** Format: date-time */
+            closedAt?: string;
+            resolution?: string;
+        };
+        ApiResponseAiIncidentView: {
+            data?: components["schemas"]["AiIncidentView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        AiEvalRequest: {
+            capability: string;
+            subject: string;
+            suiteName: string;
+            /** Format: int32 */
+            casesPassed: number;
+            /** Format: int32 */
+            casesTotal: number;
+            notes?: string;
+        };
+        ApiResponseEvalRunView: {
+            data?: components["schemas"]["EvalRunView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        EvalRunView: {
+            /** Format: uuid */
+            id?: string;
+            capability: string;
+            subject: string;
+            suiteName: string;
+            /** Format: int32 */
+            casesPassed: number;
+            /** Format: int32 */
+            casesTotal: number;
+            score: number;
+            verdict: string;
+            notes?: string;
+            /** Format: date-time */
+            recordedAt: string;
+        };
         AiCommandRequest: {
             query: string;
             agentCode?: string;
@@ -12278,6 +12402,7 @@ export interface components {
             /** Format: double */
             temperature?: number;
             enabled?: boolean;
+            scopes?: string;
         };
         AiActionRejectRequest: {
             reason?: string;
@@ -12522,6 +12647,10 @@ export interface components {
         };
         AnaesthesiaRecordStatusDto: {
             status?: string;
+        };
+        AiIncidentUpdateRequest: {
+            status?: string;
+            resolution?: string;
         };
         ApiResponseListWorkflowInstanceView: {
             data?: components["schemas"]["WorkflowInstanceView"][];
@@ -14240,6 +14369,44 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseListAiIncidentView: {
+            data?: components["schemas"]["AiIncidentView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListEvalRunView: {
+            data?: components["schemas"]["EvalRunView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseCostDashboardView: {
+            data?: components["schemas"]["CostDashboardView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CostDashboardView: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            byCapability: components["schemas"]["CostRowView"][];
+            byModel: components["schemas"]["CostRowView"][];
+            totalCostUsd: number;
+        };
+        CostRowView: {
+            name: string;
+            /** Format: int64 */
+            requests: number;
+            /** Format: int64 */
+            tokens: number;
+            costUsd: number;
         };
         ApiResponseListActionDraftView: {
             data?: components["schemas"]["ActionDraftView"][];
@@ -22838,6 +23005,98 @@ export interface operations {
             };
         };
     };
+    incidents: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListAiIncidentView"];
+                };
+            };
+        };
+    };
+    reportIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiIncidentRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAiIncidentView"];
+                };
+            };
+        };
+    };
+    evals: {
+        parameters: {
+            query?: {
+                subject?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListEvalRunView"];
+                };
+            };
+        };
+    };
+    recordEval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiEvalRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEvalRunView"];
+                };
+            };
+        };
+    };
     command: {
         parameters: {
             query?: never;
@@ -24452,6 +24711,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseEvaluationView"];
+                };
+            };
+        };
+    };
+    updateIncident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiIncidentUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAiIncidentView"];
                 };
             };
         };
@@ -26685,6 +26970,29 @@ export interface operations {
             };
         };
     };
+    costs: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseCostDashboardView"];
+                };
+            };
+        };
+    };
     actions: {
         parameters: {
             query?: {
@@ -27068,4 +27376,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: d5cdfda5501b3f7e2be25fc1a0341fbe4760bffe73028bd35957d95add02900f
+// openapi snapshot sha256: 7fe99894441081d8d6e1e35692e90a708d877aacaecad1dc82e878c41a2e6099

@@ -32,6 +32,7 @@ interface AiAgent {
   modelId: string | null
   temperature: number | null
   enabled: boolean
+  scopes: string | null
   createdAt: string | null
 }
 
@@ -47,6 +48,46 @@ interface AiModel {
   enabled: boolean
   isDefault: boolean
   createdAt: string | null
+}
+
+interface GovernanceCostRow {
+  name: string
+  requests: number
+  tokens: number
+  costUsd: number
+}
+
+interface GovernanceCosts {
+  from: string
+  to: string
+  byCapability: GovernanceCostRow[]
+  byModel: GovernanceCostRow[]
+  totalCostUsd: number
+}
+
+interface GovernanceIncident {
+  id: string
+  capability: string
+  severity: string
+  summary: string
+  detail: string | null
+  status: string
+  reportedAt: string
+  closedAt: string | null
+  resolution: string | null
+}
+
+interface GovernanceEval {
+  id: string
+  capability: string
+  subject: string
+  suiteName: string
+  casesPassed: number
+  casesTotal: number
+  score: number
+  verdict: string
+  notes: string | null
+  recordedAt: string
 }
 
 interface AiLog {
@@ -224,6 +265,19 @@ export default function AiAssistantPage() {
   const [logsLoading, setLogsLoading] = useState(true)
   const [logsError, setLogsError] = useState<string | null>(null)
 
+  const [costs, setCosts] = useState<GovernanceCosts | null>(null)
+  const [incidents, setIncidents] = useState<GovernanceIncident[]>([])
+  const [evals, setEvals] = useState<GovernanceEval[]>([])
+  const [govLoading, setGovLoading] = useState(false)
+  const [govError, setGovError] = useState<string | null>(null)
+  const [incidentBusy, setIncidentBusy] = useState(false)
+  const [incidentForm, setIncidentForm] = useState({
+    capability: 'chat',
+    severity: 'medium',
+    summary: '',
+    detail: '',
+  })
+
   const threadRef = useRef<HTMLDivElement>(null)
 
   const nextId = useCallback(() => {
@@ -279,12 +333,53 @@ export default function AiAssistantPage() {
     [apiFetch],
   )
 
+  const loadGovernance = useCallback(async () => {
+    setGovLoading(true)
+    try {
+      const [costResult, incidentResult, evalResult] = await Promise.all([
+        apiFetch<GovernanceCosts>('/ai/governance/costs'),
+        apiFetch<GovernanceIncident[]>('/ai/governance/incidents'),
+        apiFetch<GovernanceEval[]>('/ai/governance/evals'),
+      ])
+      setCosts(costResult)
+      setIncidents(Array.isArray(incidentResult) ? incidentResult : [])
+      setEvals(Array.isArray(evalResult) ? evalResult : [])
+      setGovError(null)
+    } catch (e) {
+      setGovError(e instanceof Error ? e.message : 'Failed to load governance data')
+    } finally {
+      setGovLoading(false)
+    }
+  }, [apiFetch])
+
+  const reportIncident = useCallback(async () => {
+    if (!incidentForm.summary.trim()) return
+    setIncidentBusy(true)
+    try {
+      await apiFetch<GovernanceIncident>('/ai/governance/incidents', {
+        method: 'POST',
+        body: JSON.stringify(incidentForm),
+      })
+      setIncidentForm({ capability: 'chat', severity: 'medium', summary: '', detail: '' })
+      await loadGovernance()
+    } catch (e) {
+      setGovError(e instanceof Error ? e.message : 'Failed to report the incident')
+    } finally {
+      setIncidentBusy(false)
+    }
+  }, [apiFetch, incidentForm, loadGovernance])
+
   useEffect(() => {
     if (!isReady) return
     void loadAgents()
     void loadModels()
     void loadLogs()
   }, [isReady, loadAgents, loadModels, loadLogs])
+
+  useEffect(() => {
+    if (!isReady || activeTab !== 'governance') return
+    void loadGovernance()
+  }, [isReady, activeTab, loadGovernance])
 
   useEffect(() => {
     if (activeTab !== 'chat' || !streaming) return
@@ -483,6 +578,7 @@ export default function AiAssistantPage() {
           <TabsTrigger value="chat">Chat</TabsTrigger>
           <TabsTrigger value="agents">Agents</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
+          <TabsTrigger value="governance">Governance</TabsTrigger>
         </TabsList>
 
         <TabsContent value="chat">
@@ -898,6 +994,155 @@ export default function AiAssistantPage() {
               </div>
             )}
           </ContentPanel>
+        </TabsContent>
+
+        <TabsContent value="governance">
+          <Stack gap={16}>
+            {govError ? (
+              <ContentPanel>
+                <span style={{ color: 'var(--sq-critical)', fontSize: 13 }}>{govError}</span>
+              </ContentPanel>
+            ) : null}
+            <ContentPanel>
+              <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Cost per capability (7 days)</h2>
+              {govLoading && !costs ? (
+                <Spinner size="sm" />
+              ) : (
+                <table style={fullWidthTable}>
+                  <thead>
+                    <tr>
+                      <th style={tableHeaderStyle}>Capability</th>
+                      <th style={tableHeaderStyle}>Requests</th>
+                      <th style={tableHeaderStyle}>Tokens</th>
+                      <th style={tableHeaderStyle}>Cost (USD)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(costs?.byCapability ?? []).map((row) => (
+                      <tr key={row.name}>
+                        <td style={tableCellStyle}>{row.name}</td>
+                        <td style={tableCellStyle}>{row.requests}</td>
+                        <td style={tableCellStyle}>{row.tokens}</td>
+                        <td style={tableCellStyle}>{row.costUsd.toFixed(4)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <div style={{ ...mutedText, marginTop: 8, fontSize: 12 }}>
+                Total: {costs ? costs.totalCostUsd.toFixed(4) : '0.0000'} USD ·{' '}
+                {(costs?.byModel ?? []).map((row) => `${row.name}: ${row.tokens} tokens`).join(' · ') || 'no model calls'}
+              </div>
+            </ContentPanel>
+
+            <ContentPanel>
+              <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Incidents</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: '140px 140px 1fr auto', gap: 8, marginBottom: 12 }}>
+                <Select
+                  aria-label="Incident capability"
+                  value={incidentForm.capability}
+                  onChange={(event) => setIncidentForm({ ...incidentForm, capability: event.target.value })}
+                >
+                  <option value="chat">chat</option>
+                  <option value="command">command</option>
+                  <option value="scribe">scribe</option>
+                  <option value="report">report</option>
+                </Select>
+                <Select
+                  aria-label="Incident severity"
+                  value={incidentForm.severity}
+                  onChange={(event) => setIncidentForm({ ...incidentForm, severity: event.target.value })}
+                >
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                  <option value="critical">critical</option>
+                </Select>
+                <Input
+                  aria-label="Incident summary"
+                  placeholder="What went wrong?"
+                  value={incidentForm.summary}
+                  onChange={(event) => setIncidentForm({ ...incidentForm, summary: event.target.value })}
+                />
+                <Button size="sm" loading={incidentBusy} onClick={() => void reportIncident()}>
+                  Report
+                </Button>
+              </div>
+              {incidents.length === 0 ? (
+                <EmptyState message="No AI incidents reported." />
+              ) : (
+                <table style={fullWidthTable}>
+                  <thead>
+                    <tr>
+                      <th style={tableHeaderStyle}>Reported</th>
+                      <th style={tableHeaderStyle}>Capability</th>
+                      <th style={tableHeaderStyle}>Severity</th>
+                      <th style={tableHeaderStyle}>Summary</th>
+                      <th style={tableHeaderStyle}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {incidents.map((incident) => (
+                      <tr key={incident.id}>
+                        <td style={tableCellStyle}>{formatDateTime(incident.reportedAt)}</td>
+                        <td style={tableCellStyle}>{incident.capability}</td>
+                        <td style={tableCellStyle}>
+                          <Badge
+                            size="sm"
+                            variant={incident.severity === 'critical' || incident.severity === 'high' ? 'critical' : 'warning'}
+                          >
+                            {incident.severity}
+                          </Badge>
+                        </td>
+                        <td style={tableCellStyle}>{truncate(incident.summary, 80)}</td>
+                        <td style={tableCellStyle}>{incident.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </ContentPanel>
+
+            <ContentPanel>
+              <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Eval results</h2>
+              {evals.length === 0 ? (
+                <EmptyState message="No eval runs recorded for this tenant." />
+              ) : (
+                <table style={fullWidthTable}>
+                  <thead>
+                    <tr>
+                      <th style={tableHeaderStyle}>Recorded</th>
+                      <th style={tableHeaderStyle}>Subject</th>
+                      <th style={tableHeaderStyle}>Suite</th>
+                      <th style={tableHeaderStyle}>Cases</th>
+                      <th style={tableHeaderStyle}>Score</th>
+                      <th style={tableHeaderStyle}>Verdict</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {evals.map((run) => (
+                      <tr key={run.id}>
+                        <td style={tableCellStyle}>{formatDateTime(run.recordedAt)}</td>
+                        <td style={tableCellStyle}>
+                          <code style={{ fontSize: 12 }}>{run.subject}</code>
+                        </td>
+                        <td style={tableCellStyle}>{run.suiteName}</td>
+                        <td style={tableCellStyle}>
+                          {run.casesPassed}/{run.casesTotal}
+                        </td>
+                        <td style={tableCellStyle}>{run.score.toFixed(2)}</td>
+                        <td style={tableCellStyle}>
+                          <Badge size="sm" variant={run.verdict === 'PASS' ? 'success' : 'critical'}>
+                            {run.verdict}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </ContentPanel>
+          </Stack>
         </TabsContent>
       </Tabs>
 

@@ -69,6 +69,36 @@ interface InteractionLogRepository : JpaRepository<InteractionLog, UUID> {
     @Param("cap") cap: String,
     @Param("from") from: java.time.Instant,
   ): java.math.BigDecimal
+
+  // 05.07 cost dashboard: rows are [capability, requests, tokens, cost].
+  @Query(
+    """
+    select l.capability, count(l), coalesce(sum(l.tokensUsed), 0), coalesce(sum(l.costUsd), 0)
+    from InteractionLog l
+    where l.hospitalId = :hid and l.createdAt between :from and :to
+    group by l.capability order by l.capability
+    """,
+  )
+  fun costByCapability(
+    @Param("hid") hid: UUID,
+    @Param("from") from: java.time.Instant,
+    @Param("to") to: java.time.Instant,
+  ): List<Array<Any?>>
+
+  // Rows are [modelName, requests, tokens, cost].
+  @Query(
+    """
+    select l.modelName, count(l), coalesce(sum(l.tokensUsed), 0), coalesce(sum(l.costUsd), 0)
+    from InteractionLog l
+    where l.hospitalId = :hid and l.createdAt between :from and :to
+    group by l.modelName order by l.modelName
+    """,
+  )
+  fun costByModel(
+    @Param("hid") hid: UUID,
+    @Param("from") from: java.time.Instant,
+    @Param("to") to: java.time.Instant,
+  ): List<Array<Any?>>
 }
 
 interface GatewayPolicyRepository : JpaRepository<com.squamed.core.ai.domain.GatewayPolicy, UUID> {
@@ -93,4 +123,28 @@ interface ActionDraftRepository : JpaRepository<com.squamed.core.ai.domain.Actio
   ): List<com.squamed.core.ai.domain.ActionDraft>
 
   fun findByHospitalIdOrderByCreatedAtDesc(hospitalId: UUID): List<com.squamed.core.ai.domain.ActionDraft>
+}
+
+// 05.07 governance: eval results + incidents + cost aggregation.
+interface EvalRunRepository : JpaRepository<com.squamed.core.ai.domain.EvalRun, UUID> {
+  fun findByHospitalIdOrderByRecordedAtDesc(hospitalId: UUID): List<com.squamed.core.ai.domain.EvalRun>
+
+  fun findByHospitalIdAndSubjectOrderByRecordedAtDesc(
+    hospitalId: UUID,
+    subject: String,
+  ): List<com.squamed.core.ai.domain.EvalRun>
+}
+
+interface AiIncidentRepository : JpaRepository<com.squamed.core.ai.domain.AiIncident, UUID> {
+  fun findByIdAndHospitalId(
+    id: UUID,
+    hospitalId: UUID,
+  ): com.squamed.core.ai.domain.AiIncident?
+
+  fun findByHospitalIdOrderByReportedAtDesc(hospitalId: UUID): List<com.squamed.core.ai.domain.AiIncident>
+
+  fun findByHospitalIdAndStatusOrderByReportedAtDesc(
+    hospitalId: UUID,
+    status: String,
+  ): List<com.squamed.core.ai.domain.AiIncident>
 }

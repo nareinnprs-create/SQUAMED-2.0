@@ -9504,12 +9504,12 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action drafts (46 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action drafts + 05.07 AI incident (47 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        46,
+        47,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action events: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.07 incident: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
@@ -10132,12 +10132,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07 + 4 AI action 05.03).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07 + 4 AI action 05.03 + 1 AI incident 05.07).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        46,
+        47,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.07 incident: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")
@@ -14724,6 +14724,184 @@ class PlatformIntegrationTests {
       listOf("ai.action_proposed", "ai.action_approved", "ai.action_rejected").forEach { wire ->
         assertTrue(outbox.any { it["eventType"].asText() == wire }, "$wire emitted")
       }
+    }
+
+    @Test
+    fun aiGovernanceRegistryCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "AI Reg $s", "code" to "AR-$s", "country" to "Qatar"),
+            token,
+          ),
+        )["id"].asText()
+
+      fun user(
+        role: String,
+        tag: String,
+      ): String {
+        val email = "$tag.reg.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "Reg$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))[
+          "accessToken",
+        ].asText()
+      }
+      val govAdmin = user("SYSTEM_ADMIN", "regadmin")
+      val doctor = user("DOCTOR", "regdoc")
+
+      // Agent scopes: the agent may only act with permissions its caller holds.
+      val scopedAgent =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/agents",
+            json(
+              "code" to "billing$s",
+              "name" to "Billing agent $s",
+              "description" to "Scope test",
+              "scopes" to "billing:read:invoice",
+            ),
+            token,
+          ),
+        )
+      val agents = `data`(api(HttpMethod.GET, "/api/v1/ai/agents", token = govAdmin))
+      assertEquals("billing:read:invoice", agents.first { it["id"].asText() == scopedAgent["id"].asText() }["scopes"].asText(), "agent scopes stored")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/ai/chat",
+          json("agentCode" to "billing$s", "messages" to listOf(mapOf("role" to "user", "content" to "hello"))),
+          govAdmin,
+        ),
+        "admin holds the agent scope",
+      )
+      val denied =
+        api(
+          HttpMethod.POST,
+          "/api/v1/ai/chat",
+          json("agentCode" to "billing$s", "messages" to listOf(mapOf("role" to "user", "content" to "hello"))),
+          doctor,
+        )
+      assertEquals(403, denied.status, "caller lacks the agent scope: ${denied.body.take(200)}")
+      assertTrue(denied.body.contains("AI_SCOPE_DENIED"), "agent scope guard code")
+
+      // Eval results attached to a release subject.
+      val passing =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/governance/evals",
+            json(
+              "capability" to "chat",
+              "subject" to "billing$s-v0",
+              "suiteName" to "command-bar-gold",
+              "casesPassed" to 10,
+              "casesTotal" to 10,
+            ),
+            govAdmin,
+          ),
+        )
+      assertEquals("PASS", passing["verdict"].asText(), "full pass verdict")
+      assertEquals(100.0, passing["score"].asDouble(), 1e-9, "pass score")
+      val failing =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/governance/evals",
+            json(
+              "capability" to "chat",
+              "subject" to "billing$s-v0",
+              "suiteName" to "command-bar-gold",
+              "casesPassed" to 8,
+              "casesTotal" to 10,
+              "notes" to "two grounding misses",
+            ),
+            govAdmin,
+          ),
+        )
+      assertEquals("FAIL", failing["verdict"].asText(), "partial verdict fails")
+      assertEquals(80.0, failing["score"].asDouble(), 1e-9, "fail score")
+      val evals = `data`(api(HttpMethod.GET, "/api/v1/ai/governance/evals?subject=billing$s-v0", token = govAdmin))
+      assertEquals(2, evals.size(), "eval history kept per release")
+      assertEquals("FAIL", evals[0]["verdict"].asText(), "newest eval first")
+      val badEval =
+        api(
+          HttpMethod.POST,
+          "/api/v1/ai/governance/evals",
+          json("capability" to "chat", "subject" to "x", "suiteName" to "y", "casesPassed" to 11, "casesTotal" to 10),
+          govAdmin,
+        )
+      assertEquals(400, badEval.status, "impossible eval counts rejected")
+      assertTrue(badEval.body.contains("AI_EVAL_COUNTS_INVALID"), "eval count guard code")
+
+      // Incident register with lifecycle + event.
+      val incident =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/governance/incidents",
+            json("capability" to "chat", "severity" to "high", "summary" to "Wrong patient count", "detail" to "Counted soft-deleted rows"),
+            govAdmin,
+          ),
+        )
+      assertEquals("OPEN", incident["status"].asText(), "incident opened")
+      val investigating =
+        `data`(api(HttpMethod.PATCH, "/api/v1/ai/governance/incidents/${incident["id"].asText()}", json("status" to "INVESTIGATING"), govAdmin))
+      assertEquals("INVESTIGATING", investigating["status"].asText(), "incident investigating")
+      val closeNoResolution =
+        api(
+          HttpMethod.PATCH,
+          "/api/v1/ai/governance/incidents/${incident["id"].asText()}",
+          json("status" to "CLOSED"),
+          govAdmin,
+        )
+      assertEquals(400, closeNoResolution.status, "closing needs a resolution")
+      assertTrue(closeNoResolution.body.contains("AI_INCIDENT_RESOLUTION_REQUIRED"), "resolution guard code")
+      val closed =
+        `data`(
+          api(
+            HttpMethod.PATCH,
+            "/api/v1/ai/governance/incidents/${incident["id"].asText()}",
+            json("status" to "CLOSED", "resolution" to "Filter applied; count corrected"),
+            govAdmin,
+          ),
+        )
+      assertEquals("CLOSED", closed["status"].asText(), "incident closed")
+      assertFalse(closed["closedAt"].isNull, "close timestamp recorded")
+      val reopen = api(HttpMethod.PATCH, "/api/v1/ai/governance/incidents/${incident["id"].asText()}", json("status" to "OPEN"), govAdmin)
+      assertEquals(409, reopen.status, "closed incident is final")
+      assertTrue(reopen.body.contains("AI_INCIDENT_CLOSED"), "closed guard code")
+      val incidentList = `data`(api(HttpMethod.GET, "/api/v1/ai/governance/incidents?status=CLOSED", token = govAdmin))
+      assertTrue(incidentList.any { it["id"].asText() == incident["id"].asText() }, "incident on the closed list")
+
+      // Cost dashboard per capability + model.
+      val costs = `data`(api(HttpMethod.GET, "/api/v1/ai/governance/costs", token = govAdmin))
+      assertTrue(costs["byCapability"].size() >= 1, "cost rows per capability: $costs")
+      val chatCost = costs["byCapability"].firstOrNull { it["name"].asText() == "chat" }
+      assertNotNull(chatCost, "chat cost row")
+      assertTrue(chatCost!!["requests"].asLong() >= 1, "chat requests counted")
+      assertTrue(costs["byModel"].size() >= 1, "cost rows per model")
+
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      assertTrue(outbox.any { it["eventType"].asText() == "ai.incident_reported" }, "incident event emitted")
     }
   }
 }

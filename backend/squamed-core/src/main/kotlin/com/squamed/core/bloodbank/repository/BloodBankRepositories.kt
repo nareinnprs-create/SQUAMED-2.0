@@ -113,6 +113,9 @@ interface TransfusionRecordRepository : JpaRepository<TransfusionRecord, UUID> {
   fun findAllForHospital(
     @Param("hid") hospitalId: UUID?,
   ): List<TransfusionRecord>
+
+  // 04.07 traceability.
+  fun findByUnitId(unitId: UUID): List<TransfusionRecord>
 }
 
 interface TransfusionReactionRepository : JpaRepository<TransfusionReaction, UUID> {

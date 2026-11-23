@@ -4,6 +4,7 @@ import com.squamed.core.bloodbank.api.CrossmatchCreateDto
 import com.squamed.core.bloodbank.api.CrossmatchResultDto
 import com.squamed.core.bloodbank.api.CrossmatchView
 import com.squamed.core.bloodbank.api.DonorCreateDto
+import com.squamed.core.bloodbank.api.DonorDeferralDto
 import com.squamed.core.bloodbank.api.DonorStatusDto
 import com.squamed.core.bloodbank.api.DonorView
 import com.squamed.core.bloodbank.api.GroupingCreateDto
@@ -14,10 +15,12 @@ import com.squamed.core.bloodbank.api.ReactionCreateDto
 import com.squamed.core.bloodbank.api.ReactionView
 import com.squamed.core.bloodbank.api.ReservationCreateDto
 import com.squamed.core.bloodbank.api.ReservationView
+import com.squamed.core.bloodbank.api.TraceabilityView
 import com.squamed.core.bloodbank.api.TransfusionCreateDto
 import com.squamed.core.bloodbank.api.TransfusionStatusDto
 import com.squamed.core.bloodbank.api.TransfusionView
 import com.squamed.core.bloodbank.api.UnitCreateDto
+import com.squamed.core.bloodbank.api.UnitScreeningDto
 import com.squamed.core.bloodbank.api.UnitStatusDto
 import com.squamed.core.bloodbank.api.UnitView
 import com.squamed.core.bloodbank.domain.BloodDonor
@@ -55,6 +58,7 @@ class BloodBankService(
   private val issueRepository: BloodIssueRepository,
   private val transfusionRepository: TransfusionRecordRepository,
   private val reactionRepository: TransfusionReactionRepository,
+  private val patientRecordLookup: com.squamed.core.patient.repository.PatientRecordRepository,
   private val eventPublisher: DomainEventPublisher,
 ) {
   @Transactional
@@ -125,7 +129,18 @@ class BloodBankService(
     if (component !in COMPONENTS) throw IllegalArgumentException("BLOODBANK_INVALID_COMPONENT")
     val expiry = dto.expiryDate ?: throw IllegalArgumentException("BLOODBANK_EXPIRY_REQUIRED")
     if (!expiry.isAfter(LocalDate.now())) throw IllegalArgumentException("BLOODBANK_EXPIRY_IN_PAST")
-    if (dto.donorId != null) findDonor(dto.donorId, hospitalId)
+    // 04.07: deferral rules + 90-day donation interval.
+    if (dto.donorId != null) {
+      val donor = findDonor(dto.donorId, hospitalId)
+      val now = Instant.now()
+      if (donor.status == "deferred") throw IllegalArgumentException("DONOR_DEFERRED")
+      if (donor.status != "active") throw IllegalArgumentException("DONOR_NOT_ACTIVE")
+      donor.lastDonationAt?.let {
+        if (it.isAfter(now.minus(java.time.Duration.ofDays(90)))) throw IllegalArgumentException("DONOR_INTERVAL_NOT_MET")
+      }
+      donor.lastDonationAt = now
+      donorRepository.save(donor)
+    }
     val unit =
       unitRepository.save(
         BloodUnit(
@@ -261,6 +276,18 @@ class BloodBankService(
           requestedBy = actorId,
         ).also { it.createdBy = actorId },
       )
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "bloodbank.crossmatch_requested",
+        occurredAt = Instant.now(),
+        source = "bloodbank-service",
+        entityType = "crossmatch",
+        entityId = crossmatch.id,
+        hospitalId = hospitalId,
+        payload = mapOf("patientId" to patientId, "unitId" to unitId, "technique" to technique),
+      ),
+    )
     return CrossmatchView.from(crossmatch)
   }
 
@@ -348,6 +375,99 @@ class BloodBankService(
   }
 
   @Transactional
+  fun deferDonor(
+    id: UUID,
+    dto: DonorDeferralDto,
+    actorId: UUID,
+    hospitalId: UUID?,
+  ): DonorView {
+    val donor = findDonor(id, hospitalId)
+    val reason = dto.reason.trim()
+    if (reason.isEmpty()) throw IllegalArgumentException("DONOR_DEFERRAL_REASON_REQUIRED")
+    donor.status = "deferred"
+    donor.deferralReason = reason
+    donor.deferredUntil = dto.until
+    donor.updatedBy = actorId
+    return DonorView.from(donorRepository.save(donor))
+  }
+
+  @Transactional
+  fun reactivateDonor(
+    id: UUID,
+    actorId: UUID,
+    hospitalId: UUID?,
+  ): DonorView {
+    val donor = findDonor(id, hospitalId)
+    donor.status = "active"
+    donor.deferralReason = null
+    donor.deferredUntil = null
+    donor.updatedBy = actorId
+    return DonorView.from(donorRepository.save(donor))
+  }
+
+  // 04.07 screening hand-off: ttI cleared + NAT not reactive -> CLEARED, else REJECTED/discarded.
+  @Transactional
+  fun screenUnit(
+    id: UUID,
+    dto: UnitScreeningDto,
+    actorId: UUID,
+    hospitalId: UUID?,
+  ): UnitView {
+    val unit = findUnit(id, hospitalId)
+    val tti = dto.ttiResult.trim().uppercase()
+    if (tti !in setOf("CLEARED", "REACTIVE")) throw IllegalArgumentException("BLOODBANK_SCREENING_RESULT_INVALID")
+    val nat = dto.natResult?.trim()?.uppercase()
+    if (nat != null && nat !in setOf("CLEARED", "REACTIVE")) throw IllegalArgumentException("BLOODBANK_SCREENING_RESULT_INVALID")
+    val cleared = tti == "CLEARED" && nat != "REACTIVE"
+    unit.ttiResult = tti
+    unit.natResult = nat
+    unit.screeningStatus = if (cleared) "CLEARED" else "REJECTED"
+    if (!cleared) unit.status = "discarded"
+    unit.updatedBy = actorId
+    return UnitView.from(unitRepository.save(unit))
+  }
+
+  // 04.07 regulatory trace: donor -> unit -> grouping -> crossmatch -> reservation -> issue -> transfusion -> reactions.
+  @Transactional(readOnly = true)
+  fun traceability(
+    unitId: UUID,
+    hospitalId: UUID?,
+  ): TraceabilityView {
+    val unit = findUnit(unitId, hospitalId)
+    val donor = unit.donorId?.let { donorRepository.findById(it).orElse(null) }
+    val grouping = groupingRepository.findByUnitId(unitId)
+    val crossmatches = crossmatchRepository.findByUnitId(null, unitId)
+    val reservations = reservationRepository.findByUnitId(unitId)
+    val issue = issueRepository.findByUnitId(unitId).firstOrNull()
+    val transfusions = transfusionRepository.findByUnitId(unitId)
+    val reactions =
+      transfusions.flatMap { transfusion ->
+        transfusion.id?.let { reactionRepository.findByTransfusionRecordId(it) } ?: emptyList()
+      }
+
+    fun mapOfRow(vararg pairs: Pair<String, Any?>): Map<String, Any?> = mapOf(*pairs)
+    return TraceabilityView(
+      unitId = unit.id!!,
+      unitNumber = unit.unitNumber,
+      bloodGroup = unit.bloodGroup,
+      component = unit.component,
+      status = unit.status,
+      screeningStatus = unit.screeningStatus,
+      donorId = unit.donorId,
+      donorName = donor?.fullName,
+      grouping = grouping?.let { mapOfRow("abo" to it.aboResult, "rh" to it.rhResult, "confirmed" to it.confirmed) },
+      crossmatches =
+        crossmatches.map { mapOfRow("id" to it.id, "patientId" to it.patientId, "compatibility" to it.compatibility, "technique" to it.technique) },
+      reservations = reservations.map { mapOfRow("id" to it.id, "patientId" to it.patientId, "status" to it.status) },
+      issue = issue?.let { mapOfRow("id" to it.id, "patientId" to it.patientId, "status" to it.status, "issuedAt" to it.issuedAt) },
+      transfusions =
+        transfusions.map { mapOfRow("id" to it.id, "patientId" to it.patientId, "status" to it.status, "startedAt" to it.startedAt) },
+      reactions =
+        reactions.map { mapOfRow("id" to it.id, "type" to it.reactionType, "severity" to it.severity, "onsetAt" to it.onsetAt) },
+    )
+  }
+
+  @Transactional
   fun issue(
     dto: IssueCreateDto,
     actorId: UUID,
@@ -357,6 +477,18 @@ class BloodBankService(
     val unitId = dto.unitId ?: throw IllegalArgumentException("BLOODBANK_UNIT_REQUIRED")
     val unit = findUnit(unitId, hospitalId)
     if (unit.status !in setOf("available", "reserved")) throw IllegalArgumentException("BLOODBANK_UNIT_NOT_ISSUABLE")
+    // 04.07: screening + compatible crossmatch + bedside two-identifier check.
+    if (unit.screeningStatus != "CLEARED") throw IllegalArgumentException("BLOOD_UNIT_NOT_SCREENED")
+    val compatible =
+      crossmatchRepository.findByUnitId(null, unitId).any { it.patientId == patientId && it.compatibility == "compatible" }
+    if (!compatible) throw IllegalArgumentException("BLOOD_CROSSMATCH_REQUIRED")
+    val patient = patientRecordLookup.findById(patientId).orElseThrow { IllegalArgumentException("BLOODBANK_PATIENT_REQUIRED") }
+    val barcode = dto.patientBarcode?.trim()
+    val confirmName = dto.confirmPatientName?.trim()
+    val fullName = listOfNotNull(patient.firstName, patient.lastName).joinToString(" ")
+    if (barcode == null || barcode != patient.mrn || confirmName == null || !confirmName.equals(fullName, ignoreCase = true)) {
+      throw IllegalStateException("BLOOD_IDENTITY_MISMATCH")
+    }
     unit.status = "issued"
     unit.updatedBy = actorId
     unitRepository.save(unit)
@@ -368,12 +500,14 @@ class BloodBankService(
           unitId = unitId,
           issuedFor = dto.issuedFor,
           issuedBy = actorId,
+          patientBarcodeVerified = true,
+          secondIdentifierVerified = true,
         ).also { it.createdBy = actorId },
       )
     eventPublisher.publish(
       DomainEvent(
         eventId = UUID.randomUUID(),
-        eventType = "bloodbank.unit_issued",
+        eventType = "bloodbank.crossmatch_issued",
         occurredAt = Instant.now(),
         source = "bloodbank-service",
         entityType = "blood_issue",

@@ -74,6 +74,9 @@ data class IssueCreateDto(
   val patientId: UUID? = null,
   val unitId: UUID? = null,
   val issuedFor: UUID? = null,
+  // 04.07 bedside two-identifier check.
+  val patientBarcode: String? = null,
+  val confirmPatientName: String? = null,
 )
 
 data class TransfusionCreateDto(
@@ -108,6 +111,8 @@ data class DonorView(
   val lastDonationAt: Instant?,
   val status: String,
   val notes: String?,
+  val deferralReason: String?,
+  val deferredUntil: Instant?,
 ) {
   companion object {
     fun from(entity: BloodDonor) =
@@ -123,6 +128,8 @@ data class DonorView(
         lastDonationAt = entity.lastDonationAt,
         status = entity.status,
         notes = entity.notes,
+        deferralReason = entity.deferralReason,
+        deferredUntil = entity.deferredUntil,
       )
   }
 }
@@ -140,6 +147,7 @@ data class UnitView(
   val donorId: UUID?,
   val storageLocation: String?,
   val receivedAt: Instant?,
+  val screeningStatus: String,
 ) {
   companion object {
     fun from(entity: BloodUnit) =
@@ -156,6 +164,7 @@ data class UnitView(
         donorId = entity.donorId,
         storageLocation = entity.storageLocation,
         receivedAt = entity.receivedAt,
+        screeningStatus = entity.screeningStatus,
       )
   }
 }
@@ -333,3 +342,31 @@ data class ReactionView(
       )
   }
 }
+
+// 04.07 donor deferral, unit screening, traceability.
+data class DonorDeferralDto(
+  val reason: String,
+  val until: Instant? = null,
+)
+
+data class UnitScreeningDto(
+  val ttiResult: String,
+  val natResult: String? = null,
+)
+
+data class TraceabilityView(
+  val unitId: UUID,
+  val unitNumber: String,
+  val bloodGroup: String,
+  val component: String,
+  val status: String,
+  val screeningStatus: String,
+  val donorId: UUID?,
+  val donorName: String?,
+  val grouping: Map<String, Any?>?,
+  val crossmatches: List<Map<String, Any?>>,
+  val reservations: List<Map<String, Any?>>,
+  val issue: Map<String, Any?>?,
+  val transfusions: List<Map<String, Any?>>,
+  val reactions: List<Map<String, Any?>>,
+)

@@ -101,6 +101,14 @@ object EventCatalog {
       Entry("AiIncidentReported", "ai.incident_reported", Status.EMITTED, "AI incident reported to the governance register (05.07)."),
       Entry("AttentionItemRaised", "ai.attention_item_raised", Status.EMITTED, "Intelligence-rail attention item raised (05.04)."),
       Entry("AttentionItemCleared", "ai.attention_item_cleared", Status.EMITTED, "Attention item cleared or dismissed (05.04)."),
+      Entry(
+        "RecordSharedConsented",
+        "record.shared_consented",
+        Status.EMITTED,
+        "Patient record shared across group hospitals with a consent artifact (06.01).",
+      ),
+      Entry("ReferralCreated", "group.referral_created", Status.EMITTED, "Cross-hospital referral created inside a group (06.01)."),
+      Entry("ReferralAccepted", "group.referral_accepted", Status.EMITTED, "Cross-hospital referral accepted by the receiving hospital (06.01)."),
     )
 
   fun all(): List<Entry> = entries

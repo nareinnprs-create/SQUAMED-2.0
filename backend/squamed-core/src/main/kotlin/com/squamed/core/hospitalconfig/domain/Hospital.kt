@@ -4,6 +4,7 @@ import com.squamed.core.common.domain.BaseEntity
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Table
+import java.util.UUID
 
 @Entity
 @Table(name = "hospital", schema = "hospital_config")
@@ -38,4 +39,7 @@ class Hospital(
   var currency: String = "USD",
   @Column(name = "status", nullable = false, length = 20)
   var status: String = "active",
+  // 06.01: the hospital group this hospital belongs to (null = standalone).
+  @Column(name = "group_id")
+  var groupId: UUID? = null,
 ) : BaseEntity()

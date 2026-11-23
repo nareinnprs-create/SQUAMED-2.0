@@ -21,4 +21,7 @@ interface UserRoleRepository : JpaRepository<UserRole, UUID> {
     @Param("hospitalId") hospitalId: UUID,
     @Param("roleName") roleName: String,
   ): List<UUID>
+
+  // 06.01 group directory: every role assignment inside a hospital.
+  fun findByHospitalId(hospitalId: UUID): List<UserRole>
 }

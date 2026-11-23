@@ -28,6 +28,8 @@ class SurgerySchedule(
   @Column(name = "procedure_code", length = 50) var procedureCode: String? = null,
   @Column(name = "specialty", length = 50) var specialty: String? = null,
   @Column(name = "surgeon_id") var surgeonId: UUID? = null,
+  // 04.06 consent gate before the WHO sign-in/time-out.
+  @Column(name = "consent_id") var consentId: UUID? = null,
   @Column(name = "status", nullable = false, length = 30) var status: String = "scheduled",
   @Column(name = "scheduled_start_at", nullable = false) var scheduledStartAt: Instant,
   @Column(name = "scheduled_end_at") var scheduledEndAt: Instant? = null,
@@ -88,6 +90,8 @@ class PreOpChecklist(
   @Column(name = "hospital_id", nullable = false) var hospitalId: UUID,
   @Column(name = "surgery_schedule_id", nullable = false) var surgeryScheduleId: UUID,
   @Column(name = "checklist_item", nullable = false, length = 255) var checklistItem: String,
+  // 04.06 WHO stage: SIGN_IN | TIME_OUT | SIGN_OUT.
+  @Column(name = "stage", length = 10) var stage: String? = null,
   @Column(name = "category", length = 30) var category: String? = null,
   @Column(name = "checked", nullable = false) var checked: Boolean = false,
   @Column(name = "checked_by") var checkedBy: UUID? = null,
@@ -115,6 +119,20 @@ class PostOpRecord(
   @Column(name = "pain_score") var painScore: Int? = null,
   @Column(name = "drain_output_ml") var drainOutputMl: Int? = null,
   @Column(name = "complications") var complications: String? = null,
+  @Column(name = "recorded_by") var recordedBy: UUID? = null,
+  @Column(name = "recorded_at", nullable = false) var recordedAt: Instant = Instant.now(),
+) : BaseEntity()
+
+// 04.06 intra-op consumable -> charge event.
+@Entity
+@Table(name = "surgical_consumable", schema = "surgery")
+class SurgicalConsumable(
+  @Column(name = "hospital_id", nullable = false) var hospitalId: UUID,
+  @Column(name = "surgery_schedule_id", nullable = false) var surgeryScheduleId: UUID,
+  @Column(name = "name", nullable = false, length = 255) var name: String,
+  @Column(name = "quantity", nullable = false) var quantity: Int = 1,
+  @Column(name = "unit_price_qar", precision = 12, scale = 2) var unitPriceQar: java.math.BigDecimal? = null,
+  @Column(name = "charge_event_id") var chargeEventId: UUID? = null,
   @Column(name = "recorded_by") var recordedBy: UUID? = null,
   @Column(name = "recorded_at", nullable = false) var recordedAt: Instant = Instant.now(),
 ) : BaseEntity()

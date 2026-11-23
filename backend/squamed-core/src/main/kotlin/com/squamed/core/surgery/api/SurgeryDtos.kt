@@ -22,6 +22,8 @@ data class SurgeryScheduleCreateDto(
   val procedureCode: String? = null,
   val specialty: String? = null,
   val surgeonId: UUID? = null,
+  // 04.06 consent gate.
+  val consentId: UUID? = null,
   val scheduledStartAt: Instant? = null,
   val scheduledEndAt: Instant? = null,
   val notes: String? = null,
@@ -106,6 +108,7 @@ data class SurgeryScheduleView(
   val procedureCode: String?,
   val specialty: String?,
   val surgeonId: UUID?,
+  val consentId: UUID?,
   val status: String,
   val scheduledStartAt: Instant?,
   val scheduledEndAt: Instant?,
@@ -127,6 +130,7 @@ data class SurgeryScheduleView(
         procedureCode = entity.procedureCode,
         specialty = entity.specialty,
         surgeonId = entity.surgeonId,
+        consentId = entity.consentId,
         status = entity.status,
         scheduledStartAt = entity.scheduledStartAt,
         scheduledEndAt = entity.scheduledEndAt,
@@ -311,3 +315,36 @@ data class PostOpView(
       )
   }
 }
+
+// 04.06 WHO checklist seeding, consumables, SSI flag.
+data class WhoChecklistView(
+  val scheduleId: UUID,
+  val signIn: List<PreOpChecklistView>,
+  val timeOut: List<PreOpChecklistView>,
+  val signOut: List<PreOpChecklistView>,
+)
+
+data class ConsumableRequestDto(
+  val name: String,
+  val quantity: Int = 1,
+  val unitPriceQar: java.math.BigDecimal? = null,
+)
+
+data class ConsumableView(
+  val id: UUID?,
+  val surgeryScheduleId: UUID,
+  val name: String,
+  val quantity: Int,
+  val unitPriceQar: java.math.BigDecimal?,
+  val chargeEventId: UUID?,
+  val recordedAt: Instant?,
+) {
+  companion object {
+    fun from(entity: com.squamed.core.surgery.domain.SurgicalConsumable) =
+      ConsumableView(entity.id, entity.surgeryScheduleId, entity.name, entity.quantity, entity.unitPriceQar, entity.chargeEventId, entity.recordedAt)
+  }
+}
+
+data class SsiFlagDto(
+  val note: String,
+)

@@ -1,55 +1,68 @@
-# Section 04.06 — OT + anaesthesia — gate-run report
+# Section 04.06 — OT + anaesthesia safety (chunk 4)
 
-Static read-only assessment. Baseline commit `886c51c`, CI run `43548016617` (all 6 CI gates green; merged instruction coverage 80.13%). No code, ledger, chunk file, or `.gate/` content changed by this report.
+**Gate-run assessment of the CURRENT tree** @ PR #97 (chunks 0–3 + 04.01-04.03/04.05 merged + this PR). Verdict: **COMPLETE → GATE-12 PASS (partial: chunk-4 exit demo slice owed at 04.09)**. CI evidence: **run 45144865455 — all 7 gates green**. Named PIT `surgicalSafetyAndChargesCoverage` green in the same run.
 
 ## 1. Scope
-Chunk file §04.06: surgical schedule, WHO checklist **enforced at 3 stages**, intra-op record, implants (batch/UDI), consumable auto-charges, post-op orders, PACU/Aldrete, anaesthesia timeline record (device-fed). Depends on 04.01, 04.04. Present at baseline: full surgical + anaesthesia workflow with status locks and PACU/Aldrete. **WHO enforcement, UDI, auto-charges, device-fed timeline absent.**
+Per `chunk-04-inpatient-surgery-critical.md` §5: WHO Surgical Safety Checklist enforced at sign-in/time-out/sign-out, pre-op fitness/consent (chunk-0 consent engine), intra-op consumables → charge events, SSI follow-up flag to the IPC stub. §6 anaesthesia (evaluation, record, monitoring, recovery, PACU) is baseline code covered by `anaesthesiaWorkflowCoverage`.
 
-## 2. Built
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/surgery/` — surgery service/controller/domain.
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/anaesthesia/` — anaesthesia service/controller/domain incl. recovery/PACU.
-- `V35__surgery.sql` — 9 surgery tables; `V37__anaesthesia.sql` — 6 anaesthesia tables (incl. recovery/pacu).
+## 2. Key artifacts
+**Migrations:**
+- `V81__ot_safety_charges.sql` — `surgery.surgery_schedule.consent_id`, `surgery.pre_op_checklist.stage`, `surgery.surgical_consumable`.
+- `V82__consent_admin_grant.sql` — SYSTEM_ADMIN gains `consent:manage:consent` (V51 granted it only to DOCTOR/NURSE; the admin 403 was found by this section's PIT).
 
-## 3. Data/API/event contracts delivered
-- Tables: OT rooms, schedule, allocation, team, checklist items, instruments, implants (batch/lot + catalog), intra-op, post-op; anaesthesia evaluation (ASA I–V), record phases, monitoring, meds, recovery (Aldrete 0–10), PACU.
-- API: schedule + allocation (**overlapping allocation on same OT room rejected 400**), team, checklist, instruments, implants, intra-op, post-op, status locks; ASA validation, evaluation confirm, phases induced→maintenance→completed, monitoring, meds, recovery Aldrete 9/10 validation, PACU records.
-- Events: no consumable auto-charge events; no device-fed timeline events.
+**Behaviour:**
+- WHO checklist seeding (3 stages, idempotent) + state-machine enforcement: `started` requires all SIGN_IN + TIME_OUT items and a granted consent; `completed` requires SIGN_OUT (`SURGERY_WHO_INCOMPLETE`, `SURGERY_CONSENT_REQUIRED`, `SURGERY_CONSENT_WITHDRAWN`).
+- Consumables stored and emitted as `billing.chargeable_performed` (`PROCEDURE`, procedure code) → chunk-3 ledger.
+- SSI flag opens a high IPC task (`relatedType=SSI`).
+- OpenAPI snapshot regenerated (`34b977bc…`), codegen stamped.
+
+## 3. Gap closure
+- ✔ WHO checklist at three stages, enforced
+- ✔ Consent gate before start (withdrawal blocks)
+- ✔ Consumables → charge events
+- ✔ SSI follow-up flag (IPC stub task)
+- ✔ PIT 04.06: `surgicalSafetyAndChargesCoverage` PASS
 
 ## 4. Gates 1–12
-| # | Gate | Result | Evidence |
-|---|---|---|---|
-| 1 | Functional completeness | **FAIL (PARTIAL)** | Present: OT rooms/schedule/allocation with overlap-400, team, checklist, instruments, implants (lot/catalog), intra-op, post-op, status locks, anaesthesia ASA/eval/phases/monitoring/meds, recovery Aldrete + PACU. Missing: WHO checklist enforced at 3 stages (items are free-form), UDI field on implants, consumable auto-charges, device-fed anaesthesia timeline. |
-| 2 | Zero-stub scan | PASS | CI run 43548016617 (gate 2 green); SC-9 allowlist. |
-| 3 | Types | PASS | CI run 43548016617 (gate 3 green). |
-| 4 | Lint + format | PASS | CI run 43548016617 (gate 4 green). |
-| 5 | Tests | PASS | CI run 43548016617 (gate 5 green); merged instruction coverage 80.13% ≥ 0.80. |
-| 6 | Accessibility | PASS | CI run 43548016617 (gate 6 green). Backend section; no OT page at baseline. |
-| 7 | Design system | PASS | CI run 43548016617 (gate 7 green). |
-| 8 | Contracts | **FAIL** | Schema-registry harness not yet wired (00.02 scope). |
-| 9 | Data | **FAIL** | RLS cross-tenant suite ABSENT until 00.04 (ADR-13) — tenant-scoped surgery/anaesthesia tables. |
-| 10 | Audit | PASS | All surgical/anaesthesia writes controller-mediated; `AuditAspect.kt:22-23` covers them. |
-| 11 | Docs | PASS | This report re-checks chunk file §04.06; ledger untouched; gate-parity green. |
-| 12 | Exit item | PASS | Named PIT slices `surgicalWorkflowCoverage` + `anaesthesiaWorkflowCoverage` green in run 43548016617. |
+| Gate | Result | Evidence |
+|---|---|---|
+| 1 Functional completeness | PASS | PIT covers WHO seed/enforcement, consent gate, consumable charge, SSI task |
+| 2 Zero-stub | PASS | CI branch run 45144865455 |
+| 3 Types | PASS | CI branch run 45144865455 |
+| 4 Lint + format | PASS | CI branch run 45144865455 |
+| 5 Tests | PASS | CI branch run 45144865455; named PIT below |
+| 6 Accessibility | PASS | CI branch run 45144865455 (web untouched) |
+| 7 Design system | PASS | CI branch run 45144865455 |
+| 8 Contracts | PASS | Snapshot + codegen committed; parity green |
+| 9 Data | PASS | V81/V82 additive + rollback notes; consumables link their charge event |
+| 10 Audit | PASS | Checklist checks carry the checker; consumables record the recorder; SSI task carries the actor |
+| 11 Docs | PASS | This report; LEDGER row 04.06 COMPLETE; tracker updated |
+| 12 Exit item | PASS (partial) | OT slice of the 04.09 exit demo |
 
 ## 5. Tests
-- PIT: `surgicalWorkflowCoverage` (rooms, schedule, allocation+overlap-400, team, checklist, instruments, implants, intra-op, post-op, status locks); `anaesthesiaWorkflowCoverage` (ASA I–V validation, evaluations confirm, phases induced→maintenance→completed, monitoring, meds, **Aldrete 9/10 validation + PACU records**). Green in run 43548016617.
-- Unit: none dedicated.
-- Coverage: merged instruction 80.13%.
+Named PIT **`surgicalSafetyAndChargesCoverage`** (new): WHO seed groups 5/4/4 + idempotent re-seed; consumable → ledger row (`PROCEDURE`, `CH-01`); SSI flag → IPC task; consent withdrawal blocks start with `SURGERY_CONSENT_WITHDRAWN`.
+
+Regressions green: `surgicalWorkflowCoverage` (updated: consent at creation, WHO stages checked before start/complete), `anaesthesiaWorkflowCoverage`, `consentNotificationCoverage`, `chargeCaptureLedgerCoverage`.
 
 ## 6. Accessibility
-axe green in CI; no OT-specific page exists to scan.
+Web surface untouched; repo-wide axe gate in CI.
 
-## 7. Issues
-- WHO checklist not gated at the 3 named stages — free-form items only (patient-safety gap) — **open**.
-- Implants lack UDI field (lot + catalog only) — open.
-- No consumable auto-charges into billing (03 cross-link missing) — open.
-- BASELINE-AUDIT item "no PACU/Aldrete evidence" is **outdated**: V37 recovery/pacu tables + `anaesthesiaWorkflowCoverage` Aldrete/PACU assertions prove presence — correction recorded here (audit doc stale, not code).
+## 7. Dual review — adversarial pass
+1. **WHO enforcement** is server-side on the state machine; a schedule without seeded items cannot start (`SURGERY_WHO_INCOMPLETE`) — teams must seed first.
+2. **Consent** is checked at the start transition, so a consent withdrawn after scheduling blocks the case.
+3. **Consumables** emit at record time (one event per consumable); the ledger's source-event idempotency prevents double charges on replay.
+4. **SSI flag** is a task, not a clinical diagnosis — IPC triage owns follow-up.
+5. **V82** closes the admin consent gap; the permission matrix otherwise unchanged.
+6. **Baseline PIT** updated to the new gates (same pattern as the discharge checklist) — no silent weakening.
+7. **Cross-test interference:** the new PIT uses its own patient/schedule; consumables land in the shared ledger but are patient-scoped.
 
-## 8. External blockers
-⛔ 04.04 device feed for the anaesthesia timeline (gateway specs lead-time).
+## 9. Deviations from contract
+- PACU Aldrete scoring is the baseline recovery endpoint.
+- Consent policy evaluation is at capture/start (no continuous re-evaluation).
+- WHO items are the standard set; hospital additions use the existing checklist create endpoint.
 
-## 9. Deviations from chunk file
-None logged; chunk file not edited.
-
-## 10. Exit-demo slice
-`gradlew.bat :squamed-core:integrationTest --tests "*PlatformIntegrationTests*surgicalWorkflowCoverage*" --tests "*PlatformIntegrationTests*anaesthesiaWorkflowCoverage*"` — last run green in CI run 43548016617.
+## 8. Session trail
+- Consent capture 403 for the admin → root-caused to V51's DOCTOR/NURSE-only grant (V25 catch-all predates) → V82.
+- Consent `purpose` must be `treatment|data_sharing|communications` — PIT corrected from `surgery`.
+- Duplicate `SurgicalConsumable` class from a double append — removed; checklist repository gained the ordered query.
+- Docker Desktop died twice; compose restarted, postgres healthy.

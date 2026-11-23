@@ -135,6 +135,43 @@ class SurgeryController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<List<PreOpChecklistView>> = ApiResponse.ok(surgeryService.listChecklist(id, principal.hospitalId))
 
+  // 04.06 WHO staged checklist, consumables -> charge events, SSI flag.
+  @PostMapping("/schedules/{id}/checklist/who")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("surgery:write:surgery")
+  @Transactional
+  fun seedWhoChecklist(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<WhoChecklistView> = ApiResponse.ok(surgeryService.seedWhoChecklist(id, principal.userId, principal.hospitalId))
+
+  @PostMapping("/schedules/{id}/consumables")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("surgery:write:surgery")
+  @Transactional
+  fun addConsumable(
+    @PathVariable id: UUID,
+    @RequestBody dto: ConsumableRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<ConsumableView> = ApiResponse.ok(surgeryService.addConsumable(id, dto, principal.userId, principal.hospitalId))
+
+  @GetMapping("/schedules/{id}/consumables")
+  @RequiresPermission("surgery:read:surgery")
+  @Transactional(readOnly = true)
+  fun listConsumables(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<ConsumableView>> = ApiResponse.ok(surgeryService.listConsumables(id, principal.hospitalId))
+
+  @PostMapping("/schedules/{id}/ssi-flag")
+  @RequiresPermission("surgery:write:surgery")
+  @Transactional
+  fun flagSsi(
+    @PathVariable id: UUID,
+    @RequestBody dto: SsiFlagDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(surgeryService.flagSsi(id, dto, principal.userId, principal.hospitalId))
+
   @PostMapping("/schedules/{id}/instruments")
   @ResponseStatus(HttpStatus.CREATED)
   @RequiresPermission("surgery:write:surgery")

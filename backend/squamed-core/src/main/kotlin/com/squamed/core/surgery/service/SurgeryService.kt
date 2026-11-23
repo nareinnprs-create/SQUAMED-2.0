@@ -4,6 +4,8 @@ import com.squamed.core.common.tenant.requireSameHospital
 import com.squamed.core.events.DomainEvent
 import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.surgery.api.ChecklistCreateDto
+import com.squamed.core.surgery.api.ConsumableRequestDto
+import com.squamed.core.surgery.api.ConsumableView
 import com.squamed.core.surgery.api.ImplantCreateDto
 import com.squamed.core.surgery.api.ImplantView
 import com.squamed.core.surgery.api.InstrumentCreateDto
@@ -18,11 +20,13 @@ import com.squamed.core.surgery.api.OtRoomView
 import com.squamed.core.surgery.api.PostOpCreateDto
 import com.squamed.core.surgery.api.PostOpView
 import com.squamed.core.surgery.api.PreOpChecklistView
+import com.squamed.core.surgery.api.SsiFlagDto
 import com.squamed.core.surgery.api.SurgeryScheduleCreateDto
 import com.squamed.core.surgery.api.SurgeryScheduleView
 import com.squamed.core.surgery.api.SurgeryStatusDto
 import com.squamed.core.surgery.api.SurgicalTeamCreateDto
 import com.squamed.core.surgery.api.SurgicalTeamView
+import com.squamed.core.surgery.api.WhoChecklistView
 import com.squamed.core.surgery.domain.ImplantRecord
 import com.squamed.core.surgery.domain.InstrumentTracking
 import com.squamed.core.surgery.domain.IntraOpRecord
@@ -31,6 +35,7 @@ import com.squamed.core.surgery.domain.OtRoom
 import com.squamed.core.surgery.domain.PostOpRecord
 import com.squamed.core.surgery.domain.PreOpChecklist
 import com.squamed.core.surgery.domain.SurgerySchedule
+import com.squamed.core.surgery.domain.SurgicalConsumable
 import com.squamed.core.surgery.domain.SurgicalTeam
 import com.squamed.core.surgery.repository.ImplantRecordRepository
 import com.squamed.core.surgery.repository.InstrumentTrackingRepository
@@ -40,6 +45,7 @@ import com.squamed.core.surgery.repository.OtRoomRepository
 import com.squamed.core.surgery.repository.PostOpRecordRepository
 import com.squamed.core.surgery.repository.PreOpChecklistRepository
 import com.squamed.core.surgery.repository.SurgeryScheduleRepository
+import com.squamed.core.surgery.repository.SurgicalConsumableRepository
 import com.squamed.core.surgery.repository.SurgicalTeamRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -57,6 +63,9 @@ class SurgeryService(
   private val checklistRepository: PreOpChecklistRepository,
   private val intraOpRepository: IntraOpRecordRepository,
   private val postOpRepository: PostOpRecordRepository,
+  private val consumableRepository: SurgicalConsumableRepository,
+  private val consentRepository: com.squamed.core.consent.repository.ConsentRepository,
+  private val taskService: com.squamed.core.task.service.TaskService,
   private val eventPublisher: DomainEventPublisher,
 ) {
   @Transactional
@@ -97,6 +106,7 @@ class SurgeryService(
           procedureCode = dto.procedureCode,
           specialty = dto.specialty,
           surgeonId = dto.surgeonId,
+          consentId = dto.consentId,
           scheduledStartAt = startAt,
           scheduledEndAt = dto.scheduledEndAt,
           notes = dto.notes,
@@ -143,11 +153,18 @@ class SurgeryService(
         if (schedule.status !in setOf("scheduled", "confirmed", "checklist_done")) {
           throw IllegalArgumentException("SURGERY_CANNOT_START")
         }
+        // 04.06: consent gate + WHO sign-in/time-out must be complete before the knife.
+        val consentId = schedule.consentId ?: throw IllegalArgumentException("SURGERY_CONSENT_REQUIRED")
+        val consent = consentRepository.findById(consentId).orElseThrow { IllegalArgumentException("SURGERY_CONSENT_REQUIRED") }
+        if (consent.status != "granted") throw IllegalArgumentException("SURGERY_CONSENT_WITHDRAWN")
+        requireWhoStage(id, setOf("SIGN_IN", "TIME_OUT"))
         schedule.actualStartAt = now
       }
 
       "completed" -> {
         if (schedule.status != "started") throw IllegalArgumentException("SURGERY_CANNOT_COMPLETE")
+        // 04.06: WHO sign-out must be complete before the case closes.
+        requireWhoStage(id, setOf("SIGN_OUT"))
         schedule.actualEndAt = now
         val allocation = allocationRepository.findBySurgeryScheduleId(id)
         if (allocation != null) {
@@ -474,8 +491,157 @@ class SurgeryService(
 
   private fun String.snakeToKebab(): String = this.replace("_", "-")
 
+  // -- 04.06 WHO staged checklist, consumables -> charge events, SSI flag --
+
+  private fun requireWhoStage(
+    scheduleId: UUID,
+    stages: Set<String>,
+  ) {
+    val items = checklistRepository.findBySurgeryScheduleIdOrderByCreatedAtAsc(scheduleId).filter { it.stage in stages }
+    if (items.isEmpty() || items.any { !it.checked }) throw IllegalArgumentException("SURGERY_WHO_INCOMPLETE")
+  }
+
+  @Transactional
+  fun seedWhoChecklist(
+    scheduleId: UUID,
+    actorId: UUID,
+    hospitalId: UUID?,
+  ): WhoChecklistView {
+    val schedule = findSchedule(scheduleId, hospitalId)
+    val existing = checklistRepository.findBySurgeryScheduleIdOrderByCreatedAtAsc(scheduleId)
+    if (existing.none { it.stage != null }) {
+      WHO_ITEMS.forEach { (stage, items) ->
+        items.forEach { item ->
+          checklistRepository.save(
+            PreOpChecklist(
+              hospitalId = schedule.hospitalId,
+              surgeryScheduleId = scheduleId,
+              checklistItem = item,
+              category = "who",
+              stage = stage,
+            ).also { it.createdBy = actorId },
+          )
+        }
+      }
+    }
+    val rows = checklistRepository.findBySurgeryScheduleIdOrderByCreatedAtAsc(scheduleId)
+    return WhoChecklistView(
+      scheduleId = scheduleId,
+      signIn = rows.filter { it.stage == "SIGN_IN" }.map { PreOpChecklistView.from(it) },
+      timeOut = rows.filter { it.stage == "TIME_OUT" }.map { PreOpChecklistView.from(it) },
+      signOut = rows.filter { it.stage == "SIGN_OUT" }.map { PreOpChecklistView.from(it) },
+    )
+  }
+
+  @Transactional
+  fun addConsumable(
+    scheduleId: UUID,
+    dto: ConsumableRequestDto,
+    actorId: UUID,
+    hospitalId: UUID?,
+  ): ConsumableView {
+    val schedule = findSchedule(scheduleId, hospitalId)
+    if (dto.name.isBlank()) throw IllegalArgumentException("SURGERY_CONSUMABLE_NAME_REQUIRED")
+    if (dto.quantity <= 0) throw IllegalArgumentException("SURGERY_CONSUMABLE_QUANTITY_INVALID")
+    val eventId = UUID.randomUUID()
+    val saved =
+      consumableRepository.save(
+        SurgicalConsumable(
+          hospitalId = schedule.hospitalId,
+          surgeryScheduleId = scheduleId,
+          name = dto.name.trim(),
+          quantity = dto.quantity,
+          unitPriceQar = dto.unitPriceQar,
+          chargeEventId = eventId,
+          recordedBy = actorId,
+        ).also { it.createdBy = actorId },
+      )
+    // 04.06: consumables feed the chunk-3 charge ledger as performed billable events.
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = eventId,
+        eventType = "billing.chargeable_performed",
+        occurredAt = Instant.now(),
+        source = "surgery-service",
+        entityType = "surgery-schedule",
+        entityId = scheduleId,
+        hospitalId = schedule.hospitalId,
+        payload =
+          mapOf(
+            "orderNumber" to (schedule.bookingNumber ?: scheduleId.toString()),
+            "patientId" to schedule.patientId.toString(),
+            "chargeCategory" to "PROCEDURE",
+            "tests" to listOf(mapOf("testCode" to (schedule.procedureCode ?: dto.name.trim()), "testName" to dto.name.trim(), "quantity" to dto.quantity)),
+          ),
+        recipientIds = emptyList(),
+      ),
+    )
+    return ConsumableView.from(saved)
+  }
+
+  @Transactional(readOnly = true)
+  fun listConsumables(
+    scheduleId: UUID,
+    hospitalId: UUID?,
+  ): List<ConsumableView> {
+    findSchedule(scheduleId, hospitalId)
+    return consumableRepository.findBySurgeryScheduleIdOrderByRecordedAtDesc(scheduleId).map { ConsumableView.from(it) }
+  }
+
+  // 04.06 SSI follow-up flag -> IPC hand-off (task).
+  @Transactional
+  fun flagSsi(
+    scheduleId: UUID,
+    dto: SsiFlagDto,
+    actorId: UUID,
+    hospitalId: UUID?,
+  ): Map<String, Any?> {
+    val schedule = findSchedule(scheduleId, hospitalId)
+    if (dto.note.isBlank()) throw IllegalArgumentException("SURGERY_SSI_NOTE_REQUIRED")
+    val task =
+      taskService.createTask(
+        com.squamed.core.task.api.TaskCreateDto(
+          hospitalId = schedule.hospitalId,
+          title = "SSI follow-up: ${schedule.procedureName}",
+          description = dto.note.trim(),
+          priority = "high",
+          relatedType = "SSI",
+          relatedId = scheduleId,
+        ),
+        actorId,
+      )
+    return mapOf("scheduleId" to scheduleId, "taskId" to task.id, "status" to "flagged")
+  }
+
   companion object {
     val SCHEDULE_STATUSES = setOf("scheduled", "confirmed", "checklist_done", "started", "completed", "cancelled")
+
+    // 04.06 WHO Surgical Safety Checklist (three stages).
+    val WHO_ITEMS =
+      linkedMapOf(
+        "SIGN_IN" to
+          listOf(
+            "Patient identity confirmed",
+            "Site marked / not applicable",
+            "Consent signed",
+            "Allergies checked",
+            "Airway / aspiration risk assessed",
+          ),
+        "TIME_OUT" to
+          listOf(
+            "Team introduced by name and role",
+            "Procedure and site confirmed by the team",
+            "Antibiotic prophylaxis given within 60 min",
+            "Imaging displayed",
+          ),
+        "SIGN_OUT" to
+          listOf(
+            "Instrument and sponge counts correct",
+            "Specimen labelled with patient name",
+            "Equipment problems recorded",
+            "Recovery plan agreed",
+          ),
+      )
     val TEAM_ROLES = setOf("surgeon", "assistant", "anaesthetist", "nurse", "scout", "technician", "perfusionist")
     val INSTRUMENT_STATUSES = setOf("booked", "checked_in", "sterilized", "in_use", "returned", "decontaminated")
     val POSTOP_DESTINATIONS = setOf("ward", "icu", "observation", "recovery", "stepdown")

@@ -8870,6 +8870,115 @@ class PlatformIntegrationTests {
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog", token = token))
       assertTrue(catalog.any { it["name"].asText() == "ThresholdAlertRaised" && it["status"].asText() == "EMITTED" }, "ThresholdAlertRaised cataloged")
     }
+
+    @Test
+    fun surgicalSafetyAndChargesCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId = ensureSeed(token)
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Theatre",
+              "lastName" to "Safety$s",
+              "gender" to "male",
+              "dateOfBirth" to "1969-09-09",
+              "phone" to "65$s".take(11),
+              "qid" to "TH$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+            ),
+            token,
+          ),
+        )["patient"]["id"].asText()
+      val consent =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/consents",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "purpose" to "treatment", "scope" to "procedure", "signedByName" to "Patient"),
+            token,
+          ),
+        )
+      val scheduleId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "procedureName" to "Open cholecystectomy",
+              "procedureCode" to "CH-01",
+              "consentId" to consent["id"].asText(),
+              "scheduledStartAt" to Instant.now().plusSeconds(3600).toString(),
+            ),
+            token,
+          ),
+        )["id"].asText()
+
+      // WHO seed is idempotent and stages are grouped.
+      val who = `data`(api(HttpMethod.POST, "/api/v1/surgery/schedules/$scheduleId/checklist/who", json(), token))
+      assertEquals(5, who["signIn"].size(), "sign-in items")
+      assertEquals(4, who["timeOut"].size(), "time-out items")
+      assertEquals(4, who["signOut"].size(), "sign-out items")
+      val whoAgain = `data`(api(HttpMethod.POST, "/api/v1/surgery/schedules/$scheduleId/checklist/who", json(), token))
+      assertEquals(who["signIn"].size(), whoAgain["signIn"].size(), "seed is idempotent")
+
+      // Consumable -> charge event into the ledger.
+      val consumable =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules/$scheduleId/consumables",
+            json("name" to "Laparotomy pack", "quantity" to 2, "unitPriceQar" to 350.0),
+            token,
+          ),
+        )
+      assertFalse(consumable["chargeEventId"].isNull, "consumable links its charge event")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/surgery/schedules/$scheduleId/consumables", token = token)).size(), "consumables listed")
+      var charge: JsonNode? = null
+      val deadline = System.currentTimeMillis() + 45_000
+      while (System.currentTimeMillis() < deadline) {
+        charge =
+          `data`(api(HttpMethod.GET, "/api/v1/billing/charges?patientId=$patientId", token = token))
+            .firstOrNull { it["referenceType"].asText() == "surgery-schedule" && it["referenceId"].asText() == scheduleId }
+        if (charge != null) break
+        Thread.sleep(500)
+      }
+      assertNotNull(charge, "consumable captured into the charge ledger")
+      assertEquals("PROCEDURE", charge!!["category"].asText(), "procedure charge category")
+      assertEquals("CH-01", charge["chargeCode"].asText(), "procedure code carried")
+
+      // SSI follow-up flag opens an IPC task.
+      val ssi =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules/$scheduleId/ssi-flag",
+            json("note" to "Redness at the wound edge on day 5"),
+            token,
+          ),
+        )
+      assertEquals("flagged", ssi["status"].asText(), "SSI flagged")
+      val tasks = `data`(api(HttpMethod.GET, "/api/v1/tasks", token = token))
+      assertTrue(
+        tasks.any { it["relatedType"].asText() == "SSI" && it["relatedId"].asText() == scheduleId },
+        "SSI task opened for IPC",
+      )
+
+      // Consent withdrawal blocks the start.
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/consents/${consent["id"].asText()}/withdraw", json("reason" to "patient changed mind"), token),
+        "consent withdrawn",
+      )
+      val blocked = api(HttpMethod.PATCH, "/api/v1/surgery/schedules/$scheduleId/status", json("status" to "started"), token)
+      assertEquals(400, blocked.status, "withdrawn consent blocks the start: ${blocked.body.take(200)}")
+      assertTrue(blocked.body.contains("SURGERY_CONSENT_WITHDRAWN"), "consent guard code")
+    }
   }
 
   /** Collects every text frame pushed to one realtime WebSocket session (shared by fabric tests). */
@@ -10554,6 +10663,18 @@ class PlatformIntegrationTests {
         )
       assertEquals(400, noStart.status, "schedule without start time")
 
+      // 04.06: a signed consent is required before the WHO sign-in/time-out gate lets the case start.
+      val surgeryConsent =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/consents",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "purpose" to "treatment", "scope" to "procedure", "signedByName" to "Patient"),
+            token,
+          ),
+        )
+      val surgeryConsentId = surgeryConsent["id"].asText()
+
       val schedule =
         `data`(
           api(
@@ -10565,6 +10686,7 @@ class PlatformIntegrationTests {
               "procedureName" to "Laparoscopic appendectomy",
               "procedureCode" to "LA-01",
               "specialty" to "General Surgery",
+              "consentId" to surgeryConsentId,
               "scheduledStartAt" to now.plusSeconds(3600).toString(),
               "scheduledEndAt" to now.plusSeconds(7200).toString(),
               "notes" to "Third case of the day",
@@ -10739,6 +10861,22 @@ class PlatformIntegrationTests {
       val fetchedPostOp = `data`(api(HttpMethod.GET, "/api/v1/surgery/schedules/$scheduleId/post-op", token = token))
       assertEquals("ward", fetchedPostOp["destination"].asText(), "post-op destination")
 
+      // 04.06: WHO sign-in + time-out must be checked before the case can start.
+      fun checkAll(stages: List<String>) {
+        val who = `data`(api(HttpMethod.POST, "/api/v1/surgery/schedules/$scheduleId/checklist/who", json(), token))
+        stages.forEach { stage ->
+          who[stage].forEach { item ->
+            assert2xx(
+              api(HttpMethod.PATCH, "/api/v1/surgery/schedules/$scheduleId/checklist/${item["id"].asText()}/check", json(), token),
+              "check $stage item",
+            )
+          }
+        }
+      }
+      val whoBefore = api(HttpMethod.PATCH, "/api/v1/surgery/schedules/$scheduleId/status", json("status" to "started"), token)
+      assertEquals(400, whoBefore.status, "cannot start before the WHO sign-in/time-out: ${whoBefore.body.take(200)}")
+      assertTrue(whoBefore.body.contains("SURGERY_WHO_INCOMPLETE"), "WHO guard code")
+      checkAll(listOf("signIn", "timeOut"))
       val started =
         `data`(
           api(
@@ -10750,6 +10888,9 @@ class PlatformIntegrationTests {
         )
       assertEquals("started", started["status"].asText(), "surgery started")
       assertNotNull(started["actualStartAt"])
+      val signOutMissing = api(HttpMethod.PATCH, "/api/v1/surgery/schedules/$scheduleId/status", json("status" to "completed"), token)
+      assertEquals(400, signOutMissing.status, "cannot complete before the WHO sign-out")
+      checkAll(listOf("signOut"))
       val completed =
         `data`(
           api(

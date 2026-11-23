@@ -104,6 +104,11 @@ class DischargeChecklist(
   var pharmacyReturnAt: Instant? = null,
   @Column(name = "final_bill_verified", nullable = false)
   var finalBillVerified: Boolean = false,
+  // 04.08 medication-reconciliation review leg (required before signing the summary).
+  @Column(name = "med_rec_done", nullable = false)
+  var medRecDone: Boolean = false,
+  @Column(name = "med_rec_at")
+  var medRecAt: Instant? = null,
   @Column(name = "completed_by")
   var completedBy: UUID? = null,
   @Column(name = "completed_at")

@@ -72,3 +72,15 @@ interface DischargeChecklistRepository : JpaRepository<DischargeChecklist, UUID>
 interface AttendantRepository : JpaRepository<Attendant, UUID> {
   fun findByAdmissionId(admissionId: UUID): List<Attendant>
 }
+
+// 04.08 dietary-lite.
+interface DietOrderRepository : org.springframework.data.jpa.repository.JpaRepository<com.squamed.core.ipd.domain.DietOrder, java.util.UUID> {
+  fun findByAdmissionIdAndIsActiveTrue(admissionId: java.util.UUID): List<com.squamed.core.ipd.domain.DietOrder>
+
+  @org.springframework.data.jpa.repository.Query(
+    "select d from DietOrder d where d.hospitalId = :hid and d.isActive = true order by d.dietType, d.orderedAt",
+  )
+  fun findActiveForHospital(
+    @org.springframework.data.repository.query.Param("hid") hospitalId: java.util.UUID,
+  ): List<com.squamed.core.ipd.domain.DietOrder>
+}

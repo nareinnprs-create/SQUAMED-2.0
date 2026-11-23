@@ -8227,6 +8227,11 @@ class PlatformIntegrationTests {
         ),
         "summary drafted",
       )
+      // 04.08: the summary cannot be signed before the medication-reconciliation review leg.
+      val earlySign = api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge-summary/sign", json("icdCodes" to listOf("R05")), token)
+      assertEquals(409, earlySign.status, "summary sign blocked before med-rec: ${earlySign.body.take(200)}")
+      assertTrue(earlySign.body.contains("DISCHARGE_MEDREC_REQUIRED"), "med-rec guard code")
+      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/checklist/med_rec", json(), token), "med-rec review recorded")
       val noIcd = api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge-summary/sign", json("icdCodes" to emptyList<String>()), token)
       assert4xx(noIcd, "summary signature needs ICD codes")
       assertTrue(noIcd.body.contains("SUMMARY_ICD_REQUIRED"), "ICD guard code")
@@ -9189,6 +9194,176 @@ class PlatformIntegrationTests {
       listOf("CrossmatchRequested", "CrossmatchIssued", "TransfusionReactionReported").forEach { name ->
         assertTrue(catalog.any { it["name"].asText() == name && it["status"].asText() == "EMITTED" }, "$name cataloged EMITTED")
       }
+    }
+
+    @Test
+    fun ipdBillingDietaryCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "IPD Billing $s", "code" to "IB-$s", "country" to "Qatar"),
+            token,
+          ),
+        )["id"].asText()
+      val wardId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json("name" to "Ward B $s", "code" to "WB-$s", "type" to "general"),
+            token,
+          ),
+        )["id"].asText()
+
+      fun bed(
+        label: String,
+        type: String,
+      ) = `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+          json("label" to label, "type" to type, "status" to "available", "wardId" to wardId),
+          token,
+        ),
+      )["id"].asText()
+      val standardBed = bed("S-$s", "standard")
+      val icuBed = bed("I-$s", "icu")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/tariffs",
+          json("hospitalId" to hospitalId, "code" to "ROOM-STANDARD", "name" to "Standard room/hour", "category" to "room", "priceQar" to 100.0),
+          token,
+        ),
+        "room tariff",
+      )
+
+      fun patient(
+        tag: String,
+        allergy: String? = null,
+      ): String {
+        val p =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/patients",
+              json(
+                "firstName" to "Ipd$tag",
+                "lastName" to "Bill$s",
+                "gender" to "female",
+                "dateOfBirth" to "1976-06-06",
+                "phone" to "63$tag$s".take(11),
+                "qid" to "IB$tag$s".take(11),
+                "nationality" to "QA",
+                "city" to "Doha",
+                "hospitalId" to hospitalId,
+              ),
+              token,
+            ),
+          )["patient"]
+        allergy?.let {
+          assert2xx(api(HttpMethod.POST, "/api/v1/patients/${p["id"].asText()}/allergies", json("allergen" to it, "severity" to "warn"), token), "allergy $it")
+        }
+        return p["id"].asText()
+      }
+      val patientId = patient("1", "Peanut")
+      val admission =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patientId,
+              "bedId" to standardBed,
+              "admissionType" to "elective",
+            ),
+            token,
+          ),
+        )
+      val admissionId = admission["id"].asText()
+
+      // Room charge by bed-hour priced from the tariff; interim bill from the posted ledger.
+      val roomCharge = `data`(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/room-charge", json("hours" to 3), token))
+      assertEquals("room", roomCharge["category"].asText(), "room charge category")
+      assertEquals(3, roomCharge["quantity"].asInt(), "three bed-hours")
+      assertEquals(100.0, roomCharge["unitPriceQar"].asDouble(), 1e-9, "tariff rate")
+      assertEquals(300.0, roomCharge["totalQar"].asDouble(), 1e-9, "room charge total")
+      val interim = `data`(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/interim-bill", json(), token))
+      assertEquals(300.0, interim["invoice"]["totalQar"].asDouble(), 1e-9, "interim bill total")
+
+      // A bed type without a tariff blocks the room charge.
+      val patient2 = patient("2")
+      val icuAdmission =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patient2,
+              "bedId" to icuBed,
+              "admissionType" to "emergency",
+            ),
+            token,
+          ),
+        )
+      val noRate = api(HttpMethod.POST, "/api/v1/admissions/${icuAdmission["id"].asText()}/room-charge", json("hours" to 2), token)
+      assert4xx(noRate, "missing room tariff blocks the charge")
+      assertTrue(noRate.body.contains("ROOM_RATE_NOT_CONFIGURED"), "rate guard code")
+
+      // Dietary: allergy-aware order + manifest.
+      val conflict = api(HttpMethod.POST, "/api/v1/admissions/$admissionId/diet-orders", json("dietType" to "Soft", "restrictions" to "peanut-free"), token)
+      assert4xx(conflict, "allergen conflict blocked")
+      assertTrue(conflict.body.contains("DIET_ALLERGEN_CONFLICT"), "diet allergen guard")
+      val diet = `data`(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/diet-orders", json("dietType" to "Soft", "restrictions" to "low salt"), token))
+      assertEquals("Soft", diet["dietType"].asText(), "diet order stored")
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/admissions/$admissionId/diet-orders", json("dietType" to "Liquid", "restrictions" to "clear fluids"), token),
+        "diet order replaced",
+      )
+      val doctorEmail = "ipddoc.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to doctorEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Ipd",
+            "lastName" to "Doc$s",
+            "roles" to listOf("DOCTOR"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register doctor",
+      )
+      val doctor = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to doctorEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+      val manifest = `data`(api(HttpMethod.GET, "/api/v1/beds/dietary/manifest?meal=lunch", token = doctor))
+      val row = manifest.firstOrNull { it["admissionId"].asText() == admissionId }
+      assertNotNull(row, "manifest carries the active diet order: $manifest")
+      assertEquals("Liquid", row!!["dietType"].asText(), "only the active order appears")
+
+      // Med-rec gate: the summary cannot be signed before the review leg.
+      assert2xx(
+        api(HttpMethod.PUT, "/api/v1/admissions/$admissionId/discharge-summary", json("summaryText" to "Recovered after IV therapy"), token),
+        "summary drafted",
+      )
+      val earlySign = api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge-summary/sign", json("icdCodes" to listOf("R05")), token)
+      assertEquals(409, earlySign.status, "med-rec gate blocks the sign: ${earlySign.body.take(200)}")
+      assertTrue(earlySign.body.contains("DISCHARGE_MEDREC_REQUIRED"), "med-rec guard code")
+      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/checklist/med_rec", json(), token), "med-rec recorded")
+      val tasks = `data`(api(HttpMethod.GET, "/api/v1/tasks", token = token))
+      assertTrue(
+        tasks.any { it["relatedType"].asText() == "DISCHARGE" && it["relatedId"].asText() == admissionId },
+        "med-rec review task opened",
+      )
+      val signed = `data`(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge-summary/sign", json("icdCodes" to listOf("R05")), token))
+      assertEquals("SIGNED", signed["status"].asText(), "summary signed after med-rec")
     }
   }
 
@@ -10262,6 +10437,7 @@ class PlatformIntegrationTests {
           ),
           "discharge summary drafted",
         )
+        assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admId/checklist/med_rec", json(), token), "med-rec review recorded")
         assert2xx(
           api(HttpMethod.POST, "/api/v1/admissions/$admId/discharge-summary/sign", json("icdCodes" to listOf("R05")), token),
           "discharge summary signed",
@@ -11715,6 +11891,7 @@ class PlatformIntegrationTests {
       text: String = "cleanup discharge",
     ) {
       assert2xx(api(HttpMethod.PUT, "/api/v1/admissions/$admissionId/discharge-summary", json("summaryText" to text), token), "cleanup summary")
+      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$admissionId/checklist/med_rec", json(), token), "cleanup med-rec")
       assert2xx(
         api(HttpMethod.POST, "/api/v1/admissions/$admissionId/discharge-summary/sign", json("icdCodes" to listOf("R05")), token),
         "cleanup summary sign",

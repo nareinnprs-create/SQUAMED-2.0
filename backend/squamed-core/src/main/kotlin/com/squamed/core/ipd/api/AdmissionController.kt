@@ -132,6 +132,36 @@ class AdmissionController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<DischargeSummaryView> = ApiResponse.ok(admissionService.signSummary(id, dto, principal.userId))
 
+  // 04.08 room charges, interim bills, dietary.
+  @PostMapping("/{id}/room-charge")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("ipd:write:admission")
+  @Transactional
+  fun postRoomCharge(
+    @PathVariable id: UUID,
+    @RequestBody dto: RoomChargeRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.billing.api.ChargeView> = ApiResponse.ok(admissionService.postRoomCharge(id, dto, principal))
+
+  @PostMapping("/{id}/interim-bill")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("ipd:write:admission")
+  @Transactional
+  fun interimBill(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.billing.api.InvoiceDetailView> = ApiResponse.ok(admissionService.interimBill(id, principal))
+
+  @PostMapping("/{id}/diet-orders")
+  @ResponseStatus(HttpStatus.CREATED)
+  @RequiresPermission("ipd:write:admission")
+  @Transactional
+  fun createDietOrder(
+    @PathVariable id: UUID,
+    @RequestBody dto: DietOrderRequestDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<DietOrderView> = ApiResponse.ok(admissionService.createDietOrder(id, dto, principal))
+
   @GetMapping("/{id}/attendants")
   @RequiresPermission("ipd:read:admission")
   @Transactional(readOnly = true)

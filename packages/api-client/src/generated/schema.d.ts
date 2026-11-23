@@ -3892,6 +3892,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admissions/{id}/room-charge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postRoomCharge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admissions/{id}/plan-discharge": {
         parameters: {
             query?: never;
@@ -3902,6 +3918,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["planDischarge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admissions/{id}/interim-bill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["interimBill"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3934,6 +3966,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["signSummary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admissions/{id}/diet-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createDietOrder"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6060,6 +6108,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getInvoice"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/beds/dietary/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["dietManifest"];
         put?: never;
         post?: never;
         delete?: never;
@@ -12136,6 +12200,11 @@ export interface components {
             toBedId?: string;
             reason?: string;
         };
+        RoomChargeRequestDto: {
+            /** Format: int32 */
+            hours?: number;
+            unitPriceQar?: number;
+        };
         PlanDischargeDto: {
             /** Format: date-time */
             expectedDischargeAt: string;
@@ -12150,6 +12219,34 @@ export interface components {
         };
         SummarySignDto: {
             icdCodes: string[];
+        };
+        DietOrderRequestDto: {
+            dietType: string;
+            restrictions?: string;
+            notes?: string;
+        };
+        ApiResponseDietOrderView: {
+            data?: components["schemas"]["DietOrderView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        DietOrderView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            admissionId: string;
+            /** Format: uuid */
+            patientId: string;
+            dietType: string;
+            restrictions?: string;
+            notes?: string;
+            isActive: boolean;
+            /** Format: date-time */
+            orderedAt?: string;
         };
         ApiResponseDischargeChecklistView: {
             data?: components["schemas"]["DischargeChecklistView"];
@@ -13677,6 +13774,23 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseListDietManifestRowView: {
+            data?: components["schemas"]["DietManifestRowView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        DietManifestRowView: {
+            /** Format: uuid */
+            admissionId: string;
+            /** Format: uuid */
+            patientId: string;
+            patientName: string;
+            dietType: string;
+            restrictions?: string;
+            notes?: string;
         };
         ApiResponseListBedBoardRowView: {
             data?: components["schemas"]["BedBoardRowView"][];
@@ -22703,6 +22817,32 @@ export interface operations {
             };
         };
     };
+    postRoomCharge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoomChargeRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseChargeView"];
+                };
+            };
+        };
+    };
     planDischarge: {
         parameters: {
             query?: never;
@@ -22725,6 +22865,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseAdmissionView"];
+                };
+            };
+        };
+    };
+    interimBill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseInvoiceDetailView"];
                 };
             };
         };
@@ -22777,6 +22939,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseDischargeSummaryView"];
+                };
+            };
+        };
+    };
+    createDietOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DietOrderRequestDto"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDietOrderView"];
                 };
             };
         };
@@ -25868,6 +26056,28 @@ export interface operations {
             };
         };
     };
+    dietManifest: {
+        parameters: {
+            query?: {
+                meal?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListDietManifestRowView"];
+                };
+            };
+        };
+    };
     board_1: {
         parameters: {
             query?: never;
@@ -26515,4 +26725,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: b6bef6b122e315b0fe85a91e2dfe7a8b8103039dd521f668647009cdb301eedd
+// openapi snapshot sha256: 33e24f36071d976894ca295152b8509b046cf39f47a1cc8f0614ef353272ac39

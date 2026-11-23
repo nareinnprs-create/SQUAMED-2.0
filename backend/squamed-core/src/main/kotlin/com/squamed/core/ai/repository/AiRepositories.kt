@@ -148,3 +148,21 @@ interface AiIncidentRepository : JpaRepository<com.squamed.core.ai.domain.AiInci
     status: String,
   ): List<com.squamed.core.ai.domain.AiIncident>
 }
+
+// 05.04 intelligence rail.
+interface AttentionItemRepository : JpaRepository<com.squamed.core.ai.domain.AttentionItem, UUID> {
+  fun findByHospitalIdAndDedupeKey(
+    hospitalId: UUID,
+    dedupeKey: String,
+  ): com.squamed.core.ai.domain.AttentionItem?
+
+  fun findByIdAndHospitalId(
+    id: UUID,
+    hospitalId: UUID,
+  ): com.squamed.core.ai.domain.AttentionItem?
+
+  fun findByHospitalIdAndStatusOrderByRaisedAtDesc(
+    hospitalId: UUID,
+    status: String,
+  ): List<com.squamed.core.ai.domain.AttentionItem>
+}

@@ -99,6 +99,8 @@ object EventCatalog {
       Entry("AiActionRejected", "ai.action_rejected", Status.EMITTED, "Drafted action rejected by a human reviewer (05.03)."),
       Entry("AiActionExpired", "ai.action_expired", Status.EMITTED, "Drafted action expired before a decision (05.03)."),
       Entry("AiIncidentReported", "ai.incident_reported", Status.EMITTED, "AI incident reported to the governance register (05.07)."),
+      Entry("AttentionItemRaised", "ai.attention_item_raised", Status.EMITTED, "Intelligence-rail attention item raised (05.04)."),
+      Entry("AttentionItemCleared", "ai.attention_item_cleared", Status.EMITTED, "Attention item cleared or dismissed (05.04)."),
     )
 
   fun all(): List<Entry> = entries

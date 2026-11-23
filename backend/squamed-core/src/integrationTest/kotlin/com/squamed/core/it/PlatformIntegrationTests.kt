@@ -9504,12 +9504,12 @@ class PlatformIntegrationTests {
       assertTrue(consumers.contains("dispatcher"), "dispatcher cursor tracked: $consumers")
       assertTrue(consumers.contains("notification-bridge"), "notification-bridge cursor tracked: $consumers")
 
-      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action drafts + 05.07 AI incident (47 total).
+      // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action drafts + 05.04 attention rail + 05.07 AI incident (49 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        47,
+        49,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.07 incident: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "AppointmentCreated" && it["status"].asText() == "EMITTED" })
       assertTrue(catalog.any { it["name"].asText() == "QueueCalled" && it["status"].asText() == "EMITTED" })
@@ -10132,12 +10132,12 @@ class PlatformIntegrationTests {
         "cross-hospital ledger leak denied",
       )
 
-      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07 + 4 AI action 05.03 + 1 AI incident 05.07).
+      // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07 + 4 AI action 05.03 + 2 attention rail 05.04 + 1 AI incident 05.07).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        47,
+        49,
         catalog.size(),
-        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.07 incident: $catalog",
+        "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident: $catalog",
       )
       assertTrue(catalog.any { it["name"].asText() == "ConsentCaptured" && it["status"].asText() == "EMITTED" }, "consent.captured EMITTED")
       assertTrue(catalog.any { it["name"].asText() == "ConsentWithdrawn" && it["status"].asText() == "EMITTED" }, "consent.withdrawn EMITTED")
@@ -14902,6 +14902,170 @@ class PlatformIntegrationTests {
 
       val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
       assertTrue(outbox.any { it["eventType"].asText() == "ai.incident_reported" }, "incident event emitted")
+    }
+
+    @Test
+    fun aiRailAttentionCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "AI Rail $s", "code" to "RA-$s", "country" to "Qatar"),
+            token,
+          ),
+        )["id"].asText()
+      val email = "rail.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "rail",
+            "lastName" to "Gov$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register rail admin",
+      )
+      val govAdmin = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Rail$s",
+              "lastName" to "Patient",
+              "gender" to "male",
+              "dateOfBirth" to "1970-07-07",
+              "phone" to "68$s".take(11),
+              "qid" to "RA$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]
+      val ward =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json("name" to "Rail Ward $s", "code" to "RW-$s", "type" to "general"),
+            token,
+          ),
+        )["id"].asText()
+      val bed =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+            json("label" to "RA-$s", "type" to "standard", "status" to "available", "wardId" to ward),
+            token,
+          ),
+        )["id"].asText()
+      val admission =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json("hospitalId" to hospitalId, "patientId" to patient["id"].asText(), "bedId" to bed, "admissionType" to "elective"),
+            token,
+          ),
+        )
+      val admissionId = admission["id"].asText()
+      val past =
+        java.time.Instant
+          .now()
+          .minusSeconds(7200)
+          .toString()
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/admissions/$admissionId/plan-discharge", json("expectedDischargeAt" to past), token),
+        "expected discharge set in the past",
+      )
+      val consent =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/consents",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patient["id"].asText(),
+              "purpose" to "treatment",
+              "scope" to "procedure",
+              "signedByName" to "Patient",
+            ),
+            token,
+          ),
+        )
+      val schedule =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/surgery/schedules",
+            json(
+              "hospitalId" to hospitalId,
+              "patientId" to patient["id"].asText(),
+              "procedureName" to "Delayed case $s",
+              "procedureCode" to "DL-01",
+              "consentId" to consent["id"].asText(),
+              "scheduledStartAt" to past,
+            ),
+            token,
+          ),
+        )
+      val draft =
+        `data`(api(HttpMethod.POST, "/api/v1/ai/command", json("query" to "create task Rail draft $s"), govAdmin))["draft"]
+      assertEquals("PROPOSED", draft["status"].asText(), "pending draft exists")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/tasks",
+          json("hospitalId" to hospitalId, "title" to "Overdue rail task $s", "priority" to "high", "dueAt" to past),
+          govAdmin,
+        ),
+        "overdue task created",
+      )
+
+      val items = `data`(api(HttpMethod.GET, "/api/v1/ai/rail/items", token = govAdmin))
+      val types = items.map { it["itemType"].asText() }.toSet()
+      listOf("DISCHARGE_BLOCKER", "OT_DELAY", "PENDING_AI_APPROVAL", "TASK_OVERDUE").forEach { type ->
+        assertTrue(type in types, "$type on the rail: $types")
+      }
+      assertTrue(items.size() <= 20, "rail capped per role")
+      assertEquals("high", items[0]["severity"].asText(), "high severity first")
+      val blocker = items.first { it["itemType"].asText() == "DISCHARGE_BLOCKER" }
+      assertEquals(admissionId, blocker["sourceId"].asText(), "blocker points at the admission")
+
+      val dismissed =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/rail/items/${blocker["id"].asText()}/dismiss",
+            json("reason" to "patient still unstable"),
+            govAdmin,
+          ),
+        )
+      assertEquals("CLEARED", dismissed["status"].asText(), "rail item dismissed")
+      assertEquals("patient still unstable", dismissed["dismissalReason"].asText(), "dismissal reason kept")
+      val dismissAgain = api(HttpMethod.POST, "/api/v1/ai/rail/items/${blocker["id"].asText()}/dismiss", json("reason" to "again"), govAdmin)
+      assertEquals(409, dismissAgain.status, "cleared item cannot be dismissed again")
+      assertTrue(dismissAgain.body.contains("AI_ATTENTION_NOT_OPEN"), "attention guard code")
+      val after = `data`(api(HttpMethod.GET, "/api/v1/ai/rail/items", token = govAdmin))
+      assertFalse(after.any { it["itemType"].asText() == "DISCHARGE_BLOCKER" }, "dismissed item does not re-raise")
+
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      listOf("ai.attention_item_raised", "ai.attention_item_cleared").forEach { wire ->
+        assertTrue(outbox.any { it["eventType"].asText() == wire }, "$wire emitted")
+      }
     }
   }
 }

@@ -3796,6 +3796,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/rail/items/{id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["dismissRailItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/models": {
         parameters: {
             query?: never;
@@ -6444,6 +6460,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["tools"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/rail/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["railItems"];
         put?: never;
         post?: never;
         delete?: never;
@@ -12249,6 +12281,33 @@ export interface components {
             /** Format: date-time */
             evaluatedAt?: string;
         };
+        AiActionRejectRequest: {
+            reason?: string;
+        };
+        ApiResponseAttentionItemView: {
+            data?: components["schemas"]["AttentionItemView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        AttentionItemView: {
+            /** Format: uuid */
+            id?: string;
+            itemType: string;
+            severity: string;
+            title: string;
+            detail?: string;
+            sourceType: string;
+            /** Format: uuid */
+            sourceId?: string;
+            status: string;
+            /** Format: date-time */
+            raisedAt: string;
+            /** Format: date-time */
+            clearedAt?: string;
+            dismissalReason?: string;
+        };
         AiModelCreateRequest: {
             name: string;
             provider: string;
@@ -12403,9 +12462,6 @@ export interface components {
             temperature?: number;
             enabled?: boolean;
             scopes?: string;
-        };
-        AiActionRejectRequest: {
-            reason?: string;
         };
         ApiResponseActionDraftView: {
             data?: components["schemas"]["ActionDraftView"];
@@ -14349,6 +14405,13 @@ export interface components {
         };
         ApiResponseListEvaluationView: {
             data?: components["schemas"]["EvaluationView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListAttentionItemView: {
+            data?: components["schemas"]["AttentionItemView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -22961,6 +23024,32 @@ export interface operations {
             };
         };
     };
+    dismissRailItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiActionRejectRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAttentionItemView"];
+                };
+            };
+        };
+    };
     models: {
         parameters: {
             query?: never;
@@ -26910,6 +26999,26 @@ export interface operations {
             };
         };
     };
+    railItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListAttentionItemView"];
+                };
+            };
+        };
+    };
     logs: {
         parameters: {
             query?: never;
@@ -27376,4 +27485,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 7fe99894441081d8d6e1e35692e90a708d877aacaecad1dc82e878c41a2e6099
+// openapi snapshot sha256: b8a7baa65ba5cad1e82ec9a80254c4c72c3fc4567a5b4bc224cbfaa83ecc4acd

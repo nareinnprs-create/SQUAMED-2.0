@@ -15067,5 +15067,121 @@ class PlatformIntegrationTests {
         assertTrue(outbox.any { it["eventType"].asText() == wire }, "$wire emitted")
       }
     }
+
+    @Test
+    fun aiProductionAgentsCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "AI Agents $s", "code" to "AG-$s", "country" to "Qatar"),
+            token,
+          ),
+        )["id"].asText()
+      val email = "agents.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "agents",
+            "lastName" to "Gov$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register agent admin",
+      )
+      val govAdmin = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+
+      val agents = `data`(api(HttpMethod.GET, "/api/v1/ai/agents", token = govAdmin))
+      listOf("ops", "revenue", "patient_comms").forEach { code ->
+        assertTrue(agents.any { it["code"].asText() == code }, "$code agent seeded")
+      }
+
+      // Ops agent proposes a task; a human approves and the governed API creates it.
+      val opsDraft =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/agents/ops/propose",
+            json("actionType" to "create_task", "payload" to mapOf("title" to "Agent task $s")),
+            govAdmin,
+          ),
+        )
+      assertEquals("PROPOSED", opsDraft["status"].asText(), "ops draft proposed")
+      assertEquals("ops", opsDraft["payload"]["agentCode"].asText(), "agent provenance recorded")
+      assert2xx(api(HttpMethod.POST, "/api/v1/ai/actions/${opsDraft["id"].asText()}/approve", json(), govAdmin), "ops draft approved")
+      val tasks = `data`(api(HttpMethod.GET, "/api/v1/tasks", token = govAdmin))
+      assertTrue(tasks.any { it["title"].asText() == "Agent task $s" }, "approved agent task created")
+
+      // Revenue agent may only propose revenue-related tasks.
+      val revenueOk =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/agents/revenue/propose",
+            json(
+              "actionType" to "create_task",
+              "payload" to mapOf("title" to "Chase denial $s", "relatedType" to "REVENUE"),
+            ),
+            govAdmin,
+          ),
+        )
+      assertEquals("revenue", revenueOk["payload"]["agentCode"].asText(), "revenue provenance")
+      val revenueDenied =
+        api(
+          HttpMethod.POST,
+          "/api/v1/ai/agents/revenue/propose",
+          json("actionType" to "create_task", "payload" to mapOf("title" to "Wrong", "relatedType" to "OTHER")),
+          govAdmin,
+        )
+      assertEquals(400, revenueDenied.status, "revenue agent cannot propose unrelated work: ${revenueDenied.body.take(200)}")
+      assertTrue(revenueDenied.body.contains("AI_AGENT_ACTION_NOT_ALLOWED"), "agent action guard code")
+
+      // Patient-comms agent is template-scoped.
+      val comms =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/agents/patient_comms/propose",
+            json(
+              "actionType" to "create_task",
+              "payload" to mapOf("title" to "Reminder $s", "relatedType" to "PATIENT_COMMS"),
+            ),
+            govAdmin,
+          ),
+        )
+      assertEquals("patient_comms", comms["payload"]["agentCode"].asText(), "comms provenance")
+
+      // Disabled agents cannot propose.
+      val revenue = agents.first { it["code"].asText() == "revenue" }
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/ai/agents/${revenue["id"].asText()}", json("enabled" to false), token), "revenue disabled")
+      val disabled =
+        api(
+          HttpMethod.POST,
+          "/api/v1/ai/agents/revenue/propose",
+          json("actionType" to "create_task", "payload" to mapOf("title" to "x", "relatedType" to "REVENUE")),
+          govAdmin,
+        )
+      assertEquals(409, disabled.status, "disabled agent blocked")
+      assertTrue(disabled.body.contains("AI_AGENT_DISABLED"), "disabled agent guard code")
+      assert2xx(api(HttpMethod.PATCH, "/api/v1/ai/agents/${revenue["id"].asText()}", json("enabled" to true), token), "revenue re-enabled")
+
+      val unknown =
+        api(
+          HttpMethod.POST,
+          "/api/v1/ai/agents/nope/propose",
+          json("actionType" to "create_task", "payload" to mapOf("title" to "x")),
+          govAdmin,
+        )
+      assertEquals(400, unknown.status, "unknown agent rejected")
+      assertTrue(unknown.body.contains("AI_AGENT_NOT_FOUND"), "unknown agent guard code")
+    }
   }
 }

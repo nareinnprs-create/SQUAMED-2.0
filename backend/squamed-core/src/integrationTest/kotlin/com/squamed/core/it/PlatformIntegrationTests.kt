@@ -14420,5 +14420,152 @@ class PlatformIntegrationTests {
       assertEquals(409, recomplete.status, "re-complete rejected: ${recomplete.body.take(300)}")
       assertTrue(recomplete.body.contains("ENCOUNTER_NOT_ACTIVE"), "re-complete guard code: ${recomplete.body.take(200)}")
     }
+
+    @Test
+    fun aiGatewayGovernanceCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "AI Gov $s", "code" to "AIG-$s", "country" to "Qatar"),
+            token,
+          ),
+        )["id"].asText()
+
+      fun user(
+        role: String,
+        tag: String,
+      ): String {
+        val email = "$tag.aig.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "Gov$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      }
+      val govAdmin = user("SYSTEM_ADMIN", "govadmin")
+      val doctor = user("DOCTOR", "govdoc")
+      val nurse = user("NURSE", "govnurse")
+
+      // Redaction + full trace: identifiers never reach the provider or the log.
+      val chat =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/chat",
+            json(
+              "messages" to
+                listOf(
+                  mapOf(
+                    "role" to "user",
+                    "content" to "Patient 12345678901 MRN MQ-1234-5678 called about results",
+                  ),
+                ),
+            ),
+            govAdmin,
+          ),
+        )
+      assertTrue(chat["tokensUsed"].asInt() > 0, "token usage captured: $chat")
+      assertTrue(chat["redacted"].asBoolean(), "prompt redacted")
+      assertTrue(chat["costUsd"].asDouble() >= 0.0, "cost traced")
+      val logs = `data`(api(HttpMethod.GET, "/api/v1/ai/logs", token = govAdmin))
+      val logged = logs.firstOrNull { it["redacted"].asBoolean() }
+      assertNotNull(logged, "redacted interaction logged: $logs")
+      assertTrue(logged!!["userMessage"].asText().contains("[QID]"), "QID masked: ${logged["userMessage"].asText()}")
+      assertTrue(logged!!["userMessage"].asText().contains("[MRN]"), "MRN masked")
+      assertFalse(logged!!["userMessage"].asText().contains("12345678901"), "raw QID never stored")
+      assertTrue(logged!!["promptVersion"].asText().startsWith("ops@"), "prompt version recorded")
+      assertTrue(logged!!["promptTokens"].asInt() > 0 && logged!!["completionTokens"].asInt() > 0, "token split recorded")
+      assertEquals("chat", logged!!["capability"].asText(), "capability recorded")
+
+      // Effective scopes: the assistant inherits the caller's ABAC.
+      val doctorCount = `data`(api(HttpMethod.POST, "/api/v1/ai/command", json("query" to "how many patients?"), doctor))
+      assertEquals("count", doctorCount["intent"].asText(), "doctor count allowed")
+      val nurseDenied = api(HttpMethod.POST, "/api/v1/ai/command", json("query" to "how many patients?"), nurse)
+      assertEquals(403, nurseDenied.status, "nurse lacks patient read: ${nurseDenied.body.take(200)}")
+      assertTrue(nurseDenied.body.contains("AI_SCOPE_DENIED"), "scope guard code")
+
+      // Kill switch: chat off -> blocked, on -> allowed.
+      assert2xx(api(HttpMethod.PUT, "/api/v1/ai/governance/policies/chat", json("enabled" to false), govAdmin), "chat disabled")
+      val off = api(HttpMethod.POST, "/api/v1/ai/chat", json("messages" to listOf(mapOf("role" to "user", "content" to "hello"))), govAdmin)
+      assertEquals(409, off.status, "kill switch blocks chat: ${off.body.take(200)}")
+      assertTrue(off.body.contains("AI_CAPABILITY_DISABLED"), "kill switch code")
+      assert2xx(api(HttpMethod.PUT, "/api/v1/ai/governance/policies/chat", json("enabled" to true), govAdmin), "chat re-enabled")
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/ai/chat", json("messages" to listOf(mapOf("role" to "user", "content" to "hello"))), govAdmin),
+        "chat allowed after re-enable",
+      )
+
+      // Daily cap hard-cut at 100%.
+      assert2xx(api(HttpMethod.PUT, "/api/v1/ai/governance/policies/chat", json("dailyTokenCap" to 1), govAdmin), "cap lowered")
+      val capped = api(HttpMethod.POST, "/api/v1/ai/chat", json("messages" to listOf(mapOf("role" to "user", "content" to "hello"))), govAdmin)
+      assertEquals(409, capped.status, "daily cap blocks chat: ${capped.body.take(200)}")
+      assertTrue(capped.body.contains("AI_DAILY_TOKEN_CAP_REACHED"), "cap guard code")
+      assert2xx(api(HttpMethod.PUT, "/api/v1/ai/governance/policies/chat", json("dailyTokenCap" to 200000), govAdmin), "cap restored")
+
+      // Usage/cost dashboard.
+      val usage = `data`(api(HttpMethod.GET, "/api/v1/ai/governance/usage", token = govAdmin))
+      assertEquals(4, usage.size(), "four capabilities tracked")
+      val chatUsage = usage.first { it["capability"].asText() == "chat" }
+      assertTrue(chatUsage["tokensToday"].asLong() > 0, "today's tokens counted")
+      assertEquals(200000, chatUsage["dailyTokenCap"].asInt(), "cap reported")
+      assertTrue(chatUsage["enabled"].asBoolean(), "capability enabled")
+      val policies = `data`(api(HttpMethod.GET, "/api/v1/ai/governance/policies", token = govAdmin))
+      assertEquals(4, policies.size(), "policies listed")
+
+      // Cost trace from a priced model, pinned to the ops agent then restored.
+      val ops = `data`(api(HttpMethod.GET, "/api/v1/ai/agents", token = govAdmin)).first { it["code"].asText() == "ops" }
+      val originalModelId = ops["modelId"].asText()
+      val priced =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/models",
+            json("name" to "Priced Echo $s", "provider" to "ECHO", "modelName" to "squamed-rules-v1", "costPer1kTokens" to 2.0),
+            token,
+          ),
+        )["id"].asText()
+      try {
+        assert2xx(api(HttpMethod.PATCH, "/api/v1/ai/agents/${ops["id"].asText()}", json("modelId" to priced), token), "pin priced model")
+        val pricedChat =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/ai/chat",
+              json("messages" to listOf(mapOf("role" to "user", "content" to "how many patients?"))),
+              govAdmin,
+            ),
+          )
+        assertTrue(pricedChat["costUsd"].asDouble() > 0.0, "cost computed from the model price: $pricedChat")
+      } finally {
+        api(HttpMethod.PATCH, "/api/v1/ai/agents/${ops["id"].asText()}", json("modelId" to originalModelId), token)
+      }
+
+      // Custom / self-hosted endpoints stay first-class routing targets.
+      val local =
+        api(
+          HttpMethod.POST,
+          "/api/v1/ai/models",
+          json("name" to "Self hosted $s", "provider" to "LOCAL", "modelName" to "llama-local", "baseUrl" to "http://127.0.0.1:9/v1", "apiKey" to "local"),
+          token,
+        )
+      assert2xx(local, "self-hosted model registered")
+      val localId = `data`(local)["id"].asText()
+      assert2xx(api(HttpMethod.DELETE, "/api/v1/ai/models/$localId", token = token), "self-hosted model removed")
+    }
   }
 }

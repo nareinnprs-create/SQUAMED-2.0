@@ -16,6 +16,18 @@ data class AiChatMessage(
   val content: String,
 )
 
+data class AiCompletion(
+  val text: String,
+  val promptTokens: Int,
+  val completionTokens: Int,
+)
+
+fun estimateTokens(text: String): Int =
+  kotlin.math
+    .ceil(text.length / 4.0)
+    .toInt()
+    .coerceAtLeast(1)
+
 interface AiProvider {
   fun id(): String
 
@@ -30,7 +42,7 @@ interface AiProvider {
     intent: AiIntent,
     userMessage: String,
     hospitalId: UUID?,
-  ): String
+  ): AiCompletion
 }
 
 @Component
@@ -50,7 +62,14 @@ class EchoAiProvider(
     intent: AiIntent,
     userMessage: String,
     hospitalId: UUID?,
-  ): String = intentService.render(intent, userMessage, hospitalId)
+  ): AiCompletion {
+    val text = intentService.render(intent, userMessage, hospitalId)
+    return AiCompletion(
+      text = text,
+      promptTokens = estimateTokens((systemPrompt ?: "") + messages.joinToString(" ") { it.content }),
+      completionTokens = estimateTokens(text),
+    )
+  }
 }
 
 @Component
@@ -70,7 +89,7 @@ class OpenAiCompatibleProvider(
     intent: AiIntent,
     userMessage: String,
     hospitalId: UUID?,
-  ): String {
+  ): AiCompletion {
     val baseUrl = model.baseUrl?.trim()?.removeSuffix("/") ?: "https://api.openai.com/v1"
     val apiKey =
       model.apiKey
@@ -108,18 +127,28 @@ class OpenAiCompatibleProvider(
       throw IllegalStateException("AI_PROVIDER_ERROR status=${response.statusCode()} body=${response.body().take(500)}")
     }
     val root: JsonNode = objectMapper.readTree(response.body())
-    return root
-      .path("choices")
-      .firstOrNull()
-      ?.path("message")
-      ?.path("content")
-      ?.asText()
-      ?: root
+    val text =
+      root
         .path("choices")
         .firstOrNull()
-        ?.path("text")
+        ?.path("message")
+        ?.path("content")
         ?.asText()
-      ?: throw IllegalStateException("AI_PROVIDER_EMPTY_RESPONSE")
+        ?: root
+          .path("choices")
+          .firstOrNull()
+          ?.path("text")
+          ?.asText()
+        ?: throw IllegalStateException("AI_PROVIDER_EMPTY_RESPONSE")
+    // 05.01: real usage when the endpoint reports it, else a character-based estimate.
+    val usage = root.path("usage")
+    val promptTokens = usage.path("prompt_tokens").asInt(0)
+    val completionTokens = usage.path("completion_tokens").asInt(0)
+    return AiCompletion(
+      text = text,
+      promptTokens = if (promptTokens > 0) promptTokens else estimateTokens((systemPrompt ?: "") + messages.joinToString(" ") { it.content }),
+      completionTokens = if (completionTokens > 0) completionTokens else estimateTokens(text),
+    )
   }
 }
 

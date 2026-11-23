@@ -7,9 +7,14 @@ import com.squamed.core.ai.repository.AgentConfigRepository
 import com.squamed.core.ai.repository.InteractionLogRepository
 import com.squamed.core.ai.repository.ModelConfigRepository
 import com.squamed.core.ai.repository.ToolConfigRepository
+import com.squamed.core.identity.security.SquamedPermissionEvaluator
+import com.squamed.core.identity.security.SquamedPrincipal
 import org.springframework.data.domain.PageRequest
+import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.Instant
 import java.util.UUID
 
@@ -21,6 +26,9 @@ data class AiReply(
   val latencyMs: Long,
   val suggestions: List<String>,
   val logId: UUID?,
+  val tokensUsed: Int? = null,
+  val costUsd: BigDecimal = BigDecimal.ZERO,
+  val redacted: Boolean = false,
 )
 
 data class AiCommandOutput(
@@ -39,6 +47,9 @@ class AiService(
   private val logRepository: InteractionLogRepository,
   private val router: AiModelRouter,
   private val intentService: AiIntentService,
+  private val governanceService: AiGovernanceService,
+  private val redactor: PromptRedactor,
+  private val permissionEvaluator: SquamedPermissionEvaluator,
 ) {
   @Transactional(readOnly = true)
   fun models(): List<ModelConfig> = modelRepository.findAllByOrderByCreatedAtAsc()
@@ -53,6 +64,7 @@ class AiService(
     temperature: Double?,
     maxTokens: Int?,
     isDefault: Boolean,
+    costPer1kTokens: BigDecimal? = null,
   ): ModelConfig {
     if (isDefault) {
       modelRepository.findAll().forEach { it.isDefault = false }
@@ -67,6 +79,7 @@ class AiService(
         temperature = temperature ?: 0.2,
         maxTokens = maxTokens ?: 512,
         isDefault = isDefault,
+        costPer1kTokens = costPer1kTokens ?: BigDecimal.ZERO,
       ),
     )
   }
@@ -134,36 +147,46 @@ class AiService(
   fun chat(
     agentCode: String?,
     messages: List<AiChatMessage>,
-    userId: UUID?,
+    principal: SquamedPrincipal,
     hospitalId: UUID?,
   ): AiReply {
     val userMessage = messages.lastOrNull { it.role == "user" }?.content ?: ""
-    val reply = generate(agentCode, userMessage, userId, hospitalId)
-    return reply.copy(providerId = reply.providerId)
+    return generate(agentCode, userMessage, principal, hospitalId)
   }
 
   @Transactional
   fun generate(
     agentCode: String?,
     userMessage: String,
-    userId: UUID?,
+    principal: SquamedPrincipal,
     hospitalId: UUID?,
   ): AiReply {
     val started = Instant.now()
+    val hid = hospitalId ?: throw IllegalArgumentException("AI_HOSPITAL_REQUIRED")
+    // 05.01: kill switch + hard daily cap are read fresh on every request.
+    governanceService.assertAllowed(hid, "chat")
     val agent = resolveAgent(agentCode)
     val model = resolveModel(agent.modelId)
     val provider = router.providerFor(model.provider)
-    val intent = intentService.parse(userMessage, hospitalId)
-    val replyText =
+    // 05.01: direct identifiers never reach the provider; the redacted text is what we log too.
+    val redaction = redactor.redact(userMessage)
+    val intent = intentService.parse(redaction.text, hospitalId)
+    requireScope(principal, intent)
+    val completion =
       provider.complete(
         model = model,
         systemPrompt = agent.systemPrompt,
-        messages = listOf(AiChatMessage("user", userMessage)),
+        messages = listOf(AiChatMessage("user", redaction.text)),
         intent = intent,
-        userMessage = userMessage,
+        userMessage = redaction.text,
         hospitalId = hospitalId,
       )
     val latency = Instant.now().toEpochMilli() - started.toEpochMilli()
+    val tokens = completion.promptTokens + completion.completionTokens
+    val cost =
+      model.costPer1kTokens
+        .multiply(BigDecimal.valueOf(tokens.toLong()))
+        .divide(BigDecimal.valueOf(1000), 6, RoundingMode.HALF_UP)
     val log =
       logRepository.save(
         InteractionLog(
@@ -171,40 +194,109 @@ class AiService(
           agentId = agent.id,
           agentCode = agent.code,
           modelName = model.name,
-          userId = userId,
-          userMessage = userMessage,
-          assistantMessage = replyText,
+          userId = principal.userId,
+          userMessage = redaction.text,
+          assistantMessage = completion.text,
           intent = intent.type.name.lowercase(),
           latencyMs = latency,
-          tokensUsed = null,
+          tokensUsed = tokens,
+          capability = "chat",
+          promptVersion = "${agent.code}@${agent.version}",
+          promptTokens = completion.promptTokens,
+          completionTokens = completion.completionTokens,
+          costUsd = cost,
+          redacted = redaction.redacted,
         ),
       )
     return AiReply(
-      reply = replyText,
+      reply = completion.text,
       modelName = model.name,
       providerId = provider.id(),
       intent = intent.type.name.lowercase(),
       latencyMs = latency,
       suggestions = intentService.suggestions(),
       logId = log.id,
+      tokensUsed = tokens,
+      costUsd = cost,
+      redacted = redaction.redacted,
     )
   }
 
   @Transactional
   fun command(
     query: String,
-    userId: UUID?,
+    principal: SquamedPrincipal,
     hospitalId: UUID?,
   ): AiCommandOutput {
-    val intent = intentService.parse(query, hospitalId)
-    val page = if (intent.type == AiIntentType.NAVIGATE) intentService.pageSlug(intent.target) else null
+    val hid = hospitalId ?: throw IllegalArgumentException("AI_HOSPITAL_REQUIRED")
+    governanceService.assertAllowed(hid, "command")
+    val redaction = redactor.redact(query)
+    val intent = intentService.parse(redaction.text, hospitalId)
+    requireScope(principal, intent)
+    val message = intentService.render(intent, redaction.text, hospitalId)
+    logRepository.save(
+      InteractionLog(
+        hospitalId = hospitalId,
+        userId = principal.userId,
+        userMessage = redaction.text,
+        assistantMessage = message,
+        intent = intent.type.name.lowercase(),
+        latencyMs = 0,
+        tokensUsed = 0,
+        capability = "command",
+        redacted = redaction.redacted,
+      ),
+    )
     return AiCommandOutput(
       intent = intent.type.name.lowercase(),
       target = intent.target,
       detail = (intent.detail ?: intent.note)?.let { it },
-      message = intentService.render(intent, query, hospitalId),
+      message = message,
       suggestions = intentService.suggestions(),
     )
+  }
+
+  // 05.01 effective-scope enforcement: the assistant may only touch what the caller can read.
+  private fun requireScope(
+    principal: SquamedPrincipal,
+    intent: AiIntent,
+  ) {
+    val required =
+      when (intent.type) {
+        AiIntentType.SEARCH_PATIENTS -> {
+          "patient:read:patient"
+        }
+
+        AiIntentType.ANALYTICS -> {
+          "billing:read:invoice"
+        }
+
+        AiIntentType.WORKFLOW -> {
+          "workflow:read:workflow"
+        }
+
+        AiIntentType.COUNT -> {
+          val label = intent.entityLabel ?: ""
+          when {
+            label.startsWith("patients") -> "patient:read:patient"
+            label.startsWith("encounters") -> "encounter:read:encounter"
+            label.startsWith("appointments") -> "appointment:read:appointment"
+            label.startsWith("queue") -> "queue:read:queue"
+            label.startsWith("lab") -> "laboratory:read:lab"
+            label.startsWith("invoices") -> "billing:read:invoice"
+            label.startsWith("pending approvals") || label.startsWith("workflow") -> "workflow:read:workflow"
+            label.startsWith("open tasks") -> "task:manage:task"
+            else -> null
+          }
+        }
+
+        else -> {
+          null
+        }
+      }
+    if (required != null && !permissionEvaluator.check(principal, required)) {
+      throw AccessDeniedException("AI_SCOPE_DENIED: $required")
+    }
   }
 
   private fun resolveAgent(agentCode: String?): AgentConfig {

@@ -90,6 +90,18 @@ interface GovernanceEval {
   recordedAt: string
 }
 
+interface RailItem {
+  id: string
+  itemType: string
+  severity: string
+  title: string
+  detail: string | null
+  sourceType: string
+  sourceId: string | null
+  status: string
+  raisedAt: string
+}
+
 interface AiLog {
   id: string
   agentCode: string | null
@@ -278,6 +290,12 @@ export default function AiAssistantPage() {
     detail: '',
   })
 
+  const [railItems, setRailItems] = useState<RailItem[]>([])
+  const [railLoading, setRailLoading] = useState(false)
+  const [railError, setRailError] = useState<string | null>(null)
+  const [railReason, setRailReason] = useState('')
+  const [railBusy, setRailBusy] = useState<string | null>(null)
+
   const threadRef = useRef<HTMLDivElement>(null)
 
   const nextId = useCallback(() => {
@@ -352,6 +370,38 @@ export default function AiAssistantPage() {
     }
   }, [apiFetch])
 
+  const loadRail = useCallback(async () => {
+    setRailLoading(true)
+    try {
+      const result = await apiFetch<RailItem[]>('/ai/rail/items')
+      setRailItems(Array.isArray(result) ? result : [])
+      setRailError(null)
+    } catch (e) {
+      setRailError(e instanceof Error ? e.message : 'Failed to load the rail')
+    } finally {
+      setRailLoading(false)
+    }
+  }, [apiFetch])
+
+  const dismissRailItem = useCallback(
+    async (id: string) => {
+      setRailBusy(id)
+      try {
+        await apiFetch<RailItem>(`/ai/rail/items/${id}/dismiss`, {
+          method: 'POST',
+          body: JSON.stringify({ reason: railReason.trim() || 'dismissed from the rail' }),
+        })
+        setRailReason('')
+        await loadRail()
+      } catch (e) {
+        setRailError(e instanceof Error ? e.message : 'Failed to dismiss the item')
+      } finally {
+        setRailBusy(null)
+      }
+    },
+    [apiFetch, railReason, loadRail],
+  )
+
   const reportIncident = useCallback(async () => {
     if (!incidentForm.summary.trim()) return
     setIncidentBusy(true)
@@ -380,6 +430,11 @@ export default function AiAssistantPage() {
     if (!isReady || activeTab !== 'governance') return
     void loadGovernance()
   }, [isReady, activeTab, loadGovernance])
+
+  useEffect(() => {
+    if (!isReady || activeTab !== 'rail') return
+    void loadRail()
+  }, [isReady, activeTab, loadRail])
 
   useEffect(() => {
     if (activeTab !== 'chat' || !streaming) return
@@ -579,6 +634,7 @@ export default function AiAssistantPage() {
           <TabsTrigger value="agents">Agents</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
           <TabsTrigger value="governance">Governance</TabsTrigger>
+          <TabsTrigger value="rail">Rail</TabsTrigger>
         </TabsList>
 
         <TabsContent value="chat">
@@ -1143,6 +1199,60 @@ export default function AiAssistantPage() {
               )}
             </ContentPanel>
           </Stack>
+        </TabsContent>
+
+        <TabsContent value="rail">
+          <ContentPanel>
+            <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Attention rail</h2>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <Input
+                aria-label="Dismissal reason"
+                placeholder="Dismissal reason (optional)"
+                value={railReason}
+                onChange={(event) => setRailReason(event.target.value)}
+              />
+              <Button size="sm" variant="secondary" loading={railLoading} onClick={() => void loadRail()}>
+                Refresh
+              </Button>
+            </div>
+            {railError ? <div style={{ color: 'var(--sq-critical)', fontSize: 13, marginBottom: 8 }}>{railError}</div> : null}
+            {railItems.length === 0 ? (
+              <EmptyState message="Nothing needs attention right now." />
+            ) : (
+              <Stack gap={8}>
+                {railItems.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      border: '1px solid var(--sq-border)',
+                      borderRadius: 8,
+                      padding: '10px 12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                      <Badge size="sm" variant={item.severity === 'high' || item.severity === 'critical' ? 'critical' : 'warning'}>
+                        {item.severity}
+                      </Badge>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{item.title}</div>
+                        <div style={{ fontSize: 11, color: 'var(--sq-fg-muted)' }}>
+                          {item.itemType} · {item.sourceType}
+                          {item.detail ? ` · ${item.detail}` : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <Button size="sm" variant="secondary" loading={railBusy === item.id} onClick={() => void dismissRailItem(item.id)}>
+                      Dismiss
+                    </Button>
+                  </div>
+                ))}
+              </Stack>
+            )}
+          </ContentPanel>
         </TabsContent>
       </Tabs>
 

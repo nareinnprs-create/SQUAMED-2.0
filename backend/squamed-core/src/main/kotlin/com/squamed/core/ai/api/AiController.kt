@@ -100,6 +100,7 @@ class AiController(
   private val aiService: AiService,
   private val governanceService: com.squamed.core.ai.service.AiGovernanceService,
   private val actionService: com.squamed.core.ai.service.AiActionService,
+  private val railService: com.squamed.core.ai.service.AiRailService,
   private val tenantResolver: TenantResolver,
 ) {
   @GetMapping("/models")
@@ -422,6 +423,29 @@ class AiController(
         tenantResolver.pinOrDefault(principal, null),
         from?.takeIf { it.isNotBlank() }?.let { java.time.Instant.parse(it) },
         to?.takeIf { it.isNotBlank() }?.let { java.time.Instant.parse(it) },
+      ),
+    )
+
+  // 05.04 intelligence rail: items assembled from governed state, dismissible with a reason.
+  @GetMapping("/rail/items")
+  @RequiresPermission("ai:chat:agent")
+  fun railItems(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<com.squamed.core.ai.service.AttentionItemView>> = ApiResponse.ok(railService.scan(tenantResolver.pinOrDefault(principal, null)))
+
+  @PostMapping("/rail/items/{id}/dismiss")
+  @RequiresPermission("ai:chat:agent")
+  fun dismissRailItem(
+    @PathVariable id: UUID,
+    @RequestBody req: AiActionRejectRequest,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.AttentionItemView> =
+    ApiResponse.ok(
+      railService.dismiss(
+        id,
+        tenantResolver.pinOrDefault(principal, null),
+        principal.userId,
+        req.reason,
       ),
     )
 

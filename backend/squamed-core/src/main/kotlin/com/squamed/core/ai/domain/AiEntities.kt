@@ -205,3 +205,33 @@ class AiIncident(
   @Column(name = "resolution", length = 400)
   var resolution: String? = null,
 ) : BaseEntity()
+
+// 05.04 intelligence rail: an attention item assembled from governed platform state.
+@Entity
+@Table(name = "attention_item", schema = "ai")
+class AttentionItem(
+  @Column(name = "hospital_id", nullable = false)
+  var hospitalId: UUID,
+  @Column(name = "item_type", nullable = false, length = 40)
+  var itemType: String,
+  @Column(name = "severity", nullable = false, length = 20)
+  var severity: String,
+  @Column(name = "title", nullable = false, length = 300)
+  var title: String,
+  @Column(name = "detail", length = 500)
+  var detail: String? = null,
+  @Column(name = "dedupe_key", nullable = false, length = 200)
+  var dedupeKey: String,
+  @Column(name = "source_type", nullable = false, length = 40)
+  var sourceType: String,
+  @Column(name = "source_id")
+  var sourceId: UUID? = null,
+  @Column(name = "status", nullable = false, length = 20)
+  var status: String = "OPEN",
+  @Column(name = "raised_at", nullable = false)
+  var raisedAt: java.time.Instant = java.time.Instant.now(),
+  @Column(name = "cleared_at")
+  var clearedAt: java.time.Instant? = null,
+  @Column(name = "dismissal_reason", length = 300)
+  var dismissalReason: String? = null,
+) : BaseEntity()

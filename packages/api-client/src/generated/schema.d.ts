@@ -1332,6 +1332,214 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/qms/risks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["risks"];
+        put?: never;
+        post: operations["createRisk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/legal/holds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["holds"];
+        put?: never;
+        post: operations["placeHold"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/legal/holds/{id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["releaseHold"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/ipc/outbreaks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["outbreaks"];
+        put?: never;
+        post: operations["declareOutbreak"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/ipc/outbreaks/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["closeOutbreak"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/ipc/infections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["infections"];
+        put?: never;
+        post: operations["recordInfection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/ipc/infections/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resolveInfection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/ipc/hand-hygiene": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["handHygiene"];
+        put?: never;
+        post: operations["recordHandHygiene"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/indicators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["indicators"];
+        put?: never;
+        post: operations["upsertIndicator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/capa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["capas"];
+        put?: never;
+        post: operations["createCapa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/capa/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["closeCapa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/audits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["audits"];
+        put?: never;
+        post: operations["createAudit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/audits/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeAudit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portal/push/subscribe": {
         parameters: {
             query?: never;
@@ -3389,7 +3597,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["placeHold"];
+        post: operations["placeHold_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3405,7 +3613,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["releaseHold"];
+        post: operations["releaseHold_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6044,6 +6252,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["board"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qms/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["summary"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9969,6 +10193,72 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        RiskDto: {
+            title: string;
+            /** Format: int32 */
+            likelihood: number;
+            /** Format: int32 */
+            impact: number;
+            owner?: string;
+        };
+        ApiResponseObject: {
+            data?: unknown;
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        LitigationHoldDto: {
+            caseRef: string;
+            subjectType: string;
+            /** Format: uuid */
+            subjectId: string;
+            reason: string;
+        };
+        OutbreakDto: {
+            code: string;
+            pathogen: string;
+        };
+        InfectionDto: {
+            /** Format: uuid */
+            patientId: string;
+            infectionType: string;
+            organism?: string;
+            /** Format: date */
+            identifiedOn: string;
+        };
+        HandHygieneDto: {
+            /** Format: uuid */
+            wardId?: string;
+            period: string;
+            /** Format: int32 */
+            opportunities: number;
+            /** Format: int32 */
+            compliant: number;
+        };
+        IndicatorDto: {
+            code: string;
+            name: string;
+            target: number;
+            actual: number;
+            period: string;
+        };
+        CapaDto: {
+            code: string;
+            title: string;
+            rootCause?: string;
+            action: string;
+            /** Format: date */
+            dueOn?: string;
+        };
+        AuditDto: {
+            title: string;
+            /** Format: date */
+            scheduledOn: string;
+        };
+        AuditCompleteDto: {
+            findings?: string;
         };
         PortalPushSubscribeDto: {
             endpoint: string;
@@ -19611,6 +19901,478 @@ export interface operations {
             };
         };
     };
+    risks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    createRisk: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    holds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    placeHold: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LitigationHoldDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    releaseHold: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    outbreaks: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    declareOutbreak: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutbreakDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    closeOutbreak: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    infections: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    recordInfection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InfectionDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    resolveInfection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    handHygiene: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    recordHandHygiene: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HandHygieneDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    indicators: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    upsertIndicator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IndicatorDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    capas: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    createCapa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CapaDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    closeCapa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    audits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    createAudit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuditDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    completeAudit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuditCompleteDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     subscribePush: {
         parameters: {
             query?: never;
@@ -24211,7 +24973,7 @@ export interface operations {
             };
         };
     };
-    placeHold: {
+    placeHold_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -24235,7 +24997,7 @@ export interface operations {
             };
         };
     };
-    releaseHold: {
+    releaseHold_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -29279,6 +30041,26 @@ export interface operations {
             };
         };
     };
+    summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
     slots_1: {
         parameters: {
             query: {
@@ -31934,4 +32716,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: c13eaa1a73e896fd7a1468cd2e998853a2ebf3a4bbf2a21667bdfb6a082242a8
+// openapi snapshot sha256: 5840710fadb29d529f5c09cd4452c115f6a812a11ddfb09185b08840c2ee9c33

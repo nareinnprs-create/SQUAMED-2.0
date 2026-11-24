@@ -1,6 +1,6 @@
 # Section 06.09 — Chunk-6 exit (enterprise, scale & resilience)
 
-**Verdict: SECTION REVIEW** (never COMPLETE). CI evidence: **run PENDING — all 7 gates green** on the docs branch. Live demo evidence: `scripts/demo-06.09-chunk6-exit.ps1` → **28 passed, 0 failed** against the app on :8080 (2026-11-24). Zero feature code: the exit item is the live scenario, the second-hospital runbook, this report and `reports/chunk-06/FINAL.md`.
+**Verdict: SECTION REVIEW** (never COMPLETE). CI evidence: **run 45421129104 — all 7 gates green** on the docs branch. Live demo evidence: `scripts/demo-06.09-chunk6-exit.ps1` → **28 passed, 0 failed** against the app on :8080 (2026-11-24). Zero feature code: the exit item is the live scenario, the second-hospital runbook, this report and `reports/chunk-06/FINAL.md`.
 
 ## 1. Scope
 Per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SECTIONS.md` 06.09.
@@ -31,12 +31,12 @@ Per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SECTIONS.md` 06.
 | Gate | Result | Evidence |
 |---|---|---|
 | 1 Functional completeness | PASS | 28/28 live scenario |
-| 2 Zero-stub | PASS | CI docs run PENDING |
-| 3 Types | PASS | CI docs run PENDING |
-| 4 Lint + format | PASS | CI docs run PENDING |
-| 5 Tests | PASS | CI docs run PENDING; chunk PITs in FINAL §5 |
-| 6 Accessibility | PASS | CI docs run PENDING (no UI change) |
-| 7 Design system | PASS | CI docs run PENDING |
+| 2 Zero-stub | PASS | CI docs run 45421129104 |
+| 3 Types | PASS | CI docs run 45421129104 |
+| 4 Lint + format | PASS | CI docs run 45421129104 |
+| 5 Tests | PASS | CI docs run 45421129104; chunk PITs in FINAL §5 |
+| 6 Accessibility | PASS | CI docs run 45421129104 (no UI change) |
+| 7 Design system | PASS | CI docs run 45421129104 |
 | 8 Contracts | PASS | No API change in this section; snapshot `1f0ca599…` |
 | 9 Data | PASS | No migration in this section |
 | 10 Audit | PASS | Demo asserts share/referral/erasure events |

@@ -9507,7 +9507,7 @@ class PlatformIntegrationTests {
       // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action drafts + 05.04 attention rail + 05.07 AI incident + 06.01 group share/referral (52 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        60,
+        61,
         catalog.size(),
         "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident + 06.01 group: $catalog",
       )
@@ -10135,7 +10135,7 @@ class PlatformIntegrationTests {
       // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07 + 4 AI action 05.03 + 2 attention rail 05.04 + 1 AI incident 05.07 + 3 group 06.01).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        60,
+        61,
         catalog.size(),
         "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident + 06.01 group: $catalog",
       )
@@ -16239,6 +16239,219 @@ class PlatformIntegrationTests {
       val denied = api(HttpMethod.GET, "/api/v1/portal/me", token = unlinked)
       assertEquals(403, denied.status, "portal requires a linked account")
       assertTrue(denied.body.contains("PORTAL_ACCOUNT_REQUIRED"), "account guard code")
+    }
+
+    @Test
+    fun resilienceRetentionCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Res $s", "code" to "RS-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      val email = "res.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "res",
+            "lastName" to "Admin$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register resilience admin",
+      )
+      val admin = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+
+      // Degraded mode: identity/finance blocked, clinical appends queued, registration allowed.
+      val active = `data`(api(HttpMethod.POST, "/api/v1/resilience/degraded/activate", json("reason" to "network partition"), admin))
+      assertEquals(true, active["active"].asBoolean(), "degraded mode active")
+
+      fun check(
+        module: String,
+        appendOnly: Boolean,
+      ) = `data`(api(HttpMethod.POST, "/api/v1/resilience/degraded/check", json("module" to module, "operation" to "write", "appendOnly" to appendOnly), admin))
+      assertEquals("BLOCKED", check("identity", false)["mode"].asText(), "identity writes blocked offline")
+      assertEquals("BLOCKED", check("billing", false)["mode"].asText(), "financial writes blocked offline")
+      assertEquals("QUEUED", check("emar", true)["mode"].asText(), "eMAR administrations queue")
+      assertEquals("ALLOWED", check("registration", false)["mode"].asText(), "registration-lite allowed")
+      assertEquals(false, check("vitals", false)["allowed"].asBoolean(), "non-append clinical writes blocked")
+
+      // Store-and-forward: enqueue, replay once, replay again (idempotent, zero duplication).
+      repeat(50) { index ->
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/resilience/degraded/queue",
+            json(
+              "module" to "emar",
+              "operation" to "administer",
+              "idempotencyKey" to "dose-$s-$index",
+              "payload" to
+                mapOf(
+                  "doseId" to "d-$index",
+                  "at" to
+                    java.time.Instant
+                      .now()
+                      .toString(),
+                ),
+              "appendOnly" to true,
+              "occurredAt" to
+                java.time.Instant
+                  .now()
+                  .toString(),
+            ),
+            admin,
+          ),
+          "queued $index",
+        )
+      }
+      val firstReplay = `data`(api(HttpMethod.POST, "/api/v1/resilience/degraded/replay", json(), admin))
+      assertEquals(50, firstReplay["queued"].asInt(), "all queued writes replayed")
+      assertEquals(50, firstReplay["replayed"].asInt(), "50 applied")
+      assertEquals(50, firstReplay["ledger"].asInt(), "ledger holds every key once")
+      val secondReplay = `data`(api(HttpMethod.POST, "/api/v1/resilience/degraded/replay", json(), admin))
+      assertEquals(0, secondReplay["queued"].asInt(), "nothing pending after replay")
+      assertEquals(50, secondReplay["ledger"].asInt(), "replay is idempotent")
+      val conflict =
+        api(
+          HttpMethod.POST,
+          "/api/v1/resilience/degraded/queue",
+          json(
+            "module" to "emar",
+            "operation" to "administer",
+            "idempotencyKey" to "dose-$s-0",
+            "payload" to mapOf("doseId" to "different"),
+            "appendOnly" to true,
+            "occurredAt" to
+              java.time.Instant
+                .now()
+                .toString(),
+          ),
+          admin,
+        )
+      assertEquals(409, conflict.status, "same key with a different payload conflicts")
+      assertTrue(conflict.body.contains("IDEMPOTENCY_CONFLICT"), "idempotency guard code")
+      val released = `data`(api(HttpMethod.POST, "/api/v1/resilience/degraded/release", json(), admin))
+      assertEquals(false, released["active"].asBoolean(), "degraded mode released")
+      assertEquals("ALLOWED", check("identity", false)["mode"].asText(), "normal mode allows writes")
+
+      // Retention + legal hold + erasure.
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/governance/retention/policies",
+          json(
+            "entityType" to "patient_photo",
+            "retentionDays" to 365,
+            "legalBasis" to "DPDP non-clinical",
+            "clinical" to false,
+          ),
+          admin,
+        ),
+        "photo policy",
+      )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/governance/retention/policies",
+          json(
+            "entityType" to "clinical_note",
+            "retentionDays" to 3650,
+            "legalBasis" to "clinical record",
+            "clinical" to true,
+          ),
+          admin,
+        ),
+        "clinical policy",
+      )
+      val subjectId = java.util.UUID.randomUUID()
+      val hold =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/governance/legal-holds",
+            json(
+              "subjectType" to "patient_photo",
+              "subjectId" to subjectId.toString(),
+              "reason" to "litigation",
+            ),
+            admin,
+          ),
+        )
+      val held =
+        api(
+          HttpMethod.POST,
+          "/api/v1/governance/erasure",
+          json(
+            "subjectType" to "patient_photo",
+            "subjectId" to subjectId.toString(),
+            "reason" to "patient request",
+          ),
+          admin,
+        )
+      assertEquals(409, held.status, "legal hold blocks erasure")
+      assertTrue(held.body.contains("LEGAL_HOLD_ACTIVE"), "hold guard code")
+      assert2xx(api(HttpMethod.POST, "/api/v1/governance/legal-holds/${hold["id"].asText()}/release", json(), admin), "hold released")
+      val erased =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/governance/erasure",
+            json(
+              "subjectType" to "patient_photo",
+              "subjectId" to subjectId.toString(),
+              "reason" to "patient request",
+            ),
+            admin,
+          ),
+        )
+      assertEquals("COMPLETED", erased["status"].asText(), "non-clinical erasure completed")
+      val clinicalErase =
+        api(
+          HttpMethod.POST,
+          "/api/v1/governance/erasure",
+          json(
+            "subjectType" to "clinical_note",
+            "subjectId" to subjectId.toString(),
+            "reason" to "request",
+          ),
+          admin,
+        )
+      assertEquals(409, clinicalErase.status, "clinical data cannot be erased")
+      assertTrue(clinicalErase.body.contains("ERASURE_CLINICAL_BLOCKED"), "clinical erasure guard")
+      val noPolicy =
+        api(
+          HttpMethod.POST,
+          "/api/v1/governance/erasure",
+          json(
+            "subjectType" to "unknown_type",
+            "subjectId" to subjectId.toString(),
+            "reason" to "request",
+          ),
+          admin,
+        )
+      assertEquals(400, noPolicy.status, "erasure needs a retention policy")
+
+      // Sandbox hospital: seeding only after the flag is enabled.
+      val sandboxHospital =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Sandbox $s", "code" to "SB-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      val notSandbox = api(HttpMethod.POST, "/api/v1/governance/sandbox/hospitals/$sandboxHospital/seed", json("patients" to 5), admin)
+      assertEquals(409, notSandbox.status, "seeding requires a sandbox hospital")
+      assertTrue(notSandbox.body.contains("HOSPITAL_NOT_SANDBOX"), "sandbox guard code")
+      assert2xx(api(HttpMethod.POST, "/api/v1/governance/sandbox/hospitals/$sandboxHospital/enable", json(), admin), "sandbox enabled")
+      val seeded = `data`(api(HttpMethod.POST, "/api/v1/governance/sandbox/hospitals/$sandboxHospital/seed", json("patients" to 5), admin))
+      assertEquals(5, seeded["created"].asInt(), "five synthetic patients seeded")
+      assertTrue(seeded["sampleMrn"].asText().startsWith("SBX-"), "synthetic MRN prefix")
+
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      assertTrue(outbox.any { it["eventType"].asText() == "governance.erasure_completed" }, "erasure event emitted")
     }
   }
 }

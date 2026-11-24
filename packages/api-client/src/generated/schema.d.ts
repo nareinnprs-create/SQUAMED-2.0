@@ -932,6 +932,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/resilience/degraded/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["replay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resilience/degraded/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["release"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resilience/degraded/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["queued"];
+        put?: never;
+        post: operations["enqueue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resilience/degraded/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resilience/degraded/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["activate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reception/visits": {
         parameters: {
             query?: never;
@@ -1229,7 +1309,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["enqueue"];
+        post: operations["enqueue_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2221,7 +2301,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["check"];
+        post: operations["check_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3150,6 +3230,102 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["attachHospital"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/governance/sandbox/hospitals/{id}/seed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["seedSandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/governance/sandbox/hospitals/{id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["enableSandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/governance/retention/policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["policies"];
+        put?: never;
+        post: operations["upsertPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/governance/legal-holds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["placeHold"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/governance/legal-holds/{id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["releaseHold"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/governance/erasure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["erasures"];
+        put?: never;
+        post: operations["requestErasure"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4189,7 +4365,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["replay"];
+        post: operations["replay_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5612,6 +5788,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["slots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/resilience/degraded": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["state"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7451,7 +7643,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["policies"];
+        get: operations["policies_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9157,6 +9349,89 @@ export interface components {
             validFrom?: string;
             /** Format: date */
             validTo?: string;
+        };
+        ApiResponseReplayResultView: {
+            data?: components["schemas"]["ReplayResultView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ReplayResultView: {
+            /** Format: int32 */
+            queued: number;
+            /** Format: int32 */
+            replayed: number;
+            /** Format: int32 */
+            duplicates: number;
+            /** Format: int32 */
+            rejected: number;
+            /** Format: int64 */
+            ledger: number;
+        };
+        ApiResponseDegradedStateView: {
+            data?: components["schemas"]["DegradedStateView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        DegradedStateView: {
+            active: boolean;
+            reason?: string;
+            /** Format: date-time */
+            activatedAt?: string;
+            /** Format: date-time */
+            releasedAt?: string;
+        };
+        QueueWriteDto: {
+            module: string;
+            operation: string;
+            idempotencyKey: string;
+            payload: {
+                [key: string]: unknown;
+            };
+            appendOnly: boolean;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        ApiResponseQueuedWriteView: {
+            data?: components["schemas"]["QueuedWriteView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        QueuedWriteView: {
+            /** Format: uuid */
+            id?: string;
+            module: string;
+            operation: string;
+            idempotencyKey: string;
+            status: string;
+            resolution?: string;
+            /** Format: date-time */
+            occurredAt: string;
+        };
+        DegradedCheckDto: {
+            module: string;
+            operation: string;
+            appendOnly: boolean;
+        };
+        ApiResponseDegradedCheckView: {
+            data?: components["schemas"]["DegradedCheckView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        DegradedCheckView: {
+            active: boolean;
+            allowed: boolean;
+            mode: string;
+        };
+        DegradedActivateDto: {
+            reason?: string;
         };
         VisitCreateDto: {
             /** Format: uuid */
@@ -11961,6 +12236,95 @@ export interface components {
             status: string;
             hospitals: components["schemas"]["GroupHospitalView"][];
         };
+        SandboxSeedDto: {
+            /** Format: int32 */
+            patients: number;
+        };
+        ApiResponseSandboxSeedView: {
+            data?: components["schemas"]["SandboxSeedView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        SandboxSeedView: {
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: int32 */
+            created: number;
+            sampleMrn?: string;
+        };
+        RetentionPolicyDto: {
+            entityType: string;
+            /** Format: int32 */
+            retentionDays: number;
+            legalBasis: string;
+            clinical: boolean;
+        };
+        ApiResponseRetentionPolicyView: {
+            data?: components["schemas"]["RetentionPolicyView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        RetentionPolicyView: {
+            /** Format: uuid */
+            id?: string;
+            entityType: string;
+            /** Format: int32 */
+            retentionDays: number;
+            legalBasis: string;
+            clinical: boolean;
+        };
+        LegalHoldDto: {
+            subjectType: string;
+            /** Format: uuid */
+            subjectId: string;
+            reason: string;
+        };
+        ApiResponseLegalHoldView: {
+            data?: components["schemas"]["LegalHoldView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        LegalHoldView: {
+            /** Format: uuid */
+            id?: string;
+            subjectType: string;
+            /** Format: uuid */
+            subjectId: string;
+            reason: string;
+            active: boolean;
+            /** Format: date-time */
+            releasedAt?: string;
+        };
+        ErasureDto: {
+            subjectType: string;
+            /** Format: uuid */
+            subjectId: string;
+            reason: string;
+        };
+        ApiResponseErasureView: {
+            data?: components["schemas"]["ErasureView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ErasureView: {
+            /** Format: uuid */
+            id?: string;
+            subjectType: string;
+            /** Format: uuid */
+            subjectId: string;
+            status: string;
+            resolution?: string;
+            /** Format: date-time */
+            completedAt?: string;
+        };
         StartEncounterDto: {
             /** Format: uuid */
             patientId: string;
@@ -14332,6 +14696,13 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListQueuedWriteView: {
+            data?: components["schemas"]["QueuedWriteView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListVisitDto: {
             data?: components["schemas"]["VisitDto"][];
             success: boolean;
@@ -15572,6 +15943,20 @@ export interface components {
             /** Format: uuid */
             hospitalId?: string;
             roles: string[];
+        };
+        ApiResponseListRetentionPolicyView: {
+            data?: components["schemas"]["RetentionPolicyView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListErasureView: {
+            data?: components["schemas"]["ErasureView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
         };
         ApiResponseEncounterDetailView: {
             data?: components["schemas"]["EncounterDetailView"];
@@ -18270,6 +18655,140 @@ export interface operations {
             };
         };
     };
+    replay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReplayResultView"];
+                };
+            };
+        };
+    };
+    release: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDegradedStateView"];
+                };
+            };
+        };
+    };
+    queued: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListQueuedWriteView"];
+                };
+            };
+        };
+    };
+    enqueue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueueWriteDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseQueuedWriteView"];
+                };
+            };
+        };
+    };
+    check: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DegradedCheckDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDegradedCheckView"];
+                };
+            };
+        };
+    };
+    activate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DegradedActivateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDegradedStateView"];
+                };
+            };
+        };
+    };
     listVisits: {
         parameters: {
             query?: {
@@ -18827,7 +19346,7 @@ export interface operations {
             };
         };
     };
-    enqueue: {
+    enqueue_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -20957,7 +21476,7 @@ export interface operations {
             };
         };
     };
-    check: {
+    check_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -23193,6 +23712,188 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseGroupView"];
+                };
+            };
+        };
+    };
+    seedSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxSeedDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSandboxSeedView"];
+                };
+            };
+        };
+    };
+    enableSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    policies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListRetentionPolicyView"];
+                };
+            };
+        };
+    };
+    upsertPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetentionPolicyDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRetentionPolicyView"];
+                };
+            };
+        };
+    };
+    placeHold: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalHoldDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseLegalHoldView"];
+                };
+            };
+        };
+    };
+    releaseHold: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseLegalHoldView"];
+                };
+            };
+        };
+    };
+    erasures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListErasureView"];
+                };
+            };
+        };
+    };
+    requestErasure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ErasureDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseErasureView"];
                 };
             };
         };
@@ -25471,7 +26172,7 @@ export interface operations {
             };
         };
     };
-    replay: {
+    replay_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -27957,6 +28658,26 @@ export interface operations {
             };
         };
     };
+    state: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDegradedStateView"];
+                };
+            };
+        };
+    };
     getVisit: {
         parameters: {
             query?: never;
@@ -30384,7 +31105,7 @@ export interface operations {
             };
         };
     };
-    policies: {
+    policies_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -30810,4 +31531,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 8d0b8a4210b36e37c8056d43aae88ab184c349b236b077635ec15c8f94de8162
+// openapi snapshot sha256: 1f0ca5994b598715d9a3936bf7c9748607c5a98386f5491011cae92a4b96562d

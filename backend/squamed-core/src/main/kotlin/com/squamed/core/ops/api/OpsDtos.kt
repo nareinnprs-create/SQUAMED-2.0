@@ -172,6 +172,9 @@ data class EdEncounterView(
   val status: String,
   val resusActivated: Boolean,
   val closedAt: Instant?,
+  val triageScaleCode: String? = null,
+  val bayId: UUID? = null,
+  val traumaActivated: Boolean = false,
 )
 
 data class EdDashboardView(
@@ -181,6 +184,10 @@ data class EdDashboardView(
   val admitted: Int,
   val discharged: Int,
   val byTriage: Map<String, Int>,
+  val resusAvailable: Int = 0,
+  val resusOccupied: Int = 0,
+  val traumaActive: Int = 0,
+  val massCasualtyActive: Boolean = false,
 )
 
 data class OpsStatusDto(
@@ -189,4 +196,52 @@ data class OpsStatusDto(
 
 data class WorkOrderCompleteDto(
   val downtimeMinutes: Int? = null,
+)
+
+data class TriageScaleDto(
+  val code: String,
+  val name: String,
+  val maxLevel: Int,
+)
+
+data class TriageScaleView(
+  val id: UUID?,
+  val code: String,
+  val name: String,
+  val maxLevel: Int,
+  val active: Boolean,
+)
+
+data class EdBayDto(
+  val code: String,
+  val name: String,
+  val type: String = "acute",
+)
+
+data class EdBayView(
+  val id: UUID?,
+  val code: String,
+  val name: String,
+  val type: String,
+  val status: String,
+)
+
+data class BayAssignDto(
+  val bayId: UUID,
+)
+
+data class TraumaActivateDto(
+  val activate: Boolean = true,
+)
+
+data class MassCasualtyDto(
+  val note: String? = null,
+)
+
+data class MassCasualtyView(
+  val id: UUID?,
+  val status: String,
+  val note: String?,
+  val declaredAt: Instant?,
+  val stoodDownAt: Instant?,
 )

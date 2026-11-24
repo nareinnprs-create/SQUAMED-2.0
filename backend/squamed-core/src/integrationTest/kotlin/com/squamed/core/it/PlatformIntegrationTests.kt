@@ -9507,7 +9507,7 @@ class PlatformIntegrationTests {
       // Event catalog: the chunk-00 EVENTS v1 set (13 types) + 01.01 appointment.* + 01.02 queue.* + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission/bed/housekeeping + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI action drafts + 05.04 attention rail + 05.07 AI incident + 06.01 group share/referral (52 total).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        61,
+        63,
         catalog.size(),
         "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent-arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident + 06.01 group: $catalog",
       )
@@ -10135,7 +10135,7 @@ class PlatformIntegrationTests {
       // Catalog: consent.* EMITTED in the set (13 chunk-00 + 4 appointment.* 01.01 + 3 queue.* 01.02 + 1 order 01.04 + 1 announcement 01.07 + 1 urgent-arrival 01.09 + 1 chargeable 02.08 + 2 imaging 02.05 + 8 admission 04.01 + 3 eMAR 04.02 + 1 care plan 04.03 + 1 ICU alert 04.05 + 3 blood bank 04.07 + 4 AI action 05.03 + 2 attention rail 05.04 + 1 AI incident 05.07 + 3 group 06.01).
       val catalog = `data`(api(HttpMethod.GET, "/api/v1/events/catalog"))
       assertEquals(
-        61,
+        63,
         catalog.size(),
         "event catalog lists the v1 set + 01.01 appointment + 01.02 queue + 01.04 order + 01.07 announcement + 01.09 urgent arrival + 02.08 chargeable + 02.05 imaging + 04.01 admission + 04.02 eMAR + 04.03 care plan + 04.05 ICU alert + 04.07 blood bank + 05.03 AI actions + 05.04 rail + 05.07 incident + 06.01 group: $catalog",
       )
@@ -16452,6 +16452,145 @@ class PlatformIntegrationTests {
 
       val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
       assertTrue(outbox.any { it["eventType"].asText() == "governance.erasure_completed" }, "erasure event emitted")
+    }
+
+    @Test
+    fun fullEdTraumaCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "ED $s", "code" to "ED-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      val email = "ed.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "ed",
+            "lastName" to "Admin$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register ED admin",
+      )
+      val admin = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+
+      val scale =
+        `data`(api(HttpMethod.POST, "/api/v1/ops/ed/triage-scales", json("code" to "ATS", "name" to "Australasian Triage Scale", "maxLevel" to 5), admin))
+      assertEquals(5, scale["maxLevel"].asInt(), "ATS scale configured")
+      val dupScale = api(HttpMethod.POST, "/api/v1/ops/ed/triage-scales", json("code" to "ATS", "name" to "dup", "maxLevel" to 5), admin)
+      assertEquals(400, dupScale.status, "triage scale code is unique")
+      val badScale = api(HttpMethod.POST, "/api/v1/ops/ed/triage-scales", json("code" to "X", "name" to "bad", "maxLevel" to 9), admin)
+      assertEquals(400, badScale.status, "triage scale level range enforced")
+
+      val resus = `data`(api(HttpMethod.POST, "/api/v1/ops/ed/bays", json("code" to "RESUS-1", "name" to "Resus 1", "type" to "resus"), admin))
+      assert2xx(api(HttpMethod.POST, "/api/v1/ops/ed/bays", json("code" to "ACUTE-1", "name" to "Acute 1", "type" to "acute"), admin), "acute bay")
+      val dupBay = api(HttpMethod.POST, "/api/v1/ops/ed/bays", json("code" to "RESUS-1", "name" to "dup", "type" to "resus"), admin)
+      assertEquals(400, dupBay.status, "bay code is unique")
+      val badBay = api(HttpMethod.POST, "/api/v1/ops/ed/bays", json("code" to "X-1", "name" to "bad", "type" to "ward"), admin)
+      assertEquals(400, badBay.status, "bay type constrained")
+
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Ed$s",
+              "lastName" to "Trauma",
+              "gender" to "male",
+              "dateOfBirth" to "1990-09-09",
+              "phone" to "67$s".take(11),
+              "qid" to "ED$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]
+      val enc =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ops/ed/encounters",
+            json(
+              "patientId" to patient["id"].asText(),
+              "triageLevel" to 2,
+              "chiefComplaint" to "MVA polytrauma",
+            ),
+            admin,
+          ),
+        )
+      val encId = enc["id"].asText()
+      val assigned = `data`(api(HttpMethod.POST, "/api/v1/ops/ed/encounters/$encId/bay", json("bayId" to resus["id"].asText()), admin))
+      assertEquals(resus["id"].asText(), assigned["bayId"].asText(), "encounter assigned to the resus bay")
+      val baysAfter = `data`(api(HttpMethod.GET, "/api/v1/ops/ed/bays", token = admin))
+      assertEquals("OCCUPIED", baysAfter.first { it["id"].asText() == resus["id"].asText() }["status"].asText(), "resus bay occupied")
+
+      val patient2 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Ed$s",
+              "lastName" to "Second",
+              "gender" to "female",
+              "dateOfBirth" to "1988-08-08",
+              "phone" to "68$s".take(11),
+              "qid" to "EE$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]
+      val enc2 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ops/ed/encounters",
+            json(
+              "patientId" to patient2["id"].asText(),
+              "triageLevel" to 3,
+              "chiefComplaint" to "laceration",
+            ),
+            admin,
+          ),
+        )
+      val bayConflict = api(HttpMethod.POST, "/api/v1/ops/ed/encounters/${enc2["id"].asText()}/bay", json("bayId" to resus["id"].asText()), admin)
+      assertEquals(409, bayConflict.status, "occupied bay cannot be double-assigned")
+      assertTrue(bayConflict.body.contains("ED_BAY_OCCUPIED"), "bay guard code")
+
+      val trauma = `data`(api(HttpMethod.POST, "/api/v1/ops/ed/encounters/$encId/trauma", json("activate" to true), admin))
+      assertEquals(true, trauma["traumaActivated"].asBoolean(), "trauma team activated")
+      val traumaAgain = api(HttpMethod.POST, "/api/v1/ops/ed/encounters/$encId/trauma", json("activate" to true), admin)
+      assertEquals(409, traumaAgain.status, "trauma activation is once")
+      assertTrue(traumaAgain.body.contains("TRAUMA_ALREADY_ACTIVATED"), "trauma guard code")
+
+      val mc = `data`(api(HttpMethod.POST, "/api/v1/ops/ed/mass-casualty", json("note" to "bus collision"), admin))
+      assertEquals("ACTIVE", mc["status"].asText(), "mass casualty declared")
+      val mcAgain = api(HttpMethod.POST, "/api/v1/ops/ed/mass-casualty", json("note" to "again"), admin)
+      assertEquals(409, mcAgain.status, "one active mass-casualty event")
+      val dashboard = `data`(api(HttpMethod.GET, "/api/v1/ops/ed/dashboard", token = admin))
+      assertEquals(true, dashboard["massCasualtyActive"].asBoolean(), "dashboard shows mass casualty")
+      assertEquals(1, dashboard["resusOccupied"].asInt(), "dashboard counts the occupied resus bay")
+      assertEquals(1, dashboard["traumaActive"].asInt(), "dashboard counts the trauma case")
+      val down = `data`(api(HttpMethod.POST, "/api/v1/ops/ed/mass-casualty/${mc["id"].asText()}/stand-down", json(), admin))
+      assertEquals("STOOD_DOWN", down["status"].asText(), "mass casualty stood down")
+      assertFalse(down["stoodDownAt"].isNull, "stand-down timestamp recorded")
+
+      val outbox = `data`(api(HttpMethod.GET, "/api/v1/admin/events/outbox?limit=200", token = token))
+      listOf("ops.trauma_team_activated", "ops.mass_casualty_declared").forEach { wire ->
+        assertTrue(outbox.any { it["eventType"].asText() == wire }, "$wire emitted")
+      }
     }
   }
 }

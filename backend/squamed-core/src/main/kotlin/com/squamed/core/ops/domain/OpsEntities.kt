@@ -205,4 +205,61 @@ class EdEncounter(
   var resusActivated: Boolean = false,
   @Column(name = "closed_at")
   var closedAt: Instant? = null,
+  // 07.05 full ED: scale, bay and trauma activation.
+  @Column(name = "triage_scale_code", length = 20)
+  var triageScaleCode: String? = null,
+  @Column(name = "bay_id")
+  var bayId: UUID? = null,
+  @Column(name = "trauma_activated", nullable = false)
+  var traumaActivated: Boolean = false,
+  @Column(name = "trauma_activated_at")
+  var traumaActivatedAt: Instant? = null,
+) : BaseEntity()
+
+// 07.05 full ED: configurable triage scale, resus/acute bays, mass-casualty mode.
+@Entity
+@Table(name = "ed_triage_scale", schema = "ops")
+class EdTriageScale(
+  @Column(name = "hospital_id", nullable = false)
+  var hospitalId: UUID,
+  @Column(name = "code", nullable = false, length = 20)
+  var code: String,
+  @Column(name = "name", nullable = false, length = 80)
+  var name: String,
+  @Column(name = "max_level", nullable = false)
+  var maxLevel: Int,
+  @Column(name = "active", nullable = false)
+  var active: Boolean = true,
+) : BaseEntity()
+
+@Entity
+@Table(name = "ed_bay", schema = "ops")
+class EdBay(
+  @Column(name = "hospital_id", nullable = false)
+  var hospitalId: UUID,
+  @Column(name = "code", nullable = false, length = 30)
+  var code: String,
+  @Column(name = "name", nullable = false, length = 80)
+  var name: String,
+  @Column(name = "type", nullable = false, length = 20)
+  var type: String = "acute",
+  @Column(name = "status", nullable = false, length = 20)
+  var status: String = "AVAILABLE",
+) : BaseEntity()
+
+@Entity
+@Table(name = "mass_casualty_event", schema = "ops")
+class MassCasualtyEvent(
+  @Column(name = "hospital_id", nullable = false)
+  var hospitalId: UUID,
+  @Column(name = "note", length = 400)
+  var note: String? = null,
+  @Column(name = "status", nullable = false, length = 20)
+  var status: String = "ACTIVE",
+  @Column(name = "declared_by")
+  var declaredBy: UUID? = null,
+  @Column(name = "declared_at", nullable = false)
+  var declaredAt: Instant = Instant.now(),
+  @Column(name = "stood_down_at")
+  var stoodDownAt: Instant? = null,
 ) : BaseEntity()

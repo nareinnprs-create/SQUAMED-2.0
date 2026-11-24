@@ -261,7 +261,7 @@ class PortalService(
 
   /**
    * Web Push delivery needs VAPID keys + an HTTPS origin. Until they are configured this endpoint
-   * reports the deployment gap instead of pretending the stub is live.
+   * reports the deployment gap instead of pretending delivery is live.
    */
   @Transactional(readOnly = true)
   fun pushStatus(userId: UUID): Map<String, Any?> {

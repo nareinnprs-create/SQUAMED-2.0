@@ -15975,7 +15975,10 @@ class PlatformIntegrationTests {
       )["patient"]
       val patientA = patient("a", "PA$s".take(11))
       val patientB = patient("b", "PB$s".take(11))
-      assert2xx(api(HttpMethod.POST, "/api/v1/patients/${patientA["id"].asText()}/allergies", json("allergen" to "NKA", "severity" to "none"), token), "allergy documented")
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/patients/${patientA["id"].asText()}/allergies", json("allergen" to "NKA", "severity" to "none"), token),
+        "allergy documented",
+      )
 
       assert2xx(
         api(

@@ -1908,6 +1908,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ops/ed/triage-scales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["scales"];
+        put?: never;
+        post: operations["createScale"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/ed/mass-casualty": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["activeMassCasualties"];
+        put?: never;
+        post: operations["declareMassCasualty"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/ed/mass-casualty/{id}/stand-down": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["standDown"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ops/ed/encounters": {
         parameters: {
             query?: never;
@@ -1918,6 +1966,54 @@ export interface paths {
         get: operations["edEncounters"];
         put?: never;
         post: operations["createEdEncounter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/ed/encounters/{id}/trauma": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["activateTrauma"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/ed/encounters/{id}/bay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["assignBay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/ed/bays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["bays"];
+        put?: never;
+        post: operations["createBay"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3549,7 +3645,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["activateTrauma"];
+        post: operations["activateTrauma_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10545,6 +10641,48 @@ export interface components {
             /** Format: date */
             nextPmOn?: string;
         };
+        TriageScaleDto: {
+            code: string;
+            name: string;
+            /** Format: int32 */
+            maxLevel: number;
+        };
+        ApiResponseTriageScaleView: {
+            data?: components["schemas"]["TriageScaleView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        TriageScaleView: {
+            /** Format: uuid */
+            id?: string;
+            code: string;
+            name: string;
+            /** Format: int32 */
+            maxLevel: number;
+            active: boolean;
+        };
+        MassCasualtyDto: {
+            note?: string;
+        };
+        ApiResponseMassCasualtyView: {
+            data?: components["schemas"]["MassCasualtyView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        MassCasualtyView: {
+            /** Format: uuid */
+            id?: string;
+            status: string;
+            note?: string;
+            /** Format: date-time */
+            declaredAt?: string;
+            /** Format: date-time */
+            stoodDownAt?: string;
+        };
         EdEncounterCreateDto: {
             /** Format: uuid */
             patientId: string;
@@ -10572,6 +10710,37 @@ export interface components {
             resusActivated: boolean;
             /** Format: date-time */
             closedAt?: string;
+            triageScaleCode?: string;
+            /** Format: uuid */
+            bayId?: string;
+            traumaActivated: boolean;
+        };
+        TraumaActivateDto: {
+            activate: boolean;
+        };
+        BayAssignDto: {
+            /** Format: uuid */
+            bayId: string;
+        };
+        EdBayDto: {
+            code: string;
+            name: string;
+            type: string;
+        };
+        ApiResponseEdBayView: {
+            data?: components["schemas"]["EdBayView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        EdBayView: {
+            /** Format: uuid */
+            id?: string;
+            code: string;
+            name: string;
+            type: string;
+            status: string;
         };
         TrayCreateDto: {
             code: string;
@@ -15242,6 +15411,20 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListTriageScaleView: {
+            data?: components["schemas"]["TriageScaleView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListMassCasualtyView: {
+            data?: components["schemas"]["MassCasualtyView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListEdEncounterView: {
             data?: components["schemas"]["EdEncounterView"][];
             success: boolean;
@@ -15269,6 +15452,20 @@ export interface components {
             discharged: number;
             byTriage: {
                 [key: string]: number;
+            };
+            /** Format: int32 */
+            resusAvailable: number;
+            /** Format: int32 */
+            resusOccupied: number;
+            /** Format: int32 */
+            traumaActive: number;
+            massCasualtyActive: boolean;
+        };
+        ApiResponseListEdBayView: {
+            data?: components["schemas"]["EdBayView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
             };
         };
         ApiResponseListTrayView: {
@@ -20648,6 +20845,116 @@ export interface operations {
             };
         };
     };
+    scales: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListTriageScaleView"];
+                };
+            };
+        };
+    };
+    createScale: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TriageScaleDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseTriageScaleView"];
+                };
+            };
+        };
+    };
+    activeMassCasualties: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListMassCasualtyView"];
+                };
+            };
+        };
+    };
+    declareMassCasualty: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MassCasualtyDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMassCasualtyView"];
+                };
+            };
+        };
+    };
+    standDown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMassCasualtyView"];
+                };
+            };
+        };
+    };
     edEncounters: {
         parameters: {
             query?: never;
@@ -20688,6 +20995,102 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseEdEncounterView"];
+                };
+            };
+        };
+    };
+    activateTrauma: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TraumaActivateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEdEncounterView"];
+                };
+            };
+        };
+    };
+    assignBay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BayAssignDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEdEncounterView"];
+                };
+            };
+        };
+    };
+    bays: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListEdBayView"];
+                };
+            };
+        };
+    };
+    createBay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EdBayDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEdBayView"];
                 };
             };
         };
@@ -24387,7 +24790,7 @@ export interface operations {
             };
         };
     };
-    activateTrauma: {
+    activateTrauma_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -31531,4 +31934,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 1f0ca5994b598715d9a3936bf7c9748607c5a98386f5491011cae92a4b96562d
+// openapi snapshot sha256: c13eaa1a73e896fd7a1468cd2e998853a2ebf3a4bbf2a21667bdfb6a082242a8

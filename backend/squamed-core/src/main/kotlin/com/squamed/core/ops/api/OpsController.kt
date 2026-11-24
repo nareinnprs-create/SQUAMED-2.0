@@ -201,3 +201,76 @@ class OpsController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<EdDashboardView> = ApiResponse.ok(edService.dashboard(tenantResolver.pinOrDefault(principal, null)))
 }
+
+// 07.05 full ED: configurable triage scales, bays, trauma activation, mass casualty.
+@RestController
+@RequestMapping("/api/v1/ops/ed")
+class EdConfigController(
+  private val edService: com.squamed.core.ops.service.EdService,
+  private val tenantResolver: TenantResolver,
+) {
+  @PostMapping("/triage-scales")
+  @RequiresPermission("ops:write:ed")
+  fun createScale(
+    @RequestBody dto: TriageScaleDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<TriageScaleView> = ApiResponse.ok(edService.createScale(tenantResolver.pinOrDefault(principal, null), dto, principal.userId))
+
+  @GetMapping("/triage-scales")
+  @RequiresPermission("ops:read:ops")
+  fun scales(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<TriageScaleView>> = ApiResponse.ok(edService.scales(tenantResolver.pinOrDefault(principal, null)))
+
+  @PostMapping("/bays")
+  @RequiresPermission("ops:write:ed")
+  fun createBay(
+    @RequestBody dto: EdBayDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<EdBayView> = ApiResponse.ok(edService.createBay(tenantResolver.pinOrDefault(principal, null), dto, principal.userId))
+
+  @GetMapping("/bays")
+  @RequiresPermission("ops:read:ops")
+  fun bays(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<EdBayView>> = ApiResponse.ok(edService.bays(tenantResolver.pinOrDefault(principal, null)))
+
+  @PostMapping("/encounters/{id}/bay")
+  @RequiresPermission("ops:write:ed")
+  fun assignBay(
+    @PathVariable id: UUID,
+    @RequestBody dto: BayAssignDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<EdEncounterView> = ApiResponse.ok(edService.assignBay(id, tenantResolver.pinOrDefault(principal, null), dto.bayId, principal.userId))
+
+  @PostMapping("/encounters/{id}/trauma")
+  @RequiresPermission("ops:write:ed")
+  fun activateTrauma(
+    @PathVariable id: UUID,
+    @RequestBody dto: TraumaActivateDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<EdEncounterView> {
+    if (!dto.activate) throw IllegalArgumentException("TRAUMA_ACTIVATE_REQUIRED")
+    return ApiResponse.ok(edService.activateTrauma(id, tenantResolver.pinOrDefault(principal, null), principal.userId))
+  }
+
+  @PostMapping("/mass-casualty")
+  @RequiresPermission("ops:write:ed")
+  fun declareMassCasualty(
+    @RequestBody dto: MassCasualtyDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<MassCasualtyView> = ApiResponse.ok(edService.declareMassCasualty(tenantResolver.pinOrDefault(principal, null), dto.note, principal.userId))
+
+  @PostMapping("/mass-casualty/{id}/stand-down")
+  @RequiresPermission("ops:write:ed")
+  fun standDown(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<MassCasualtyView> = ApiResponse.ok(edService.standDownMassCasualty(id, tenantResolver.pinOrDefault(principal, null), principal.userId))
+
+  @GetMapping("/mass-casualty")
+  @RequiresPermission("ops:read:ops")
+  fun activeMassCasualties(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<MassCasualtyView>> = ApiResponse.ok(edService.massCasualties(tenantResolver.pinOrDefault(principal, null)))
+}

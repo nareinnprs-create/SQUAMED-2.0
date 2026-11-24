@@ -118,6 +118,8 @@ object EventCatalog {
       Entry("WorkOrderCompleted", "ops.work_order_completed", Status.EMITTED, "Facilities work order completed with downtime (06.05)."),
       Entry("EDEncounterClosed", "ops.ed_encounter_closed", Status.EMITTED, "ED encounter closed with a disposition (06.05)."),
       Entry("ErasureCompleted", "governance.erasure_completed", Status.EMITTED, "Non-clinical data erased under a retention policy (06.08)."),
+      Entry("TraumaTeamActivated", "ops.trauma_team_activated", Status.EMITTED, "ED trauma team activated for an encounter (07.05)."),
+      Entry("MassCasualtyDeclared", "ops.mass_casualty_declared", Status.EMITTED, "Mass-casualty mode declared by the ED (07.05)."),
     )
 
   fun all(): List<Entry> = entries

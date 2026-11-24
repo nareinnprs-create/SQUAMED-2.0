@@ -5,10 +5,13 @@ import com.squamed.core.events.DomainEventPublisher
 import com.squamed.core.ops.api.AssetCreateDto
 import com.squamed.core.ops.api.AssetView
 import com.squamed.core.ops.api.CycleView
+import com.squamed.core.ops.api.EdBayDto
+import com.squamed.core.ops.api.EdBayView
 import com.squamed.core.ops.api.EdDashboardView
 import com.squamed.core.ops.api.EdEncounterCreateDto
 import com.squamed.core.ops.api.EdEncounterView
 import com.squamed.core.ops.api.IssueView
+import com.squamed.core.ops.api.MassCasualtyView
 import com.squamed.core.ops.api.OrderView
 import com.squamed.core.ops.api.ReceiptCreateDto
 import com.squamed.core.ops.api.ReceiptLineDto
@@ -20,6 +23,8 @@ import com.squamed.core.ops.api.StockView
 import com.squamed.core.ops.api.TraceabilityView
 import com.squamed.core.ops.api.TrayCreateDto
 import com.squamed.core.ops.api.TrayView
+import com.squamed.core.ops.api.TriageScaleDto
+import com.squamed.core.ops.api.TriageScaleView
 import com.squamed.core.ops.api.VendorPerformanceView
 import com.squamed.core.ops.api.WorkOrderCreateDto
 import com.squamed.core.ops.api.WorkOrderView
@@ -546,6 +551,9 @@ class FacilitiesService(
 @Service
 class EdService(
   private val encounterRepository: EdEncounterRepository,
+  private val scaleRepository: com.squamed.core.ops.repository.EdTriageScaleRepository,
+  private val bayRepository: com.squamed.core.ops.repository.EdBayRepository,
+  private val massCasualtyRepository: com.squamed.core.ops.repository.MassCasualtyRepository,
   private val eventPublisher: DomainEventPublisher,
 ) {
   @Transactional
@@ -626,8 +634,175 @@ class EdService(
       admitted = all.count { it.status == "ADMITTED" },
       discharged = all.count { it.status == "DISCHARGED" },
       byTriage = active.groupingBy { "ESI${it.triageLevel}" }.eachCount(),
+      resusAvailable = bayRepository.findByHospitalIdOrderByCodeAsc(hospitalId).count { it.type == "resus" && it.status == "AVAILABLE" },
+      resusOccupied = bayRepository.findByHospitalIdOrderByCodeAsc(hospitalId).count { it.type == "resus" && it.status == "OCCUPIED" },
+      traumaActive = active.count { it.traumaActivated },
+      massCasualtyActive = massCasualtyRepository.findByHospitalIdAndStatus(hospitalId, "ACTIVE").isNotEmpty(),
     )
   }
+
+  // -- 07.05 full ED: scales, bays, trauma, mass casualty --
+
+  @Transactional
+  fun createScale(
+    hospitalId: UUID,
+    dto: TriageScaleDto,
+    actorId: UUID?,
+  ): TriageScaleView {
+    if (dto.code.isBlank() || dto.name.isBlank()) throw IllegalArgumentException("TRIAGE_SCALE_FIELDS_REQUIRED")
+    if (dto.maxLevel !in 3..5) throw IllegalArgumentException("TRIAGE_SCALE_LEVELS_INVALID")
+    if (scaleRepository.findByHospitalIdAndCode(hospitalId, dto.code.trim().uppercase()) != null) throw IllegalArgumentException("TRIAGE_SCALE_EXISTS")
+    val saved =
+      scaleRepository.save(
+        com.squamed.core.ops.domain
+          .EdTriageScale(
+            hospitalId = hospitalId,
+            code = dto.code.trim().uppercase(),
+            name = dto.name.trim(),
+            maxLevel = dto.maxLevel,
+          ).also { it.createdBy = actorId },
+      )
+    return TriageScaleView(saved.id, saved.code, saved.name, saved.maxLevel, saved.active)
+  }
+
+  @Transactional(readOnly = true)
+  fun scales(hospitalId: UUID): List<TriageScaleView> =
+    scaleRepository.findByHospitalIdOrderByCodeAsc(hospitalId).map { TriageScaleView(it.id, it.code, it.name, it.maxLevel, it.active) }
+
+  @Transactional
+  fun createBay(
+    hospitalId: UUID,
+    dto: EdBayDto,
+    actorId: UUID?,
+  ): EdBayView {
+    if (dto.code.isBlank() || dto.name.isBlank()) throw IllegalArgumentException("ED_BAY_FIELDS_REQUIRED")
+    if (dto.type.trim().lowercase() !in setOf("resus", "acute", "minor")) throw IllegalArgumentException("ED_BAY_TYPE_INVALID")
+    if (bayRepository.findByHospitalIdAndCode(hospitalId, dto.code.trim()) != null) throw IllegalArgumentException("ED_BAY_EXISTS")
+    val saved =
+      bayRepository.save(
+        com.squamed.core.ops.domain
+          .EdBay(
+            hospitalId = hospitalId,
+            code = dto.code.trim(),
+            name = dto.name.trim(),
+            type = dto.type.trim().lowercase(),
+          ).also { it.createdBy = actorId },
+      )
+    return EdBayView(saved.id, saved.code, saved.name, saved.type, saved.status)
+  }
+
+  @Transactional(readOnly = true)
+  fun bays(hospitalId: UUID): List<EdBayView> =
+    bayRepository.findByHospitalIdOrderByCodeAsc(hospitalId).map { EdBayView(it.id, it.code, it.name, it.type, it.status) }
+
+  @Transactional
+  fun assignBay(
+    encounterId: UUID,
+    hospitalId: UUID,
+    bayId: UUID,
+    actorId: UUID?,
+  ): EdEncounterView {
+    val encounter = encounterRepository.findByIdAndHospitalId(encounterId, hospitalId) ?: throw IllegalArgumentException("ED_ENCOUNTER_NOT_FOUND")
+    if (encounter.status == "DISCHARGED" || encounter.status == "ADMITTED") throw IllegalStateException("ED_ENCOUNTER_CLOSED")
+    val bay = bayRepository.findByIdAndHospitalId(bayId, hospitalId) ?: throw IllegalArgumentException("ED_BAY_NOT_FOUND")
+    if (bay.status == "OCCUPIED") throw IllegalStateException("ED_BAY_OCCUPIED")
+    encounter.bayId?.let { previous ->
+      bayRepository.findByIdAndHospitalId(previous, hospitalId)?.let {
+        it.status = "AVAILABLE"
+        bayRepository.save(it)
+      }
+    }
+    bay.status = "OCCUPIED"
+    bay.updatedBy = actorId
+    bayRepository.save(bay)
+    encounter.bayId = bayId
+    encounter.updatedBy = actorId
+    return view(encounterRepository.save(encounter))
+  }
+
+  @Transactional
+  fun activateTrauma(
+    encounterId: UUID,
+    hospitalId: UUID,
+    actorId: UUID?,
+  ): EdEncounterView {
+    val encounter = encounterRepository.findByIdAndHospitalId(encounterId, hospitalId) ?: throw IllegalArgumentException("ED_ENCOUNTER_NOT_FOUND")
+    if (encounter.traumaActivated) throw IllegalStateException("TRAUMA_ALREADY_ACTIVATED")
+    encounter.traumaActivated = true
+    encounter.traumaActivatedAt = Instant.now()
+    encounter.updatedBy = actorId
+    val saved = encounterRepository.save(encounter)
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "ops.trauma_team_activated",
+        occurredAt = Instant.now(),
+        source = "ops-service",
+        entityType = "ed_encounter",
+        entityId = saved.id,
+        hospitalId = hospitalId,
+        payload = mapOf("patientId" to saved.patientId.toString(), "triageLevel" to saved.triageLevel),
+        actorType = "user",
+        actorId = actorId,
+      ),
+    )
+    return view(saved)
+  }
+
+  @Transactional
+  fun declareMassCasualty(
+    hospitalId: UUID,
+    note: String?,
+    actorId: UUID?,
+  ): MassCasualtyView {
+    if (massCasualtyRepository.findByHospitalIdAndStatus(hospitalId, "ACTIVE").isNotEmpty()) {
+      throw IllegalStateException("MASS_CASUALTY_ACTIVE")
+    }
+    val saved =
+      massCasualtyRepository.save(
+        com.squamed.core.ops.domain
+          .MassCasualtyEvent(
+            hospitalId = hospitalId,
+            note = note,
+            declaredBy = actorId,
+          ).also { it.createdBy = actorId },
+      )
+    eventPublisher.publish(
+      DomainEvent(
+        eventId = UUID.randomUUID(),
+        eventType = "ops.mass_casualty_declared",
+        occurredAt = Instant.now(),
+        source = "ops-service",
+        entityType = "mass_casualty_event",
+        entityId = saved.id,
+        hospitalId = hospitalId,
+        payload = mapOf("note" to note),
+        actorType = "user",
+        actorId = actorId,
+      ),
+    )
+    return massCasualtyView(saved)
+  }
+
+  @Transactional
+  fun standDownMassCasualty(
+    id: UUID,
+    hospitalId: UUID,
+    actorId: UUID?,
+  ): MassCasualtyView {
+    val event = massCasualtyRepository.findByIdAndHospitalId(id, hospitalId) ?: throw IllegalArgumentException("MASS_CASUALTY_NOT_FOUND")
+    if (event.status != "ACTIVE") throw IllegalStateException("MASS_CASUALTY_NOT_ACTIVE")
+    event.status = "STOOD_DOWN"
+    event.stoodDownAt = Instant.now()
+    event.updatedBy = actorId
+    return massCasualtyView(massCasualtyRepository.save(event))
+  }
+
+  @Transactional(readOnly = true)
+  fun massCasualties(hospitalId: UUID): List<MassCasualtyView> = massCasualtyRepository.findByHospitalIdAndStatus(hospitalId, "ACTIVE").map(::massCasualtyView)
+
+  private fun massCasualtyView(entity: com.squamed.core.ops.domain.MassCasualtyEvent) =
+    MassCasualtyView(entity.id, entity.status, entity.note, entity.declaredAt, entity.stoodDownAt)
 
   private fun view(encounter: EdEncounter) =
     EdEncounterView(
@@ -638,5 +813,8 @@ class EdService(
       encounter.status,
       encounter.resusActivated,
       encounter.closedAt,
+      encounter.triageScaleCode,
+      encounter.bayId,
+      encounter.traumaActivated,
     )
 }

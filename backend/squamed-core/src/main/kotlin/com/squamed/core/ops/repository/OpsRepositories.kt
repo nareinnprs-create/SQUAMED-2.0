@@ -126,3 +126,39 @@ interface EdEncounterRepository : JpaRepository<EdEncounter, UUID> {
     status: String,
   ): List<EdEncounter>
 }
+
+// 07.05 full ED: scales, bays, mass-casualty.
+interface EdTriageScaleRepository : JpaRepository<com.squamed.core.ops.domain.EdTriageScale, UUID> {
+  fun findByHospitalIdAndCode(
+    hospitalId: UUID,
+    code: String,
+  ): com.squamed.core.ops.domain.EdTriageScale?
+
+  fun findByHospitalIdOrderByCodeAsc(hospitalId: UUID): List<com.squamed.core.ops.domain.EdTriageScale>
+}
+
+interface EdBayRepository : JpaRepository<com.squamed.core.ops.domain.EdBay, UUID> {
+  fun findByHospitalIdAndCode(
+    hospitalId: UUID,
+    code: String,
+  ): com.squamed.core.ops.domain.EdBay?
+
+  fun findByIdAndHospitalId(
+    id: UUID,
+    hospitalId: UUID,
+  ): com.squamed.core.ops.domain.EdBay?
+
+  fun findByHospitalIdOrderByCodeAsc(hospitalId: UUID): List<com.squamed.core.ops.domain.EdBay>
+}
+
+interface MassCasualtyRepository : JpaRepository<com.squamed.core.ops.domain.MassCasualtyEvent, UUID> {
+  fun findByIdAndHospitalId(
+    id: UUID,
+    hospitalId: UUID,
+  ): com.squamed.core.ops.domain.MassCasualtyEvent?
+
+  fun findByHospitalIdAndStatus(
+    hospitalId: UUID,
+    status: String,
+  ): List<com.squamed.core.ops.domain.MassCasualtyEvent>
+}

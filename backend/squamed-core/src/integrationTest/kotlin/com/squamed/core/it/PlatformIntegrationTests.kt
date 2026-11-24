@@ -16592,5 +16592,224 @@ class PlatformIntegrationTests {
         assertTrue(outbox.any { it["eventType"].asText() == wire }, "$wire emitted")
       }
     }
+
+    @Test
+    fun qmsIpcLegalCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "QMS $s", "code" to "QM-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+      val email = "qms.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "qms",
+            "lastName" to "Officer$s",
+            "roles" to listOf("QMS_OFFICER"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register QMS officer",
+      )
+      val qms = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+
+      // Indicators: upsert per code+period, status derived from target.
+      val onTrack =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/qms/indicators",
+            json(
+              "code" to "HANDHYG",
+              "name" to "Hand hygiene compliance",
+              "target" to 90.0,
+              "actual" to 94.0,
+              "period" to "2026-11",
+            ),
+            qms,
+          ),
+        )
+      assertEquals("ON_TRACK", onTrack["status"].asText(), "indicator on track")
+      val offTrack =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/qms/indicators",
+            json(
+              "code" to "HANDHYG",
+              "name" to "Hand hygiene compliance",
+              "target" to 90.0,
+              "actual" to 82.0,
+              "period" to "2026-11",
+            ),
+            qms,
+          ),
+        )
+      assertEquals("OFF_TRACK", offTrack["status"].asText(), "upsert flips the status")
+      val indicators = `data`(api(HttpMethod.GET, "/api/v1/qms/indicators", token = qms))
+      assertEquals(1, indicators.size(), "one indicator row per code+period")
+
+      // CAPA lifecycle.
+      val capa =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/qms/capa",
+            json(
+              "code" to "CAPA-1",
+              "title" to "Wrong-site near miss",
+              "rootCause" to "Checklist skipped",
+              "action" to "Re-train theatre team",
+            ),
+            qms,
+          ),
+        )
+      assertEquals("OPEN", capa["status"].asText(), "CAPA open")
+      val closed = `data`(api(HttpMethod.POST, "/api/v1/qms/capa/${capa["id"].asText()}/close", json(), qms))
+      assertEquals("CLOSED", closed["status"].asText(), "CAPA closed")
+      val closeAgain = api(HttpMethod.POST, "/api/v1/qms/capa/${capa["id"].asText()}/close", json(), qms)
+      assertEquals(409, closeAgain.status, "CAPA close is once")
+      assertTrue(closeAgain.body.contains("CAPA_ALREADY_CLOSED"), "CAPA guard code")
+
+      // Audit program.
+      val audit =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/qms/audits",
+            json(
+              "title" to "Medication storage audit",
+              "scheduledOn" to
+                java.time.LocalDate
+                  .now()
+                  .toString(),
+            ),
+            qms,
+          ),
+        )
+      val done = `data`(api(HttpMethod.POST, "/api/v1/qms/audits/${audit["id"].asText()}/complete", json("findings" to "2 expired vials removed"), qms))
+      assertEquals("COMPLETED", done["status"].asText(), "audit completed with findings")
+
+      // Risk register score = likelihood x impact.
+      val risk =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/qms/risks",
+            json(
+              "title" to "Oxygen supply failure",
+              "likelihood" to 4,
+              "impact" to 4,
+              "owner" to "Facilities",
+            ),
+            qms,
+          ),
+        )
+      assertEquals(16, risk["score"].asInt(), "risk score computed")
+      val badRisk = api(HttpMethod.POST, "/api/v1/qms/risks", json("title" to "x", "likelihood" to 6, "impact" to 1), qms)
+      assertEquals(400, badRisk.status, "risk scale bounded")
+
+      // IPC: device-associated infection + outbreak + hand hygiene.
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Qms$s",
+              "lastName" to "Ipc",
+              "gender" to "male",
+              "dateOfBirth" to "1960-01-01",
+              "phone" to "65$s".take(11),
+              "qid" to "QM$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]
+      val infection =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/qms/ipc/infections",
+            json(
+              "patientId" to patient["id"].asText(),
+              "infectionType" to "CLABSI",
+              "organism" to "S. aureus",
+              "identifiedOn" to
+                java.time.LocalDate
+                  .now()
+                  .toString(),
+            ),
+            qms,
+          ),
+        )
+      assertEquals("ACTIVE", infection["status"].asText(), "infection active")
+      val badInfection =
+        api(
+          HttpMethod.POST,
+          "/api/v1/qms/ipc/infections",
+          json(
+            "patientId" to patient["id"].asText(),
+            "infectionType" to "FLU",
+            "identifiedOn" to
+              java.time.LocalDate
+                .now()
+                .toString(),
+          ),
+          qms,
+        )
+      assertEquals(400, badInfection.status, "infection type constrained")
+      assert2xx(api(HttpMethod.POST, "/api/v1/qms/ipc/infections/${infection["id"].asText()}/resolve", json(), qms), "infection resolved")
+      val resolveAgain = api(HttpMethod.POST, "/api/v1/qms/ipc/infections/${infection["id"].asText()}/resolve", json(), qms)
+      assertEquals(409, resolveAgain.status, "infection resolve is once")
+
+      val outbreak = `data`(api(HttpMethod.POST, "/api/v1/qms/ipc/outbreaks", json("code" to "OB-$s", "pathogen" to "Norovirus"), qms))
+      assertEquals("ACTIVE", outbreak["status"].asText(), "outbreak declared")
+      val dupOutbreak = api(HttpMethod.POST, "/api/v1/qms/ipc/outbreaks", json("code" to "OB-$s", "pathogen" to "dup"), qms)
+      assertEquals(400, dupOutbreak.status, "outbreak code is unique")
+      val closedOutbreak = `data`(api(HttpMethod.POST, "/api/v1/qms/ipc/outbreaks/${outbreak["id"].asText()}/close", json(), qms))
+      assertEquals("CLOSED", closedOutbreak["status"].asText(), "outbreak closed")
+
+      val hh = `data`(api(HttpMethod.POST, "/api/v1/qms/ipc/hand-hygiene", json("period" to "2026-11", "opportunities" to 100, "compliant" to 90), qms))
+      val hhRows = `data`(api(HttpMethod.GET, "/api/v1/qms/ipc/hand-hygiene", token = qms))
+      assertEquals(90.0, hhRows[0]["compliancePct"].asDouble(), 1e-9, "hand hygiene compliance computed")
+      val badHh = api(HttpMethod.POST, "/api/v1/qms/ipc/hand-hygiene", json("period" to "2026-11", "opportunities" to 10, "compliant" to 11), qms)
+      assertEquals(400, badHh.status, "compliant cannot exceed opportunities")
+
+      // Legal/risk: litigation hold + release.
+      val hold =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/qms/legal/holds",
+            json(
+              "caseRef" to "CASE-$s",
+              "subjectType" to "patient",
+              "subjectId" to patient["id"].asText(),
+              "reason" to "litigation",
+            ),
+            qms,
+          ),
+        )
+      assertEquals(true, hold["active"].asBoolean(), "litigation hold active")
+      val released = `data`(api(HttpMethod.POST, "/api/v1/qms/legal/holds/${hold["id"].asText()}/release", json(), qms))
+      assertEquals(false, released["active"].asBoolean(), "hold released")
+      val releaseAgain = api(HttpMethod.POST, "/api/v1/qms/legal/holds/${hold["id"].asText()}/release", json(), qms)
+      assertEquals(409, releaseAgain.status, "hold release is once")
+
+      val summary = `data`(api(HttpMethod.GET, "/api/v1/qms/summary", token = qms))
+      assertEquals(1, summary["indicatorsOffTrack"].asInt(), "summary counts the off-track indicator")
+      assertEquals(1, summary["highRisks"].asInt(), "summary counts the high risk")
+      assertEquals(0, summary["activeOutbreaks"].asInt(), "no active outbreak after close")
+    }
   }
 }

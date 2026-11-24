@@ -1252,6 +1252,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/push/subscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["subscribePush"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/notifications/{id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["readNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/bills/{id}/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["pay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/appointments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["appointments"];
+        put?: never;
+        post: operations["book"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["linkAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pharmacy/stock": {
         parameters: {
             query?: never;
@@ -5684,6 +5764,166 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portal/slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["slots_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["reports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/push/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["pushSubscriptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/push/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["pushStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/prescriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["prescriptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["notifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/discharge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["discharge_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/careplans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["carePlans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portal/bills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["bills"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pharmacy/stock/ledger": {
         parameters: {
             query?: never;
@@ -6971,7 +7211,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["me"];
+        get: operations["me_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7131,7 +7371,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["appointments"];
+        get: operations["appointments_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9358,6 +9598,110 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        PortalPushSubscribeDto: {
+            endpoint: string;
+            p256dh: string;
+            auth: string;
+        };
+        ApiResponsePortalPushSubscriptionView: {
+            data?: components["schemas"]["PortalPushSubscriptionView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PortalPushSubscriptionView: {
+            /** Format: uuid */
+            id?: string;
+            endpoint: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ApiResponsePortalNotificationView: {
+            data?: components["schemas"]["PortalNotificationView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PortalNotificationView: {
+            /** Format: uuid */
+            id?: string;
+            type: string;
+            title: string;
+            body?: string;
+            /** Format: date-time */
+            readAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ApiResponsePortalBillView: {
+            data?: components["schemas"]["PortalBillView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PortalBillView: {
+            /** Format: uuid */
+            id?: string;
+            invoiceNumber: string;
+            totalQar: number;
+            amountDueQar: number;
+            status: string;
+            /** Format: date-time */
+            issuedAt?: string;
+        };
+        PortalBookDto: {
+            /** Format: uuid */
+            slotId: string;
+            appointmentType: string;
+            reason?: string;
+        };
+        ApiResponsePortalAppointmentView: {
+            data?: components["schemas"]["PortalAppointmentView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PortalAppointmentView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: date-time */
+            scheduledStart?: string;
+            status: string;
+            appointmentType?: string;
+            /** Format: uuid */
+            doctorId?: string;
+        };
+        PortalAccountLinkDto: {
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            userId: string;
+            abhaNumber?: string;
+            abhaAddress?: string;
+        };
+        ApiResponsePortalMeView: {
+            data?: components["schemas"]["PortalMeView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PortalMeView: {
+            /** Format: uuid */
+            accountId?: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            hospitalId: string;
+            mrn: string;
+            name: string;
+            abhaNumber?: string;
+            abhaAddress?: string;
         };
         StockRequestDto: {
             /** Format: uuid */
@@ -14114,6 +14458,122 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ApiResponseListPortalSlotView: {
+            data?: components["schemas"]["PortalSlotView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PortalSlotView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            doctorId: string;
+            /** Format: date */
+            slotDate: string;
+            startTime: components["schemas"]["LocalTime"];
+            status: string;
+        };
+        ApiResponseListPortalReportView: {
+            data?: components["schemas"]["PortalReportView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PortalReportView: {
+            kind: string;
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            orderStatus: string;
+            /** Format: uuid */
+            reportId?: string;
+            /** Format: int32 */
+            reportVersion?: number;
+            reportStatus?: string;
+        };
+        ApiResponseListPortalPushSubscriptionView: {
+            data?: components["schemas"]["PortalPushSubscriptionView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListPortalPrescriptionView: {
+            data?: components["schemas"]["PortalPrescriptionView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PortalPrescriptionView: {
+            /** Format: uuid */
+            id?: string;
+            drugName: string;
+            dose?: string;
+            frequency?: string;
+            route?: string;
+            status: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ApiResponseListPortalNotificationView: {
+            data?: components["schemas"]["PortalNotificationView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListPortalDischargeView: {
+            data?: components["schemas"]["PortalDischargeView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PortalDischargeView: {
+            /** Format: uuid */
+            admissionId: string;
+            status: string;
+            /** Format: date-time */
+            signedAt?: string;
+            summaryText?: string;
+            followUpPlan?: string;
+            medicationsAtDischarge?: string;
+            instructions?: string;
+        };
+        ApiResponseListPortalCarePlanView: {
+            data?: components["schemas"]["PortalCarePlanView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PortalCarePlanView: {
+            /** Format: uuid */
+            id?: string;
+            title: string;
+            problem?: string;
+            goal?: string;
+            interventions?: string;
+            status: string;
+        };
+        ApiResponseListPortalBillView: {
+            data?: components["schemas"]["PortalBillView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListPortalAppointmentView: {
+            data?: components["schemas"]["PortalAppointmentView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListPharmacyStockView: {
             data?: components["schemas"]["PharmacyStockView"][];
             success: boolean;
@@ -18431,6 +18891,142 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseAnnouncementRuleDto"];
+                };
+            };
+        };
+    };
+    subscribePush: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalPushSubscribeDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePortalPushSubscriptionView"];
+                };
+            };
+        };
+    };
+    readNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePortalNotificationView"];
+                };
+            };
+        };
+    };
+    pay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePortalBillView"];
+                };
+            };
+        };
+    };
+    appointments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPortalAppointmentView"];
+                };
+            };
+        };
+    };
+    book: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalBookDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePortalAppointmentView"];
+                };
+            };
+        };
+    };
+    linkAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalAccountLinkDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePortalMeView"];
                 };
             };
         };
@@ -27559,6 +28155,210 @@ export interface operations {
             };
         };
     };
+    slots_1: {
+        parameters: {
+            query: {
+                doctorId: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPortalSlotView"];
+                };
+            };
+        };
+    };
+    reports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPortalReportView"];
+                };
+            };
+        };
+    };
+    pushSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPortalPushSubscriptionView"];
+                };
+            };
+        };
+    };
+    pushStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    prescriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPortalPrescriptionView"];
+                };
+            };
+        };
+    };
+    notifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPortalNotificationView"];
+                };
+            };
+        };
+    };
+    me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePortalMeView"];
+                };
+            };
+        };
+    };
+    discharge_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPortalDischargeView"];
+                };
+            };
+        };
+    };
+    carePlans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPortalCarePlanView"];
+                };
+            };
+        };
+    };
+    bills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPortalBillView"];
+                };
+            };
+        };
+    };
     listLedger: {
         parameters: {
             query?: {
@@ -29278,7 +30078,7 @@ export interface operations {
             };
         };
     };
-    me: {
+    me_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -29484,7 +30284,7 @@ export interface operations {
             };
         };
     };
-    appointments: {
+    appointments_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -30010,4 +30810,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: af1ccec255e4fd072209fb9937f9bc5c44c127cad278b3ec806f3f812c2f52b4
+// openapi snapshot sha256: 8d0b8a4210b36e37c8056d43aae88ab184c349b236b077635ec15c8f94de8162

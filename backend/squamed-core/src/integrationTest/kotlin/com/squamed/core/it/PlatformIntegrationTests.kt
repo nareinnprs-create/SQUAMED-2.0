@@ -15914,5 +15914,328 @@ class PlatformIntegrationTests {
         assertTrue(outbox.any { it["eventType"].asText() == wire }, "$wire emitted")
       }
     }
+
+    @Test
+    fun patientPortalCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Portal $s", "code" to "PT-$s", "country" to "Qatar"), token),
+        )["id"].asText()
+
+      fun user(
+        role: String,
+        tag: String,
+      ): Pair<String, String> {
+        val email = "$tag.pt.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "Portal$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role",
+        )
+        val tok = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+        val id = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = tok))["userId"].asText()
+        return tok to id
+      }
+      val (portalA, userA) = user("PATIENT", "pa")
+      val (portalB, userB) = user("PATIENT", "pb")
+      val (doctor, doctorId) = user("DOCTOR", "pdoc")
+
+      fun patient(
+        tag: String,
+        qid: String,
+      ) = `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients",
+          json(
+            "firstName" to "Portal$tag",
+            "lastName" to "Patient$s",
+            "gender" to "female",
+            "dateOfBirth" to "1983-03-03",
+            "phone" to "69$tag$s".take(11),
+            "qid" to qid,
+            "nationality" to "QA",
+            "city" to "Doha",
+            "hospitalId" to hospitalId,
+          ),
+          token,
+        ),
+      )["patient"]
+      val patientA = patient("a", "PA$s".take(11))
+      val patientB = patient("b", "PB$s".take(11))
+      assert2xx(api(HttpMethod.POST, "/api/v1/patients/${patientA["id"].asText()}/allergies", json("allergen" to "NKA", "severity" to "none"), token), "allergy documented")
+
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/portal/accounts",
+          json(
+            "patientId" to patientA["id"].asText(),
+            "userId" to userA,
+            "abhaNumber" to "12-3456-7890-1234",
+            "abhaAddress" to "pa@sbx",
+          ),
+          token,
+        ),
+        "account A linked",
+      )
+      assert2xx(api(HttpMethod.POST, "/api/v1/portal/accounts", json("patientId" to patientB["id"].asText(), "userId" to userB), token), "account B linked")
+      val duplicate = api(HttpMethod.POST, "/api/v1/portal/accounts", json("patientId" to patientB["id"].asText(), "userId" to userA), token)
+      assertEquals(409, duplicate.status, "one account per user")
+      assertTrue(duplicate.body.contains("PORTAL_ACCOUNT_EXISTS"), "account uniqueness guard")
+
+      val me = `data`(api(HttpMethod.GET, "/api/v1/portal/me", token = portalA))
+      assertEquals(patientA["mrn"].asText(), me["mrn"].asText(), "portal sees its own patient")
+      assertEquals("12-3456-7890-1234", me["abhaNumber"].asText(), "ABHA link stored")
+
+      // Booking: an open slot from the doctor's template, booked for the portal's own patient.
+      val tomorrow =
+        java.time.LocalDate
+          .now()
+          .plusDays(1)
+      val weekday =
+        tomorrow
+          .dayOfWeek.value
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/schedules/templates",
+          json(
+            "hospitalId" to hospitalId,
+            "doctorId" to doctorId,
+            "weekday" to weekday,
+            "startTime" to "09:00",
+            "endTime" to "11:00",
+            "slotMinutes" to 30,
+            "validFrom" to
+              java.time.LocalDate
+                .now()
+                .toString(),
+            "validTo" to
+              java.time.LocalDate
+                .now()
+                .plusDays(7)
+                .toString(),
+          ),
+          token,
+        ),
+        "schedule template created",
+      )
+      // Materialize the week's slots through the scheduling read, then the portal sees open ones.
+      assert2xx(
+        api(HttpMethod.GET, "/api/v1/schedules/$doctorId/slots?from=$tomorrow&to=$tomorrow", token = doctor),
+        "slots materialized",
+      )
+      val slots = `data`(api(HttpMethod.GET, "/api/v1/portal/slots?doctorId=$doctorId&from=$tomorrow&to=$tomorrow", token = portalA))
+      assertTrue(slots.size() >= 1, "open slots visible: $slots")
+      val booked =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/portal/appointments",
+            json(
+              "slotId" to slots[0]["id"].asText(),
+              "appointmentType" to "new",
+              "reason" to "checkup",
+            ),
+            portalA,
+          ),
+        )
+      assertEquals(
+        patientA["id"].asText(),
+        `data`(api(HttpMethod.GET, "/api/v1/appointments/${booked["id"].asText()}", token = token))["patientId"].asText(),
+        "appointment booked for the portal patient",
+      )
+
+      // Bills: the portal can pay its own invoice, never another patient's.
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/charges",
+          json(
+            "patientId" to patientA["id"].asText(),
+            "hospitalId" to hospitalId,
+            "chargeCode" to "PT-$s",
+            "chargeName" to "Consultation",
+            "category" to "consultation",
+            "quantity" to 1,
+            "unitPriceQar" to 120.0,
+            "reason" to "portal test",
+          ),
+          token,
+        ),
+        "charge A",
+      )
+      val invoiceA =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/billing/invoices", json("patientId" to patientA["id"].asText(), "payerClass" to "general"), token),
+        )["invoice"]
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/charges",
+          json(
+            "patientId" to patientB["id"].asText(),
+            "hospitalId" to hospitalId,
+            "chargeCode" to "PTB-$s",
+            "chargeName" to "Consultation B",
+            "category" to "consultation",
+            "quantity" to 1,
+            "unitPriceQar" to 80.0,
+            "reason" to "portal test",
+          ),
+          token,
+        ),
+        "charge B",
+      )
+      val invoiceB =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/billing/invoices", json("patientId" to patientB["id"].asText(), "payerClass" to "general"), token),
+        )["invoice"]
+      val billsA = `data`(api(HttpMethod.GET, "/api/v1/portal/bills", token = portalA))
+      assertTrue(billsA.any { it["id"].asText() == invoiceA["id"].asText() }, "own bill listed")
+      assertFalse(billsA.any { it["id"].asText() == invoiceB["id"].asText() }, "another patient's bill hidden")
+      val crossPay = api(HttpMethod.POST, "/api/v1/portal/bills/${invoiceB["id"].asText()}/pay", json(), portalA)
+      assertEquals(403, crossPay.status, "cannot pay another patient's bill")
+      assertTrue(crossPay.body.contains("PORTAL_ACCESS_DENIED"), "bill ownership guard")
+      val paid = `data`(api(HttpMethod.POST, "/api/v1/portal/bills/${invoiceA["id"].asText()}/pay", json(), portalA))
+      assertEquals("paid", paid["status"].asText(), "own bill paid online")
+      assertEquals(0.0, paid["amountDueQar"].asDouble(), 1e-9, "nothing due after payment")
+
+      // Prescription, lab order and care plan surface in the portal.
+      val enc =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters",
+            json(
+              "patientId" to patientA["id"].asText(),
+              "chiefComplaint" to "follow-up",
+              "reason" to "portal",
+            ),
+            doctor,
+          ),
+        )["id"].asText()
+      val drug =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/drugs",
+            json(
+              "code" to "PTD-$s",
+              "name" to "Paracetamol",
+              "genericName" to "paracetamol",
+              "category" to "General",
+              "unit" to "tab",
+            ),
+            token,
+          ),
+        )["id"].asText()
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/encounters/$enc/prescriptions",
+          json(
+            "drugId" to drug,
+            "drugName" to "Paracetamol",
+            "dose" to "1 g",
+            "frequency" to "TID",
+            "route" to "oral",
+            "quantity" to 9,
+            "patientMrn" to patientA["mrn"].asText(),
+          ),
+          doctor,
+        ),
+        "prescription written",
+      )
+      val prescriptions = `data`(api(HttpMethod.GET, "/api/v1/portal/prescriptions", token = portalA))
+      assertTrue(prescriptions.any { it["drugName"].asText() == "Paracetamol" }, "prescription visible")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/lab/orders",
+          json(
+            "patientId" to patientA["id"].asText(),
+            "encounterId" to enc,
+            "tests" to listOf(mapOf("testCode" to "CBC-$s", "testName" to "CBC")),
+          ),
+          token,
+        ),
+        "lab order",
+      )
+      val reports = `data`(api(HttpMethod.GET, "/api/v1/portal/reports", token = portalA))
+      assertTrue(reports.any { it["kind"].asText() == "LAB" }, "lab order on the portal report list")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/nursing/careplans",
+          json(
+            "hospitalId" to hospitalId,
+            "patientId" to patientA["id"].asText(),
+            "title" to "Portal care plan",
+            "problem" to "Follow-up",
+            "goal" to "Stable",
+            "interventions" to "Review",
+          ),
+          token,
+        ),
+        "care plan",
+      )
+      val plans = `data`(api(HttpMethod.GET, "/api/v1/portal/careplans", token = portalA))
+      assertTrue(plans.any { it["title"].asText() == "Portal care plan" }, "care plan visible")
+
+      // Notifications: own only, read marks it.
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/notifications/send",
+          json(
+            "hospitalId" to hospitalId,
+            "recipientId" to userA,
+            "channel" to "in_app",
+            "type" to "appointment",
+            "title" to "Appointment reminder",
+            "body" to "Tomorrow 09:00",
+          ),
+          token,
+        ),
+        "notification sent",
+      )
+      val notifications = `data`(api(HttpMethod.GET, "/api/v1/portal/notifications", token = portalA))
+      val reminder = notifications.firstOrNull { it["title"].asText() == "Appointment reminder" }
+      assertNotNull(reminder, "notification visible: $notifications")
+      val read = `data`(api(HttpMethod.POST, "/api/v1/portal/notifications/${reminder!!["id"].asText()}/read", json(), portalA))
+      assertFalse(read["readAt"].isNull, "notification marked read")
+
+      // Push subscriptions: stored per user, endpoint ownership enforced, delivery status honest.
+      val sub =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/portal/push/subscribe", json("endpoint" to "https://push.example/$s", "p256dh" to "BPkA", "auth" to "kA"), portalA),
+        )
+      assertEquals("https://push.example/$s", sub["endpoint"].asText(), "push subscription stored")
+      val hijack = api(HttpMethod.POST, "/api/v1/portal/push/subscribe", json("endpoint" to "https://push.example/$s", "p256dh" to "x", "auth" to "y"), portalB)
+      assertEquals(403, hijack.status, "endpoint cannot be claimed by another user")
+      val pushStatus = `data`(api(HttpMethod.GET, "/api/v1/portal/push/status", token = portalA))
+      assertEquals(false, pushStatus["configured"].asBoolean(), "Web Push delivery is not configured in this environment")
+      assertEquals(1, pushStatus["subscriptions"].asInt(), "one subscription registered")
+
+      // A user without an account cannot use the portal.
+      val (unlinked, _) = user("PATIENT", "pu")
+      val denied = api(HttpMethod.GET, "/api/v1/portal/me", token = unlinked)
+      assertEquals(403, denied.status, "portal requires a linked account")
+      assertTrue(denied.body.contains("PORTAL_ACCOUNT_REQUIRED"), "account guard code")
+    }
   }
 }

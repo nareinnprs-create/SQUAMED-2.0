@@ -39,6 +39,9 @@ class Hospital(
   var currency: String = "USD",
   @Column(name = "status", nullable = false, length = 20)
   var status: String = "active",
+  // 06.08: sandbox hospitals are seeded with synthetic patients only.
+  @Column(name = "sandbox", nullable = false)
+  var sandbox: Boolean = false,
   // 06.01: the hospital group this hospital belongs to (null = standalone).
   @Column(name = "group_id")
   var groupId: UUID? = null,

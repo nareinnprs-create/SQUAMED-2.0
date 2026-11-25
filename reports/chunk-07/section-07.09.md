@@ -1,6 +1,6 @@
 # Section 07.09 — Lab & support depth (chunk 7)
 
-**Verdict: SECTION REVIEW → local gates green (CI run pending).** Microbiology ID/AST + antibiogram, histopathology/cytology slide workflow, blood-bank NAT screening records and full food-service operations, bound to the chunk-2/4 deferrals SC-1/SC-2/SC-3.
+**Verdict: COMPLETE → GATE-12 PASS (partial: 07.11 exit slice).** Gate-run assessment of the CURRENT tree @ PR #125. CI evidence: **run 45544449085 — all 7 gates green**.
 
 ## 1. Scope
 Per `chunk-07-full-depth.md` item 13 / `20-CHUNK7-SECTIONS.md` 07.09:
@@ -13,7 +13,7 @@ Per `chunk-07-full-depth.md` item 13 / `20-CHUNK7-SECTIONS.md` 07.09:
 **Migration `V98`**: `laboratory.micro_culture`, `laboratory.micro_ast`, `laboratory.path_specimen`, `laboratory.path_slide`, `bloodbank.nat_screening`, `ipd.menu_item`, `ipd.kitchen_production`, `ipd.tray_delivery`; `kitchen:read|write:kitchen` permissions + `KITCHEN_STAFF` role.
 
 **Backend**
-- `laboratory/domain/MicroEntities.kt`, `PathologyEntities.kt`; `repository/LabDepthRepositories.kt`; `service/LabDepthService.kt`; `api/LabDepthController.kt` (17 endpoints under `/api/v1/lab/micro` and `/api/v1/lab/pathology`).
+- `laboratory/domain/MicroEntities.kt`, `PathologyEntities.kt`; `repository/LabDepthRepositories.kt`; `service/LabDepthService.kt`; `api/LabDepthController.kt` (14 endpoints under `/api/v1/lab/micro` and `/api/v1/lab/pathology`).
 - `bloodbank`: `NatScreening` entity + repository + `recordNat`/`natScreenings` + `/api/v1/blood-bank/units/{id}/nat`; `screenUnit` no longer wipes a previously recorded NAT result.
 - `kitchen/`: `KitchenEntities.kt`, `KitchenRepositories.kt`, `KitchenService.kt`, `KitchenController.kt` (9 endpoints under `/api/v1/kitchen`).
 
@@ -28,15 +28,15 @@ Per `chunk-07-full-depth.md` item 13 / `20-CHUNK7-SECTIONS.md` 07.09:
 ## 4. Gates 1–12
 | Gate | Result | Evidence |
 |---|---|---|
-| 1 Functional completeness | PASS (local) | `labSupportDepthCoverage` green twice (initial + edge cases) |
-| 2 Zero-stub | PASS | grep of every new file: zero banned tokens |
-| 3 Types | PASS | `compileKotlin` + `compileIntegrationTestKotlin` clean |
-| 4 Lint + format | PASS | `ktlintCheck` clean after `ktlintFormat` |
-| 5 Tests | PASS (local) | full `integrationTest test jacocoTestReport jacocoTestCoverageVerification` BUILD SUCCESSFUL 11m13s — 102 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.29% (≥0.80) |
+| 1 Functional completeness | PASS | CI run 45544449085; `labSupportDepthCoverage` green |
+| 2 Zero-stub | PASS | CI run 45544449085 |
+| 3 Types | PASS | CI run 45544449085 |
+| 4 Lint + format | PASS | CI run 45544449085 |
+| 5 Tests | PASS | CI run 45544449085; full chain 102 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.29% (≥0.80) |
 | 6 Accessibility | PASS | No UI change |
 | 7 Design system | PASS | No UI change |
-| 8 Contracts | PASS | snapshot regenerated from live `/api-docs`; codegen stamped `46593156…` |
-| 9 Data | PASS | V98 applied (Flyway 98/98); cross-tenant culture + tray assertions |
+| 8 Contracts | PASS | snapshot regenerated from live `/api-docs`; codegen stamped `46593156…`; CI run 45544449085 |
+| 9 Data | PASS | V98 applied (Flyway 98/98); cross-tenant culture + tray assertions; CI run 45544449085 |
 | 10 Audit | PASS | Controller-mediated writes; records carry actor |
 | 11 Docs | PASS | This report; LEDGER row 07.09; tracker |
 | 12 Exit item | PASS (partial) | 07.11 exit slice |
@@ -71,4 +71,5 @@ No UI change.
 - No new event-catalog entries in this section; records ride the audit chain and existing lab/blood-bank events.
 
 ## 9. Session trail
-- Local Docker compose (postgres/redis/kafka/opensearch/minio) started for the PIT.
+- Local Docker compose (postgres/redis/kafka/opensearch/minio) started for the PIT; one Docker Desktop engine restart mid-run (environment, re-ran clean).
+- CI run 45544449085 on PR #125: all 7 gates green.

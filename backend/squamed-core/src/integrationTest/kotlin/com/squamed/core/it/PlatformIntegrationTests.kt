@@ -16811,5 +16811,424 @@ class PlatformIntegrationTests {
       assertEquals(1, summary["highRisks"].asInt(), "summary counts the high risk")
       assertEquals(0, summary["activeOutbreaks"].asInt(), "no active outbreak after close")
     }
+
+    @Test
+    fun labSupportDepthCoverage() {
+      val token = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Lab Depth $s", "code" to "LD-$s", "country" to "Qatar"),
+            token,
+          ),
+        )["id"].asText()
+
+      fun register(
+        role: String,
+        tag: String,
+      ): String {
+        val email = "$tag.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "User$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $role",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      }
+      val tech = register("LAB_TECHNICIAN", "labdepth")
+      val path = register("PATHOLOGIST", "pathdepth")
+      val kitchen = register("KITCHEN_STAFF", "kitchen")
+      val bloodBank = register("HOSPITAL_ADMIN", "bloodbank")
+
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Depth$s",
+              "lastName" to "Patient",
+              "gender" to "female",
+              "dateOfBirth" to "1980-04-04",
+              "phone" to "66$s".take(11),
+              "qid" to "LD$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]["id"].asText()
+      val orderId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/orders",
+            json(
+              "patientId" to patientId,
+              "tests" to listOf(mapOf("testCode" to "MC-$s", "testName" to "Blood culture $s")),
+              "priority" to "routine",
+            ),
+            tech,
+          ),
+        )["order"]["id"].asText()
+
+      // Microbiology: culture -> organism -> AST -> final + antibiogram.
+      val culture =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/micro/cultures",
+            json("labOrderId" to orderId, "specimenType" to "Blood", "notes" to "aerobic bottle"),
+            tech,
+          ),
+        )
+      assertEquals("PENDING", culture["status"].asText(), "culture pending")
+      val cultureId = culture["id"].asText()
+      assertEquals(
+        409,
+        api(HttpMethod.POST, "/api/v1/lab/micro/cultures", json("labOrderId" to orderId, "specimenType" to "Blood"), tech).status,
+        "one culture per lab order",
+      )
+      val earlyFinal = api(HttpMethod.POST, "/api/v1/lab/micro/cultures/$cultureId/finalize", json(), path)
+      assertEquals(400, earlyFinal.status, "cannot finalize without an organism")
+      assertTrue(earlyFinal.body.contains("MICRO_ORGANISM_REQUIRED"), "organism guard code")
+      val identified =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/micro/cultures/$cultureId/identify",
+            json("organismCode" to "ecoli", "organismName" to "Escherichia coli"),
+            tech,
+          ),
+        )
+      assertEquals("ORGANISM_IDENTIFIED", identified["status"].asText(), "organism identified")
+      assertEquals("ECOLI", identified["organismCode"].asText(), "organism code normalised")
+      assertEquals(
+        409,
+        api(HttpMethod.POST, "/api/v1/lab/micro/cultures/$cultureId/identify", json("organismCode" to "KPNE", "organismName" to "Klebsiella"), tech).status,
+        "identification is once",
+      )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/lab/micro/cultures/$cultureId/ast",
+          json(
+            "panel" to "EUCAST",
+            "results" to
+              listOf(
+                mapOf("antibioticCode" to "AMK", "antibioticName" to "Amikacin", "result" to "S", "mic" to 2.0),
+                mapOf("antibioticCode" to "CIP", "antibioticName" to "Ciprofloxacin", "result" to "R", "mic" to 8.0),
+              ),
+          ),
+          tech,
+        ),
+        "AST panel recorded",
+      )
+      assertEquals(
+        400,
+        api(
+          HttpMethod.POST,
+          "/api/v1/lab/micro/cultures/$cultureId/ast",
+          json("panel" to "EUCAST", "results" to listOf(mapOf("antibioticCode" to "GEN", "antibioticName" to "Gentamicin", "result" to "X"))),
+          tech,
+        ).status,
+        "susceptibility vocabulary enforced",
+      )
+      assertEquals(
+        400,
+        api(
+          HttpMethod.POST,
+          "/api/v1/lab/micro/cultures/$cultureId/ast",
+          json("panel" to "EUCAST", "results" to listOf(mapOf("antibioticCode" to "AMK", "antibioticName" to "Amikacin", "result" to "S"))),
+          tech,
+        ).status,
+        "antibiotic is unique per culture",
+      )
+      val finalCulture = `data`(api(HttpMethod.POST, "/api/v1/lab/micro/cultures/$cultureId/finalize", json(), path))
+      assertEquals("FINAL", finalCulture["status"].asText(), "culture final")
+      assertEquals(
+        409,
+        api(HttpMethod.POST, "/api/v1/lab/micro/cultures/$cultureId/finalize", json(), path).status,
+        "finalize is once",
+      )
+      val detail = `data`(api(HttpMethod.GET, "/api/v1/lab/micro/cultures/$cultureId", token = tech))
+      assertEquals(2, detail["ast"].size(), "AST panel persisted")
+      val antibiogram = `data`(api(HttpMethod.GET, "/api/v1/lab/micro/antibiogram?organismCode=ECOLI", token = tech))
+      assertEquals(1, antibiogram["isolates"].asInt(), "antibiogram counts final isolates")
+      assertEquals(2, antibiogram["antibiotics"].size(), "antibiogram per antibiotic")
+      val amkRow = antibiogram["antibiotics"].first { it["antibioticCode"].asText() == "AMK" }
+      val cipRow = antibiogram["antibiotics"].first { it["antibioticCode"].asText() == "CIP" }
+      assertEquals(100.0, amkRow["susceptiblePct"].asDouble(), 1e-9, "AMK susceptible")
+      assertEquals(0.0, cipRow["susceptiblePct"].asDouble(), 1e-9, "CIP resistant")
+
+      // Histopathology: accession -> gross -> slides ready -> sign-out.
+      val specimen =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/pathology/specimens",
+            json("patientId" to patientId, "specimenType" to "HISTO", "site" to "Colon"),
+            tech,
+          ),
+        )
+      val specimenId = specimen["id"].asText()
+      assertEquals("ACCESSIONED", specimen["status"].asText(), "specimen accessioned")
+      assertTrue(specimen["accessionNo"].asText().startsWith("PTH-"), "accession number generated")
+      val earlySign =
+        api(
+          HttpMethod.POST,
+          "/api/v1/lab/pathology/specimens/$specimenId/sign-out",
+          json(
+            "diagnosisCode" to "C18.9",
+            "diagnosisText" to "Adenocarcinoma",
+          ),
+          path,
+        )
+      assertEquals(400, earlySign.status, "sign-out needs ready slides")
+      assertTrue(earlySign.body.contains("PATH_SLIDES_NOT_READY"), "slide readiness guard")
+      val grossed =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/pathology/specimens/$specimenId/gross",
+            json("description" to "Two fragments, 4 cm, serially sectioned"),
+            tech,
+          ),
+        )
+      assertEquals("GROSSED", grossed["status"].asText(), "specimen grossed")
+      val slide1 = `data`(api(HttpMethod.POST, "/api/v1/lab/pathology/specimens/$specimenId/slides", json("stain" to "H&E"), tech))["id"].asText()
+      val slide2 = `data`(api(HttpMethod.POST, "/api/v1/lab/pathology/specimens/$specimenId/slides", json("stain" to "PAS"), tech))["id"].asText()
+      val ready1 = `data`(api(HttpMethod.POST, "/api/v1/lab/pathology/specimens/$specimenId/slides/$slide1/ready", json(), tech))
+      assertEquals("GROSSED", ready1["specimenStatus"].asText(), "one slide ready is not enough")
+      val ready2 = `data`(api(HttpMethod.POST, "/api/v1/lab/pathology/specimens/$specimenId/slides/$slide2/ready", json(), tech))
+      assertEquals("SLIDES_READY", ready2["specimenStatus"].asText(), "all slides ready")
+      // A late slide re-opens the specimen until it is ready too.
+      val slide3 = `data`(api(HttpMethod.POST, "/api/v1/lab/pathology/specimens/$specimenId/slides", json("stain" to "IHC"), tech))["id"].asText()
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/lab/pathology/specimens/$specimenId/sign-out", json("diagnosisCode" to "C18.9", "diagnosisText" to "early"), path).status,
+        "late slide blocks sign-out",
+      )
+      val ready3 = `data`(api(HttpMethod.POST, "/api/v1/lab/pathology/specimens/$specimenId/slides/$slide3/ready", json(), tech))
+      assertEquals("SLIDES_READY", ready3["specimenStatus"].asText(), "late slide ready re-completes the set")
+      val signed =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/pathology/specimens/$specimenId/sign-out",
+            json("diagnosisCode" to "C18.9", "diagnosisText" to "Adenocarcinoma, moderately differentiated"),
+            path,
+          ),
+        )
+      assertEquals("SIGNED_OUT", signed["status"].asText(), "pathologist signed out")
+      assertEquals(
+        409,
+        api(HttpMethod.POST, "/api/v1/lab/pathology/specimens/$specimenId/sign-out", json("diagnosisCode" to "C18.9", "diagnosisText" to "dup"), path).status,
+        "sign-out is once",
+      )
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/lab/pathology/specimens", json("patientId" to patientId, "specimenType" to "FROZEN"), tech).status,
+        "specimen type vocabulary enforced",
+      )
+      val pathDetail = `data`(api(HttpMethod.GET, "/api/v1/lab/pathology/specimens/$specimenId", token = tech))
+      assertEquals(3, pathDetail["slides"].size(), "slides persisted")
+      assertEquals(400, api(HttpMethod.GET, "/api/v1/lab/micro/cultures/$cultureId", token = token).status, "cross-tenant culture hidden")
+
+      // Blood-bank NAT: positive assay discards, negative clears with TTI.
+      val today =
+        java.time.LocalDate
+          .now()
+          .toString()
+      val donor =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/donors",
+            json("hospitalId" to hospitalId, "donorNumber" to "ND-$s", "fullName" to "Nat Donor", "bloodGroup" to "O+", "gender" to "male"),
+            bloodBank,
+          ),
+        )
+      val donorId = donor["id"].asText()
+      val donor2 =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/blood-bank/donors",
+            json("hospitalId" to hospitalId, "donorNumber" to "ND2-$s", "fullName" to "Nat Donor Two", "bloodGroup" to "O+", "gender" to "male"),
+            bloodBank,
+          ),
+        )
+      val donor2Id = donor2["id"].asText()
+
+      fun unit(
+        unitNumber: String,
+        donor: String = donorId,
+      ) = `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/blood-bank/units",
+          json(
+            "hospitalId" to hospitalId,
+            "unitNumber" to unitNumber,
+            "bloodGroup" to "O+",
+            "component" to "prbc",
+            "expiryDate" to
+              java.time.LocalDate
+                .now()
+                .plusDays(35)
+                .toString(),
+            "donorId" to donor,
+          ),
+          bloodBank,
+        ),
+      )["id"].asText()
+      val positiveUnit = unit("NU-P-$s")
+      val positiveNat =
+        `data`(api(HttpMethod.POST, "/api/v1/blood-bank/units/$positiveUnit/nat", json("assay" to "HIV-1 NAT", "result" to "POSITIVE"), bloodBank))
+      assertEquals("POSITIVE", positiveNat["result"].asText(), "NAT positive recorded")
+      val discarded = `data`(api(HttpMethod.GET, "/api/v1/blood-bank/units?status=discarded", token = bloodBank)).first { it["id"].asText() == positiveUnit }
+      assertEquals("REJECTED", discarded["screeningStatus"].asText(), "positive NAT rejects the unit")
+      assertEquals(
+        409,
+        api(HttpMethod.POST, "/api/v1/blood-bank/units/$positiveUnit/nat", json("assay" to "HIV-1 NAT", "result" to "NEGATIVE"), bloodBank).status,
+        "one record per unit+assay",
+      )
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/blood-bank/units/$positiveUnit/nat", json("assay" to "HCV NAT", "result" to "MAYBE"), bloodBank).status,
+        "NAT result vocabulary enforced",
+      )
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/blood-bank/units/$positiveUnit/nat", token = bloodBank)).size(), "NAT record listed")
+      val clearUnit = unit("NU-C-$s", donor2Id)
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/blood-bank/units/$clearUnit/nat", json("assay" to "HIV-1 NAT", "result" to "NEGATIVE"), bloodBank),
+        "negative NAT",
+      )
+      val cleared = `data`(api(HttpMethod.POST, "/api/v1/blood-bank/units/$clearUnit/screening", json("ttiResult" to "CLEARED"), bloodBank))
+      assertEquals("CLEARED", cleared["screeningStatus"].asText(), "negative NAT + clear TTI releases the unit")
+
+      // Food service: menu -> production plan -> tray delivery.
+      val wardId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json("name" to "Kitchen Ward $s", "code" to "KW-$s", "type" to "general"),
+            token,
+          ),
+        )["id"].asText()
+      val bedId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+            json("label" to "K-$s", "type" to "standard", "status" to "available", "wardId" to wardId),
+            token,
+          ),
+        )["id"].asText()
+      val admissionId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "bedId" to bedId, "admissionType" to "elective"),
+            token,
+          ),
+        )["id"].asText()
+      val dietOrderId =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/admissions/$admissionId/diet-orders", json("dietType" to "Soft", "restrictions" to "low salt"), token),
+        )["id"].asText()
+      val menu =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/kitchen/menu-items",
+            json("dietType" to "Soft", "meal" to "LUNCH", "name" to "Dal + rice $s", "allergens" to "none"),
+            kitchen,
+          ),
+        )
+      assertEquals("LUNCH", menu["meal"].asText(), "menu item created")
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/kitchen/menu-items", json("dietType" to "Soft", "meal" to "LUNCH", "name" to "Dal + rice $s"), kitchen).status,
+        "menu item is unique per diet+meal+name",
+      )
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/kitchen/menu-items", json("dietType" to "Soft", "meal" to "BRUNCH", "name" to "X"), kitchen).status,
+        "meal vocabulary enforced",
+      )
+      val plan = `data`(api(HttpMethod.POST, "/api/v1/kitchen/production/plan", json("productionDate" to today, "meal" to "LUNCH"), kitchen))
+      val softRow = plan.first { it["dietType"].asText() == "Soft" }
+      assertEquals(1, softRow["plannedCount"].asInt(), "production count from active diet orders")
+      assertEquals("PLANNED", softRow["status"].asText(), "production planned")
+      val productionId = softRow["id"].asText()
+      assertEquals(
+        "IN_PREP",
+        `data`(api(HttpMethod.POST, "/api/v1/kitchen/production/$productionId/start", json(), kitchen))["status"].asText(),
+        "production started",
+      )
+      assertEquals(
+        409,
+        api(HttpMethod.POST, "/api/v1/kitchen/production/$productionId/start", json(), kitchen).status,
+        "start is once",
+      )
+      assertEquals(
+        "READY",
+        `data`(api(HttpMethod.POST, "/api/v1/kitchen/production/$productionId/ready", json(), kitchen))["status"].asText(),
+        "production ready",
+      )
+      val tray =
+        `data`(api(HttpMethod.POST, "/api/v1/kitchen/trays", json("dietOrderId" to dietOrderId, "productionDate" to today, "meal" to "LUNCH"), kitchen))
+      assertEquals("PREPARED", tray["status"].asText(), "tray prepared")
+      val trayId = tray["id"].asText()
+      assertEquals(
+        409,
+        api(HttpMethod.POST, "/api/v1/kitchen/trays", json("dietOrderId" to dietOrderId, "productionDate" to today, "meal" to "LUNCH"), kitchen).status,
+        "one tray per diet order+date+meal",
+      )
+      assertEquals("DELIVERED", `data`(api(HttpMethod.POST, "/api/v1/kitchen/trays/$trayId/deliver", json(), kitchen))["status"].asText(), "tray delivered")
+      assertEquals(
+        409,
+        api(HttpMethod.POST, "/api/v1/kitchen/trays/$trayId/deliver", json(), kitchen).status,
+        "delivery is once",
+      )
+      assertEquals(
+        1,
+        `data`(api(HttpMethod.GET, "/api/v1/kitchen/trays?productionDate=$today&meal=LUNCH", token = kitchen)).size(),
+        "tray manifest for the meal",
+      )
+      assertEquals(
+        403,
+        api(HttpMethod.GET, "/api/v1/kitchen/trays?productionDate=$today&meal=LUNCH", token = tech).status,
+        "kitchen is a separate permission domain",
+      )
+      assertEquals(400, api(HttpMethod.POST, "/api/v1/kitchen/trays/$trayId/deliver", json(), token).status, "cross-tenant tray hidden")
+
+      // Replacing the diet order re-plans the meal: the old diet type drops to zero, the new one appears.
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/admissions/$admissionId/diet-orders", json("dietType" to "Liquid", "restrictions" to "clear fluids"), token),
+        "diet order replaced",
+      )
+      val replanned = `data`(api(HttpMethod.POST, "/api/v1/kitchen/production/plan", json("productionDate" to today, "meal" to "LUNCH"), kitchen))
+      assertEquals(0, replanned.first { it["dietType"].asText() == "Soft" }["plannedCount"].asInt(), "replaced diet drops to zero")
+      assertEquals(1, replanned.first { it["dietType"].asText() == "Liquid" }["plannedCount"].asInt(), "new diet is planned")
+    }
   }
 }

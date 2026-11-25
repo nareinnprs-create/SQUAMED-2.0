@@ -132,3 +132,16 @@ class TransfusionReaction(
   @Column(name = "actions") var actions: String? = null,
   @Column(name = "reported_by") var reportedBy: UUID? = null,
 ) : BaseEntity()
+
+// 07.09 NAT screening integration: one assay-level record per unit.
+@Entity
+@Table(name = "nat_screening", schema = "bloodbank")
+class NatScreening(
+  @Column(name = "hospital_id", nullable = false) var hospitalId: UUID,
+  @Column(name = "unit_id", nullable = false) var unitId: UUID,
+  @Column(name = "assay", nullable = false, length = 60) var assay: String,
+  @Column(name = "result", nullable = false, length = 20) var result: String,
+  @Column(name = "tested_at", nullable = false) var testedAt: Instant = Instant.now(),
+  @Column(name = "tested_by") var testedBy: UUID? = null,
+  @Column(name = "notes", length = 400) var notes: String? = null,
+) : BaseEntity()

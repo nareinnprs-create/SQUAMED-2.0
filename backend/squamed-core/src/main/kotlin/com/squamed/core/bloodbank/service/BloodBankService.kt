@@ -11,6 +11,7 @@ import com.squamed.core.bloodbank.api.GroupingCreateDto
 import com.squamed.core.bloodbank.api.GroupingView
 import com.squamed.core.bloodbank.api.IssueCreateDto
 import com.squamed.core.bloodbank.api.IssueView
+import com.squamed.core.bloodbank.api.NatScreeningDto
 import com.squamed.core.bloodbank.api.ReactionCreateDto
 import com.squamed.core.bloodbank.api.ReactionView
 import com.squamed.core.bloodbank.api.ReservationCreateDto
@@ -29,6 +30,7 @@ import com.squamed.core.bloodbank.domain.BloodIssue
 import com.squamed.core.bloodbank.domain.BloodReservation
 import com.squamed.core.bloodbank.domain.BloodUnit
 import com.squamed.core.bloodbank.domain.Crossmatch
+import com.squamed.core.bloodbank.domain.NatScreening
 import com.squamed.core.bloodbank.domain.TransfusionReaction
 import com.squamed.core.bloodbank.domain.TransfusionRecord
 import com.squamed.core.bloodbank.repository.BloodDonorRepository
@@ -37,6 +39,7 @@ import com.squamed.core.bloodbank.repository.BloodIssueRepository
 import com.squamed.core.bloodbank.repository.BloodReservationRepository
 import com.squamed.core.bloodbank.repository.BloodUnitRepository
 import com.squamed.core.bloodbank.repository.CrossmatchRepository
+import com.squamed.core.bloodbank.repository.NatScreeningRepository
 import com.squamed.core.bloodbank.repository.TransfusionReactionRepository
 import com.squamed.core.bloodbank.repository.TransfusionRecordRepository
 import com.squamed.core.common.tenant.requireSameHospital
@@ -58,6 +61,7 @@ class BloodBankService(
   private val issueRepository: BloodIssueRepository,
   private val transfusionRepository: TransfusionRecordRepository,
   private val reactionRepository: TransfusionReactionRepository,
+  private val natScreeningRepository: NatScreeningRepository,
   private val patientRecordLookup: com.squamed.core.patient.repository.PatientRecordRepository,
   private val eventPublisher: DomainEventPublisher,
 ) {
@@ -418,13 +422,71 @@ class BloodBankService(
     if (tti !in setOf("CLEARED", "REACTIVE")) throw IllegalArgumentException("BLOODBANK_SCREENING_RESULT_INVALID")
     val nat = dto.natResult?.trim()?.uppercase()
     if (nat != null && nat !in setOf("CLEARED", "REACTIVE")) throw IllegalArgumentException("BLOODBANK_SCREENING_RESULT_INVALID")
-    val cleared = tti == "CLEARED" && nat != "REACTIVE"
+    if (nat != null) unit.natResult = nat
+    val cleared = tti == "CLEARED" && unit.natResult != "REACTIVE" && unit.natResult != "INVALID"
     unit.ttiResult = tti
-    unit.natResult = nat
     unit.screeningStatus = if (cleared) "CLEARED" else "REJECTED"
     if (!cleared) unit.status = "discarded"
     unit.updatedBy = actorId
     return UnitView.from(unitRepository.save(unit))
+  }
+
+  // 07.09 NAT screening integration: assay-level record drives the unit screening hand-off.
+  @Transactional
+  fun recordNat(
+    id: UUID,
+    dto: NatScreeningDto,
+    actorId: UUID,
+    hospitalId: UUID?,
+  ): NatScreening {
+    val unit = findUnit(id, hospitalId)
+    val assay = dto.assay.trim().uppercase()
+    val result = dto.result.trim().uppercase()
+    if (assay.isBlank()) throw IllegalArgumentException("NAT_ASSAY_REQUIRED")
+    if (result !in setOf("NEGATIVE", "POSITIVE", "INVALID")) throw IllegalArgumentException("NAT_RESULT_INVALID")
+    if (unit.status == "issued") throw IllegalStateException("BLOODBANK_UNIT_ISSUED_LOCKED")
+    val unitId = unit.id ?: throw IllegalStateException("BLOOD_UNIT_ID_MISSING")
+    if (natScreeningRepository.findByUnitIdAndAssay(unitId, assay) != null) throw IllegalStateException("NAT_SCREENING_EXISTS")
+    val screening =
+      natScreeningRepository.save(
+        NatScreening(
+          hospitalId = unit.hospitalId,
+          unitId = unitId,
+          assay = assay,
+          result = result,
+          testedBy = actorId,
+          notes = dto.notes?.trim(),
+        ).also { it.createdBy = actorId },
+      )
+    when (result) {
+      "POSITIVE" -> {
+        unit.natResult = "REACTIVE"
+        unit.screeningStatus = "REJECTED"
+        unit.status = "discarded"
+      }
+
+      "NEGATIVE" -> {
+        unit.natResult = "CLEARED"
+        if (unit.ttiResult == "CLEARED") unit.screeningStatus = "CLEARED"
+      }
+
+      else -> {
+        unit.natResult = "INVALID"
+      }
+    }
+    unit.updatedBy = actorId
+    unitRepository.save(unit)
+    return screening
+  }
+
+  @Transactional(readOnly = true)
+  fun natScreenings(
+    id: UUID,
+    hospitalId: UUID?,
+  ): List<NatScreening> {
+    val unit = findUnit(id, hospitalId)
+    val unitId = unit.id ?: throw IllegalStateException("BLOOD_UNIT_ID_MISSING")
+    return natScreeningRepository.findByHospitalIdAndUnitIdOrderByTestedAtDesc(unit.hospitalId, unitId)
   }
 
   // 04.07 regulatory trace: donor -> unit -> grouping -> crossmatch -> reservation -> issue -> transfusion -> reactions.

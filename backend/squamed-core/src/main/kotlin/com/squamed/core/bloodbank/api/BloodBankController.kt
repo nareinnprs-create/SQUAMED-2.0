@@ -80,6 +80,23 @@ class BloodBankController(
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<TraceabilityView> = ApiResponse.ok(bloodBankService.traceability(unitId, principal.hospitalId))
 
+  @PostMapping("/units/{id}/nat")
+  @RequiresPermission("bloodbank:write:bloodbank")
+  @Transactional
+  fun recordNat(
+    @PathVariable id: UUID,
+    @RequestBody dto: NatScreeningDto,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<Any> = ApiResponse.ok(bloodBankService.recordNat(id, dto, principal.userId, principal.hospitalId))
+
+  @GetMapping("/units/{id}/nat")
+  @RequiresPermission("bloodbank:read:bloodbank")
+  @Transactional(readOnly = true)
+  fun natScreenings(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<Any> = ApiResponse.ok(bloodBankService.natScreenings(id, principal.hospitalId))
+
   @GetMapping("/donors")
   @RequiresPermission("bloodbank:read:bloodbank")
   @Transactional(readOnly = true)

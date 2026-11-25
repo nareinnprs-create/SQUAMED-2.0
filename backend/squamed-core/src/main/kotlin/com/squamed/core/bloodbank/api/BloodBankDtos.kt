@@ -354,6 +354,12 @@ data class UnitScreeningDto(
   val natResult: String? = null,
 )
 
+data class NatScreeningDto(
+  val assay: String,
+  val result: String,
+  val notes: String? = null,
+)
+
 data class TraceabilityView(
   val unitId: UUID,
   val unitNumber: String,

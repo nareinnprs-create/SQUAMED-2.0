@@ -1,6 +1,6 @@
 # Section 07.07 — Allied health + patient experience (chunk 7)
 
-**Verdict: SECTION REVIEW → local gates green (CI run pending).** Therapy referrals/sessions, contact-centre interactions with template agent-assist, international patient desk, and patient-experience feedback with NPS and governed follow-up tasks.
+**Verdict: COMPLETE → GATE-12 PASS (partial: 07.11 patient-experience slice).** Gate-run assessment of the CURRENT tree @ PR #133. CI evidence: **run 45664781492 — all 7 gates green**.
 
 ## 1. Scope
 Per `chunk-07-full-depth.md` item 9 / `20-CHUNK7-SECTIONS.md` 07.07: physio/diet/OT/speech/rehab/social/psychology documentation + appointments + care-plan integration; contact centre (§43); international patient desk (§44); patient-experience/CRM full (§42) with agent-assist.
@@ -24,10 +24,10 @@ Per `chunk-07-full-depth.md` item 9 / `20-CHUNK7-SECTIONS.md` 07.07: physio/diet
 | Gate | Result | Evidence |
 |---|---|---|
 | 1 Functional completeness | PASS | `alliedAndPatientExperienceCoverage` green |
-| 2 Zero-stub | PASS | new files grep clean; CI |
-| 3 Types | PASS | `compileKotlin` + `compileIntegrationTestKotlin` |
-| 4 Lint + format | PASS | `ktlintCheck` clean |
-| 5 Tests | PASS (local) | full chain BUILD SUCCESSFUL 10m37s — 106 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.78% (>=0.80) |
+| 2 Zero-stub | PASS | CI run 45664781492 |
+| 3 Types | PASS | CI run 45664781492 |
+| 4 Lint + format | PASS | CI run 45664781492 |
+| 5 Tests | PASS | CI run 45664781492; 106 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.78% (>=0.80) |
 | 6 Accessibility | PASS | No UI change |
 | 7 Design system | PASS | No UI change |
 | 8 Contracts | PASS | snapshot regenerated from live `/api-docs`; codegen stamped `d73d7f38…` |

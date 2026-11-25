@@ -1,6 +1,6 @@
 # Section 07.01 — Six new agents + orchestrator (chunk 7)
 
-**Verdict: SECTION REVIEW → local gates green (CI run pending).** Adds Clinical, Pharmacy, Facilities, Procurement, Security and Executive personas and a cross-domain orchestrator over governed platform state.
+**Verdict: COMPLETE → GATE-12 PASS (partial: 07.11 exit slice).** Gate-run assessment of the CURRENT tree @ PR #127. CI evidence: **run 45627032693 — all 7 gates green**.
 
 ## 1. Scope
 Per `chunk-07-full-depth.md` item 1 / `20-CHUNK7-SECTIONS.md` 07.01: six additional agents on top of chunk-5's three, an orchestrator that decomposes cross-domain questions into agent queries and synthesizes blocker → owner → impact → recommended action, per-agent eval suites with unauthorized-action = 0.
@@ -24,15 +24,15 @@ Per `chunk-07-full-depth.md` item 1 / `20-CHUNK7-SECTIONS.md` 07.01: six additio
 ## 4. Gates 1–12
 | Gate | Result | Evidence |
 |---|---|---|
-| 1 Functional completeness | PASS (local) | `aiOrchestrationCoverage` green |
-| 2 Zero-stub | PASS | grep of every new file: zero banned tokens; CI |
-| 3 Types | PASS | `compileKotlin` + `compileIntegrationTestKotlin` |
-| 4 Lint + format | PASS | `ktlintCheck` clean |
-| 5 Tests | PASS (local) | full chain BUILD SUCCESSFUL 12m43s — 103 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.48% (≥0.80) |
+| 1 Functional completeness | PASS | CI run 45627032693; `aiOrchestrationCoverage` green |
+| 2 Zero-stub | PASS | CI run 45627032693 |
+| 3 Types | PASS | CI run 45627032693 |
+| 4 Lint + format | PASS | CI run 45627032693 |
+| 5 Tests | PASS | CI run 45627032693; 103 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.48% (≥0.80) |
 | 6 Accessibility | PASS | No UI change |
 | 7 Design system | PASS | No UI change |
-| 8 Contracts | PASS | snapshot regenerated from live `/api-docs`; codegen stamped `cc8f5a82…` |
-| 9 Data | PASS | V99 additive; fresh-hospital seed + tenant-pinned orchestrate |
+| 8 Contracts | PASS | snapshot regenerated (`cc8f5a82…`); CI run 45627032693 |
+| 9 Data | PASS | V99 additive; CI run 45627032693 |
 | 10 Audit | PASS | Controller-mediated writes; eval runs carry actor |
 | 11 Docs | PASS | This report; LEDGER; tracker |
 | 12 Exit item | PASS (partial) | 07.11 exit slice (surgical-delay question) |

@@ -1,6 +1,6 @@
 # Section 07.04 — Full financials (chunk 7)
 
-**Verdict: SECTION REVIEW → local gates green (CI run pending).** General ledger, AP/AR, bank reconciliation, cost centres, budgets, fixed-asset depreciation, GST packs and month close over the operational billing ledger.
+**Verdict: COMPLETE → GATE-12 PASS (partial: 07.11 month-close slice).** Gate-run assessment of the CURRENT tree @ PR #129. CI evidence: **run 45639038785 — all 7 gates green**.
 
 ## 1. Scope
 Per `chunk-07-full-depth.md` item 4 / `20-CHUNK7-SECTIONS.md` 07.04: GL, AP, AR, cash/bank recon, cost centres, budget vs actual, forecast, asset accounting, financial reporting, GST return filing packs, audit integration; month-close simulation ties the trial balance to the operational ledger.
@@ -27,10 +27,10 @@ Per `chunk-07-full-depth.md` item 4 / `20-CHUNK7-SECTIONS.md` 07.04: GL, AP, AR,
 | Gate | Result | Evidence |
 |---|---|---|
 | 1 Functional completeness | PASS | `fullFinancialsCoverage` green |
-| 2 Zero-stub | PASS | new files grep clean; CI |
-| 3 Types | PASS | `compileKotlin` + `compileIntegrationTestKotlin` |
-| 4 Lint + format | PASS | `ktlintCheck` clean |
-| 5 Tests | PASS (local) | full chain BUILD SUCCESSFUL 15m15s — 104 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.71% (>=0.80) |
+| 2 Zero-stub | PASS | CI run 45639038785 |
+| 3 Types | PASS | CI run 45639038785 |
+| 4 Lint + format | PASS | CI run 45639038785 |
+| 5 Tests | PASS | CI run 45639038785; 104 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.71% (>=0.80) |
 | 6 Accessibility | PASS | No UI change |
 | 7 Design system | PASS | No UI change |
 | 8 Contracts | PASS | snapshot regenerated from live `/api-docs`; codegen stamped `09fad159…` |

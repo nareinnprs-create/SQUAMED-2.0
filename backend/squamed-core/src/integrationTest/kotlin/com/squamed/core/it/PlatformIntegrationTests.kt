@@ -17866,5 +17866,222 @@ class PlatformIntegrationTests {
       assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/ai/voice/commands", token = admin)).size(), "cross-tenant voice commands isolated")
       assertEquals(400, api(HttpMethod.POST, "/api/v1/ai/voice/commands", json("transcript" to " "), sys).status, "blank transcript rejected")
     }
+
+    @Test
+    fun alliedAndPatientExperienceCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Allied $s", "code" to "AL-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+      val sysEmail = "allied.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to sysEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Allied",
+            "lastName" to "Admin$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register allied admin",
+      )
+      val sys = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to sysEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+      val sysId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = sys))["userId"].asText()
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Allied$s",
+              "lastName" to "Patient",
+              "gender" to "female",
+              "dateOfBirth" to "1985-05-05",
+              "phone" to "69$s".take(11),
+              "qid" to "AL$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            sys,
+          ),
+        )["patient"]["id"].asText()
+
+      // Allied health: referral -> schedule -> start -> signed session -> completion.
+      val referral =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/allied/referrals",
+            json("patientId" to patientId, "discipline" to "physio", "reason" to "Post-op mobility", "sessionsPlanned" to 4),
+            sys,
+          ),
+        )
+      val referralId = referral["id"].asText()
+      assertEquals("REFERRED", referral["status"].asText(), "referral created")
+      assertEquals("PHYSIO", referral["discipline"].asText(), "discipline normalised")
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/allied/referrals", json("patientId" to patientId, "discipline" to "MAGIC", "reason" to "x"), sys).status,
+        "discipline vocabulary enforced",
+      )
+      val scheduled =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/allied/referrals/$referralId/schedule",
+            json(
+              "scheduledAt" to
+                java.time.Instant
+                  .now()
+                  .plusSeconds(3600)
+                  .toString(),
+              "therapistId" to sysId,
+            ),
+            sys,
+          ),
+        )
+      assertEquals("SCHEDULED", scheduled["status"].asText(), "referral scheduled")
+      assertEquals(
+        409,
+        api(
+          HttpMethod.POST,
+          "/api/v1/allied/referrals/$referralId/schedule",
+          json(
+            "scheduledAt" to
+              java.time.Instant
+                .now()
+                .toString(),
+            "therapistId" to sysId,
+          ),
+          sys,
+        ).status,
+        "schedule is once",
+      )
+      assertEquals("IN_PROGRESS", `data`(api(HttpMethod.POST, "/api/v1/allied/referrals/$referralId/start", json(), sys))["status"].asText(), "therapy started")
+      val session =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/allied/referrals/$referralId/sessions",
+            json(
+              "sessionAt" to
+                java.time.Instant
+                  .now()
+                  .toString(),
+              "durationMinutes" to 45,
+              "notes" to "Gait training tolerated",
+              "outcome" to "Improved",
+            ),
+            sys,
+          ),
+        )
+      assertEquals("DRAFT", session["status"].asText(), "session draft")
+      val earlyComplete = api(HttpMethod.POST, "/api/v1/allied/referrals/$referralId/complete", json("outcome" to "done"), sys)
+      assertEquals(400, earlyComplete.status, "completion needs a signed session")
+      assertTrue(earlyComplete.body.contains("ALLIED_NO_SIGNED_SESSION"), "signed-session guard")
+      val signed = `data`(api(HttpMethod.POST, "/api/v1/allied/referrals/$referralId/sessions/${session["id"].asText()}/sign", json(), sys))
+      assertEquals("SIGNED", signed["status"].asText(), "session signed")
+      assertEquals(
+        409,
+        api(HttpMethod.POST, "/api/v1/allied/referrals/$referralId/sessions/${session["id"].asText()}/sign", json(), sys).status,
+        "sign is once",
+      )
+      val completed = `data`(api(HttpMethod.POST, "/api/v1/allied/referrals/$referralId/complete", json("outcome" to "Discharged with home programme"), sys))
+      assertEquals("COMPLETED", completed["status"].asText(), "referral completed")
+      assertEquals(409, api(HttpMethod.POST, "/api/v1/allied/referrals/$referralId/complete", json("outcome" to "again"), sys).status, "complete is once")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/allied/referrals/$referralId", token = sys))["sessions"].size(), "session history")
+
+      // Contact centre with template agent-assist.
+      val interaction =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/cx/interactions",
+            json("patientId" to patientId, "channel" to "phone", "direction" to "inbound", "subject" to "Billing query on invoice", "agentId" to sysId),
+            sys,
+          ),
+        )
+      val interactionId = interaction["id"].asText()
+      assertEquals("OPEN", interaction["status"].asText(), "interaction open")
+      assertTrue(interaction["aiSuggestedReply"].asText().contains("billing"), "agent-assist billing template")
+      assertEquals(
+        "CLOSED",
+        `data`(api(HttpMethod.POST, "/api/v1/cx/interactions/$interactionId/close", json("resolution" to "Invoice explained"), sys))["status"].asText(),
+        "interaction closed",
+      )
+      assertEquals(409, api(HttpMethod.POST, "/api/v1/cx/interactions/$interactionId/close", json("resolution" to "dup"), sys).status, "close is once")
+
+      // International patient desk.
+      val intl =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/cx/intl-cases",
+            json("patientId" to patientId, "country" to "Oman", "language" to "ar", "interpreterNeeded" to true, "notes" to "Visa letter needed"),
+            sys,
+          ),
+        )
+      assertEquals("OPEN", intl["status"].asText(), "intl case open")
+      assertEquals(
+        "CLOSED",
+        `data`(api(HttpMethod.POST, "/api/v1/cx/intl-cases/${intl["id"].asText()}/close", json(), sys))["status"].asText(),
+        "intl case closed",
+      )
+      assertEquals(409, api(HttpMethod.POST, "/api/v1/cx/intl-cases/${intl["id"].asText()}/close", json(), sys).status, "intl close is once")
+
+      // Patient experience: promoter + detractor, detractor opens a follow-up task.
+      val promoter =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/cx/feedback", json("patientId" to patientId, "score" to 9, "category" to "OPD", "comment" to "Great care"), sys),
+        )
+      assertEquals("NEW", promoter["status"].asText(), "promoter feedback recorded")
+      assertTrue(promoter["followupTaskId"].isNull, "promoter needs no follow-up")
+      val detractor =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/cx/feedback", json("patientId" to patientId, "score" to 3, "category" to "Billing", "comment" to "Long wait"), sys),
+        )
+      assertTrue(!detractor["followupTaskId"].isNull, "detractor opens a follow-up task")
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/cx/feedback", json("patientId" to patientId, "score" to 11, "category" to "OPD"), sys).status,
+        "score bounded",
+      )
+      assertEquals(
+        "ACKNOWLEDGED",
+        `data`(api(HttpMethod.POST, "/api/v1/cx/feedback/${detractor["id"].asText()}/acknowledge", json(), sys))["status"].asText(),
+        "feedback acknowledged",
+      )
+      assertEquals(
+        "RESOLVED",
+        `data`(api(HttpMethod.POST, "/api/v1/cx/feedback/${detractor["id"].asText()}/resolve", json("resolution" to "Called patient"), sys))["status"].asText(),
+        "feedback resolved",
+      )
+      assertEquals(
+        409,
+        api(HttpMethod.POST, "/api/v1/cx/feedback/${detractor["id"].asText()}/resolve", json("resolution" to "dup"), sys).status,
+        "resolve is once",
+      )
+      val summary = `data`(api(HttpMethod.GET, "/api/v1/cx/feedback/summary", token = sys))
+      assertEquals(2, summary["total"].asInt(), "two feedback rows")
+      assertEquals(1, summary["promoters"].asInt(), "one promoter")
+      assertEquals(1, summary["detractors"].asInt(), "one detractor")
+      assertEquals(0.0, summary["nps"].asDouble(), 1e-9, "NPS nets to zero")
+
+      // Tenant isolation.
+      assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/allied/referrals", token = admin)).size(), "cross-tenant referrals isolated")
+      assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/cx/feedback", token = admin)).size(), "cross-tenant feedback isolated")
+    }
   }
 }

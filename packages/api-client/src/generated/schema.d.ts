@@ -5268,6 +5268,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/voice/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["commands"];
+        put?: never;
+        post: operations["command"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/voice/commands/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/voice/commands/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/rail/items/{id}/dismiss": {
         parameters: {
             query?: never;
@@ -5357,7 +5405,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["command"];
+        post: operations["command_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -15421,6 +15469,41 @@ export interface components {
             /** Format: date-time */
             evaluatedAt?: string;
         };
+        VoiceCommandRequest: {
+            transcript: string;
+            locale: string;
+            screen?: string;
+            /** Format: uuid */
+            patientId?: string;
+        };
+        ApiResponseVoiceCommandView: {
+            data?: components["schemas"]["VoiceCommandView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        VoiceCommandView: {
+            /** Format: uuid */
+            id?: string;
+            transcript: string;
+            locale: string;
+            screen?: string;
+            intent: string;
+            confidence: number;
+            riskClass: string;
+            status: string;
+            voiceApprovalAllowed: boolean;
+            response?: string;
+            target?: string;
+            searchTerm?: string;
+            escalatedReason?: string;
+            /** Format: uuid */
+            actionDraftId?: string;
+        };
+        VoiceRejectRequest: {
+            reason?: string;
+        };
         AiActionRejectRequest: {
             reason?: string;
         };
@@ -17953,6 +18036,13 @@ export interface components {
         };
         ApiResponseListEvaluationView: {
             data?: components["schemas"]["EvaluationView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ApiResponseListVoiceCommandView: {
+            data?: components["schemas"]["VoiceCommandView"][];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -29484,6 +29574,98 @@ export interface operations {
             };
         };
     };
+    commands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListVoiceCommandView"];
+                };
+            };
+        };
+    };
+    command: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoiceCommandView"];
+                };
+            };
+        };
+    };
+    reject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceRejectRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoiceCommandView"];
+                };
+            };
+        };
+    };
+    approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoiceCommandView"];
+                };
+            };
+        };
+    };
     dismissRailItem: {
         parameters: {
             query?: never;
@@ -29670,7 +29852,7 @@ export interface operations {
             };
         };
     };
-    command: {
+    command_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -34947,4 +35129,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 09fad159e602d2376dc3d56b9da211c15eac4a0b9a5ec065eb55bf93f9cb8ec5
+// openapi snapshot sha256: 73647fde964a9ae3f1197a77a110fba0e1a6417c94a4a3d73f09eefd0be4391f

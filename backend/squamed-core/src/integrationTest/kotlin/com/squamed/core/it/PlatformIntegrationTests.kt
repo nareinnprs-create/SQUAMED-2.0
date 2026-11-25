@@ -17763,5 +17763,108 @@ class PlatformIntegrationTests {
         "cross-tenant GL isolated",
       )
     }
+
+    @Test
+    fun voiceOperatingInterfaceCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Voice $s", "code" to "VO-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+      val sysEmail = "voice.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to sysEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Voice",
+            "lastName" to "Admin$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register voice admin",
+      )
+      val sys = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to sysEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+
+      fun say(
+        transcript: String,
+        locale: String = "en",
+        screen: String? = null,
+      ) = `data`(
+        api(
+          HttpMethod.POST,
+          "/api/v1/ai/voice/commands",
+          json("transcript" to transcript, "locale" to locale, "screen" to screen),
+          sys,
+        ),
+      )
+
+      // Low-risk navigation executes immediately.
+      val nav = say("open laboratory")
+      assertEquals("navigate", nav["intent"].asText(), "navigation intent")
+      assertEquals("laboratory", nav["target"].asText(), "target screen")
+      assertEquals("EXECUTED", nav["status"].asText(), "navigation executed")
+      assertEquals(true, nav["voiceApprovalAllowed"].asBoolean(), "navigation is low risk")
+
+      // Screen-aware context.
+      val sameScreen = say("open laboratory", screen = "laboratory")
+      assertTrue(sameScreen["response"].asText().contains("already"), "screen-aware response")
+
+      // Multilingual (Hindi) navigation.
+      val hindiNav = say("प्रयोगशाला खोलो", locale = "hi")
+      assertEquals("navigate", hindiNav["intent"].asText(), "Hindi navigation intent")
+      assertEquals("laboratory", hindiNav["target"].asText(), "Hindi target")
+
+      // Search.
+      val search = say("find patient Ahmed")
+      assertEquals("search", search["intent"].asText(), "search intent")
+      assertTrue(search["searchTerm"].asText().contains("ahmed"), "search term captured")
+
+      // Low-risk task draft: voice approval executes through the governed task service.
+      val task = say("create task Review critical result")
+      assertEquals("PENDING_APPROVAL", task["status"].asText(), "task waits for approval")
+      assertEquals(true, task["voiceApprovalAllowed"].asBoolean(), "task is voice-approvable")
+      assertTrue(!task["actionDraftId"].isNull, "task draft created")
+      val approved = `data`(api(HttpMethod.POST, "/api/v1/ai/voice/commands/${task["id"].asText()}/approve", json(), sys))
+      assertEquals("EXECUTED", approved["status"].asText(), "voice approval executed the task")
+      assertTrue(approved["response"].asText().contains("Approved"), "approval response")
+      assertEquals(409, api(HttpMethod.POST, "/api/v1/ai/voice/commands/${task["id"].asText()}/approve", json(), sys).status, "approval is once")
+
+      // Rejection path.
+      val rejectTask = say("create task Re-check stock")
+      val rejected = `data`(api(HttpMethod.POST, "/api/v1/ai/voice/commands/${rejectTask["id"].asText()}/reject", json("reason" to "not needed"), sys))
+      assertEquals("REJECTED", rejected["status"].asText(), "task rejected")
+      assertEquals("not needed", rejected["escalatedReason"].asText(), "rejection reason")
+
+      // High-risk clinical/financial categories are hard-excluded from voice approval.
+      val highRisk = say("discharge patient now")
+      assertEquals("high_risk_action", highRisk["intent"].asText(), "high-risk intent")
+      assertEquals("HIGH", highRisk["riskClass"].asText(), "high risk class")
+      assertEquals(false, highRisk["voiceApprovalAllowed"].asBoolean(), "voice approval blocked")
+      assertEquals(403, api(HttpMethod.POST, "/api/v1/ai/voice/commands/${highRisk["id"].asText()}/approve", json(), sys).status, "voice approval forbidden")
+      assertEquals("HIGH", say("दवा ऑर्डर करो", locale = "hi")["riskClass"].asText(), "Hindi high-risk category")
+
+      // Unknown input escalates to a human with low confidence.
+      val unknown = say("flibbertigibbet")
+      assertEquals("ESCALATED", unknown["status"].asText(), "unknown escalates")
+      assertEquals(0.4, unknown["confidence"].asDouble(), 1e-9, "low confidence")
+      assertTrue(unknown["escalatedReason"].asText().isNotBlank(), "escalation reason")
+
+      // Help is low-risk and executed.
+      assertEquals("EXECUTED", say("help")["status"].asText(), "help executes")
+
+      // Tenant isolation.
+      assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/ai/voice/commands", token = admin)).size(), "cross-tenant voice commands isolated")
+      assertEquals(400, api(HttpMethod.POST, "/api/v1/ai/voice/commands", json("transcript" to " "), sys).status, "blank transcript rejected")
+    }
   }
 }

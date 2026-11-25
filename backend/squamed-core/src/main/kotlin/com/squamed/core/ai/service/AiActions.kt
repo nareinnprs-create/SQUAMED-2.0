@@ -233,14 +233,7 @@ class AiActionService(
       ?.let { throw AccessDeniedException("AI_SCOPE_DENIED: $it") }
     val type = actionType.trim().lowercase()
     val relatedType = payload["relatedType"]?.toString()
-    val allowed =
-      when (agent.code.lowercase()) {
-        "ops" -> type in setOf("create_task", "plan_discharge")
-        "revenue" -> type == "create_task" && relatedType == "REVENUE"
-        "patient_comms" -> type == "create_task" && relatedType == "PATIENT_COMMS"
-        else -> type == "create_task"
-      }
-    if (!allowed) throw IllegalArgumentException("AI_AGENT_ACTION_NOT_ALLOWED")
+    if (!AgentPersonas.isAllowed(agent.code, type, relatedType)) throw IllegalArgumentException("AI_AGENT_ACTION_NOT_ALLOWED")
     return propose(principal, hospitalId, type, payload + mapOf("agentCode" to agent.code))
   }
 

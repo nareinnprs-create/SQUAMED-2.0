@@ -5044,6 +5044,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/orchestrate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["orchestrate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/models": {
         parameters: {
             query?: never;
@@ -5166,6 +5182,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["proposeAsAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/agents/{code}/eval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["runAgentEval"];
         delete?: never;
         options?: never;
         head?: never;
@@ -14937,6 +14969,35 @@ export interface components {
             clearedAt?: string;
             dismissalReason?: string;
         };
+        OrchestrationRequest: {
+            question: string;
+        };
+        ApiResponseOrchestrationView: {
+            data?: components["schemas"]["OrchestrationView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        BlockerFinding: {
+            agentCode: string;
+            domain: string;
+            severity: string;
+            blocker: string;
+            ownerRole: string;
+            impact: string;
+            recommendedAction: string;
+            evidenceRef: string;
+        };
+        OrchestrationView: {
+            question: string;
+            agentsConsulted: string[];
+            primaryBlocker?: components["schemas"]["BlockerFinding"];
+            synthesized: {
+                [key: string]: string;
+            };
+            blockers: components["schemas"]["BlockerFinding"][];
+        };
         AiModelCreateRequest: {
             name: string;
             provider: string;
@@ -15100,6 +15161,25 @@ export interface components {
         };
         ApiResponseActionDraftView: {
             data?: components["schemas"]["ActionDraftView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        AgentEvalView: {
+            agentCode: string;
+            /** Format: int32 */
+            casesPassed: number;
+            /** Format: int32 */
+            casesTotal: number;
+            /** Format: int32 */
+            unauthorizedActions: number;
+            verdict: string;
+            /** Format: uuid */
+            evalRunId?: string;
+        };
+        ApiResponseAgentEvalView: {
+            data?: components["schemas"]["AgentEvalView"];
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -28523,6 +28603,30 @@ export interface operations {
             };
         };
     };
+    orchestrate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrchestrationRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseOrchestrationView"];
+                };
+            };
+        };
+    };
     models: {
         parameters: {
             query?: never;
@@ -28795,6 +28899,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseActionDraftView"];
+                };
+            };
+        };
+    };
+    runAgentEval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAgentEvalView"];
                 };
             };
         };
@@ -33682,4 +33808,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 46593156c55fbad4cd9ef0d48fbebd0dd2d09d8baa6f459830ff8f967dfd1b34
+// openapi snapshot sha256: cc8f5a82273ff1dd9db0262f356c340c8b49cdd6f1abd208c0c79c7e4b683404

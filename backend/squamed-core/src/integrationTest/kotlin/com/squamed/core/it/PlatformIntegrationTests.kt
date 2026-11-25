@@ -17230,5 +17230,253 @@ class PlatformIntegrationTests {
       assertEquals(0, replanned.first { it["dietType"].asText() == "Soft" }["plannedCount"].asInt(), "replaced diet drops to zero")
       assertEquals(1, replanned.first { it["dietType"].asText() == "Liquid" }["plannedCount"].asInt(), "new diet is planned")
     }
+
+    @Test
+    fun aiOrchestrationCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Orchestrator $s", "code" to "OR-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+      val sysEmail = "orch.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to sysEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Orchestrator",
+            "lastName" to "Admin$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register hospital-bound system admin",
+      )
+      val sys = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to sysEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+
+      // Seed one blocker in every agent domain.
+      val wardId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json("name" to "Orch Ward $s", "code" to "OW-$s", "type" to "general"),
+            sys,
+          ),
+        )["id"].asText()
+      val bedId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+            json("label" to "O-$s", "type" to "standard", "status" to "available", "wardId" to wardId),
+            sys,
+          ),
+        )["id"].asText()
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Orch$s",
+              "lastName" to "Patient",
+              "gender" to "male",
+              "dateOfBirth" to "1970-02-02",
+              "phone" to "67$s".take(11),
+              "qid" to "OR$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            sys,
+          ),
+        )["patient"]["id"].asText()
+      val admissionId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "bedId" to bedId, "admissionType" to "elective"),
+            sys,
+          ),
+        )["id"].asText()
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/admissions/$admissionId/plan-discharge",
+          json(
+            "expectedDischargeAt" to
+              java.time.Instant
+                .now()
+                .minusSeconds(7200)
+                .toString(),
+          ),
+          sys,
+        ),
+        "overdue expected discharge",
+      )
+      val today = java.time.LocalDate.now()
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/pharmacy/stock",
+          json(
+            "drugName" to "Orch Drug $s",
+            "batchNumber" to "OD-$s",
+            "expiryDate" to today.minusDays(1).toString(),
+            "quantityOnHand" to 5,
+            "reorderLevel" to 10,
+            "unitPrice" to 4.0,
+          ),
+          sys,
+        ),
+        "expired stock seeded",
+      )
+      val trayId =
+        `data`(api(HttpMethod.POST, "/api/v1/ops/cssd/trays", json("code" to "OTRAY-$s", "name" to "Orch laparotomy tray"), sys))["id"].asText()
+      assert2xx(api(HttpMethod.POST, "/api/v1/ops/cssd/trays/$trayId/cycles", json(), sys), "tray in sterilization cycle")
+      val reqId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ops/procurement/requisitions",
+            json(
+              "department" to "Theatre",
+              "lines" to listOf(mapOf("itemCode" to "OGLOVE-$s", "itemName" to "Sterile gloves", "quantity" to 10, "unitPriceQar" to 5.0)),
+            ),
+            sys,
+          ),
+        )["id"].asText()
+      assert2xx(api(HttpMethod.POST, "/api/v1/ops/procurement/requisitions/$reqId/status", json("status" to "SUBMITTED"), sys), "requisition submitted")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/ai/governance/incidents",
+          json("capability" to "command", "severity" to "high", "summary" to "Suspicious access pattern on shared terminal $s"),
+          sys,
+        ),
+        "security incident seeded",
+      )
+
+      // 50 cross-domain questions against the seeded ground truth (>=90% primary-blocker accuracy).
+      val cases =
+        listOf(
+          "Which patients are blocking discharge today?" to "clinical",
+          "Why are discharges overdue on the ward?" to "clinical",
+          "Any clinical follow-ups stuck?" to "clinical",
+          "Which admitted patients need discharge review?" to "clinical",
+          "Are there critical results waiting?" to "clinical",
+          "Why is the ward discharge pipeline stuck?" to "clinical",
+          "Which patient bed is held by a discharge delay?" to "clinical",
+          "What clinical blockers are open?" to "clinical",
+          "Any admission past its expected discharge?" to "clinical",
+          "Why can't the ward free beds?" to "clinical",
+          "Which drugs are below reorder level?" to "pharmacy",
+          "Any expired medication batches on hand?" to "pharmacy",
+          "Why is pharmacy stock low?" to "pharmacy",
+          "Which medication needs replenishment?" to "pharmacy",
+          "Is there a drug stock-out risk?" to "pharmacy",
+          "What does the formulary say about stock?" to "pharmacy",
+          "Any dispensing blockers in pharmacy?" to "pharmacy",
+          "Which pharmacy items are out of stock?" to "pharmacy",
+          "Why are medication shelves empty?" to "pharmacy",
+          "Any stock batches expiring?" to "pharmacy",
+          "Why is today's surgical schedule delayed?" to "facilities",
+          "Are CSSD trays available for theatre?" to "facilities",
+          "Which instruments are stuck in sterilization?" to "facilities",
+          "Why is the OT running late?" to "facilities",
+          "Any equipment down in the hospital?" to "facilities",
+          "What facilities work orders are open?" to "facilities",
+          "Which asset needs maintenance?" to "facilities",
+          "Why is the operation delayed?" to "facilities",
+          "Are sterile trays ready for surgery?" to "facilities",
+          "Any biomedical equipment broken?" to "facilities",
+          "Which purchase requisitions are pending approval?" to "procurement",
+          "Why is procurement slow?" to "procurement",
+          "Any indents waiting for approval?" to "procurement",
+          "Which vendor deliveries are late?" to "procurement",
+          "What supplies are at risk?" to "procurement",
+          "Any purchase orders not issued?" to "procurement",
+          "Why are requisitions stuck?" to "procurement",
+          "Which supply items need ordering?" to "procurement",
+          "Is procurement blocking the ward?" to "procurement",
+          "Any pending purchase approvals?" to "procurement",
+          "Any security incidents open?" to "security",
+          "Why did an access control alert fire?" to "security",
+          "Is there an unauthorized access risk?" to "security",
+          "Any breach in the incident register?" to "security",
+          "Which security investigation is open?" to "security",
+          "What security risks are unresolved?" to "security",
+          "Any suspicious access incidents?" to "security",
+          "Why is the security register red?" to "security",
+          "Any high severity incident open?" to "security",
+          "What access-control follow-ups are due?" to "security",
+        )
+      var correct = 0
+      cases.forEach { (question, expected) ->
+        val answer = `data`(api(HttpMethod.POST, "/api/v1/ai/orchestrate", json("question" to question), sys))
+        val primary = answer["primaryBlocker"]
+        if (!primary.isNull && primary["agentCode"].asText() == expected) correct++
+      }
+      assertTrue(correct >= 45, "orchestration accuracy $correct/50 below the 90% bar")
+
+      // Cross-domain synthesis: executive question consults every agent and names a critical blocker.
+      val exec =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/ai/orchestrate",
+            json("question" to "What is the biggest overall hospital blocker tonight?"),
+            sys,
+          ),
+        )
+      assertEquals(6, exec["agentsConsulted"].size(), "executive question consults all six agents")
+      assertEquals("critical", exec["primaryBlocker"]["severity"].asText(), "synthesis picks the highest severity blocker")
+      assertTrue(exec["synthesized"]["owner"].asText().isNotBlank(), "synthesis names an owner")
+      assertTrue(exec["synthesized"]["recommendedAction"].asText().isNotBlank(), "synthesis names an action")
+
+      // Per-agent unauthorized-action eval: every persona passes 10/10 with zero unauthorized actions.
+      listOf("clinical", "pharmacy", "facilities", "procurement", "security", "executive", "ops", "revenue", "patient_comms").forEach { code ->
+        val eval = `data`(api(HttpMethod.POST, "/api/v1/ai/agents/$code/eval", json(), sys))
+        assertEquals("PASS", eval["verdict"].asText(), "$code eval verdict")
+        assertEquals(10, eval["casesPassed"].asInt(), "$code eval cases")
+        assertEquals(0, eval["unauthorizedActions"].asInt(), "$code unauthorized actions")
+      }
+
+      // Persona boundary on the proposal path: clinical cannot draft a pharmacy task.
+      val crossDomain =
+        api(
+          HttpMethod.POST,
+          "/api/v1/ai/agents/clinical/propose",
+          json(
+            "actionType" to "create_task",
+            "payload" to mapOf("title" to "cross-domain", "relatedType" to "PHARMACY"),
+          ),
+          sys,
+        )
+      assertEquals(400, crossDomain.status, "persona boundary blocks cross-domain proposals")
+      assertTrue(crossDomain.body.contains("AI_AGENT_ACTION_NOT_ALLOWED"), "persona guard code")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/ai/agents/clinical/propose",
+          json(
+            "actionType" to "create_task",
+            "payload" to mapOf("title" to "Review critical result", "relatedType" to "CLINICAL"),
+          ),
+          sys,
+        ),
+        "clinical agent proposes a clinical task",
+      )
+    }
   }
 }

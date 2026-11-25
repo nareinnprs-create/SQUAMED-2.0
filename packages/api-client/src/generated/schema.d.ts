@@ -4372,6 +4372,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cx/intl-cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["intlCases"];
+        put?: never;
+        post: operations["openIntlCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cx/intl-cases/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["closeIntlCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cx/interactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["interactions"];
+        put?: never;
+        post: operations["logInteraction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cx/interactions/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["closeInteraction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cx/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["feedback"];
+        put?: never;
+        post: operations["recordFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cx/feedback/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resolveFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cx/feedback/{id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["acknowledgeFeedback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/consents": {
         parameters: {
             query?: never;
@@ -5268,6 +5380,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/allied/referrals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["referrals_1"];
+        put?: never;
+        post: operations["refer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/allied/referrals/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/allied/referrals/{id}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["addSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/allied/referrals/{id}/sessions/{sessionId}/sign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["signSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/allied/referrals/{id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["schedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/allied/referrals/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["complete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/voice/commands": {
         parameters: {
             query?: never;
@@ -5825,7 +6033,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["complete"];
+        patch: operations["complete_1"];
         trace?: never;
     };
     "/api/v1/reception/visits/{id}/check-in": {
@@ -5905,7 +6113,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["start"];
+        patch: operations["start_1"];
         trace?: never;
     };
     "/api/v1/queue/entries/{queueType}/{tokenNumber}/skip": {
@@ -5969,7 +6177,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["complete_1"];
+        patch: operations["complete_2"];
         trace?: never;
     };
     "/api/v1/queue/entries/{queueType}/{tokenNumber}/call": {
@@ -8388,6 +8596,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cx/feedback/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["feedbackSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/consents/{id}": {
         parameters: {
             query?: never;
@@ -8700,6 +8924,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["appointments_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/allied/referrals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["detail_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -14161,6 +14401,36 @@ export interface components {
             tokens: components["schemas"]["QueueEntryView"][];
             visits: components["schemas"]["VisitDto"][];
         };
+        IntlCaseRequest: {
+            /** Format: uuid */
+            patientId: string;
+            country: string;
+            language: string;
+            interpreterNeeded: boolean;
+            /** Format: uuid */
+            coordinatorId?: string;
+            notes?: string;
+        };
+        ContactInteractionRequest: {
+            /** Format: uuid */
+            patientId?: string;
+            channel: string;
+            direction: string;
+            subject: string;
+            /** Format: uuid */
+            agentId?: string;
+        };
+        CxResolutionRequest: {
+            resolution: string;
+        };
+        FeedbackRequest: {
+            /** Format: uuid */
+            patientId: string;
+            /** Format: int32 */
+            score: number;
+            category: string;
+            comment?: string;
+        };
         ChannelOptInDto: {
             channel?: string;
             optedIn?: boolean;
@@ -15468,6 +15738,37 @@ export interface components {
             evaluatedBy?: string;
             /** Format: date-time */
             evaluatedAt?: string;
+        };
+        TherapyReferralRequest: {
+            /** Format: uuid */
+            patientId: string;
+            discipline: string;
+            reason: string;
+            /** Format: uuid */
+            therapistId?: string;
+            /** Format: uuid */
+            carePlanId?: string;
+            /** Format: int32 */
+            sessionsPlanned: number;
+        };
+        TherapySessionRequest: {
+            /** Format: date-time */
+            sessionAt: string;
+            /** Format: int32 */
+            durationMinutes: number;
+            notes?: string;
+            outcome?: string;
+        };
+        TherapyScheduleRequest: {
+            /** Format: date-time */
+            scheduledAt: string;
+            /** Format: uuid */
+            therapistId: string;
+            /** Format: uuid */
+            appointmentId?: string;
+        };
+        TherapyCompleteRequest: {
+            outcome: string;
         };
         VoiceCommandRequest: {
             transcript: string;
@@ -18040,6 +18341,80 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseReferralDetailView: {
+            data?: components["schemas"]["ReferralDetailView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ReferralDetailView: {
+            referral: components["schemas"]["TherapyReferral"];
+            sessions: components["schemas"]["TherapySession"][];
+        };
+        TherapyReferral: {
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            patientId: string;
+            discipline: string;
+            reason: string;
+            status: string;
+            /** Format: uuid */
+            therapistId?: string;
+            /** Format: date-time */
+            scheduledAt?: string;
+            /** Format: uuid */
+            appointmentId?: string;
+            /** Format: uuid */
+            carePlanId?: string;
+            /** Format: int32 */
+            sessionsPlanned: number;
+            outcome?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: uuid */
+            id?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: uuid */
+            createdBy?: string;
+            /** Format: uuid */
+            updatedBy?: string;
+            /** Format: int64 */
+            version: number;
+        };
+        TherapySession: {
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            referralId: string;
+            /** Format: date-time */
+            sessionAt: string;
+            /** Format: int32 */
+            durationMinutes: number;
+            notes?: string;
+            outcome?: string;
+            status: string;
+            /** Format: uuid */
+            signedBy?: string;
+            /** Format: date-time */
+            signedAt?: string;
+            /** Format: uuid */
+            id?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: uuid */
+            createdBy?: string;
+            /** Format: uuid */
+            updatedBy?: string;
+            /** Format: int64 */
+            version: number;
         };
         ApiResponseListVoiceCommandView: {
             data?: components["schemas"]["VoiceCommandView"][];
@@ -27546,6 +27921,234 @@ export interface operations {
             };
         };
     };
+    intlCases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    openIntlCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntlCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    closeIntlCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    interactions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    logInteraction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactInteractionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    closeInteraction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CxResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    feedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    recordFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    resolveFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CxResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    acknowledgeFeedback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     listForPatient: {
         parameters: {
             query: {
@@ -29574,6 +30177,173 @@ export interface operations {
             };
         };
     };
+    referrals_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    refer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TherapyReferralRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    addSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TherapySessionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    signSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    schedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TherapyScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    complete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TherapyCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     commands: {
         parameters: {
             query?: never;
@@ -30579,7 +31349,7 @@ export interface operations {
             };
         };
     };
-    complete: {
+    complete_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -30693,7 +31463,7 @@ export interface operations {
             };
         };
     };
-    start: {
+    start_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -30789,7 +31559,7 @@ export interface operations {
             };
         };
     };
-    complete_1: {
+    complete_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -34204,6 +34974,26 @@ export interface operations {
             };
         };
     };
+    feedbackSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     getConsent: {
         parameters: {
             query?: never;
@@ -34619,6 +35409,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseAppointmentStats"];
+                };
+            };
+        };
+    };
+    detail_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReferralDetailView"];
                 };
             };
         };
@@ -35129,4 +35941,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 73647fde964a9ae3f1197a77a110fba0e1a6417c94a4a3d73f09eefd0be4391f
+// openapi snapshot sha256: d73d7f38c554596a3b4090bb02b40eb1ee5033fb30fb8b06bed000ab9889ecc4

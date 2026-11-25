@@ -90,7 +90,7 @@ class AnalyticsService {
     val avgWait =
       nullableDouble(
         "select avg(q.estimatedWaitMinutes) from QueueEntry q where q.queueDate = :qd and q.estimatedWaitMinutes is not null and (:hid is null or q.hospitalId = :hid)",
-        "qd" to LocalDate.now(utc),
+        "qd" to LocalDate.now(),
         "hid" to hospitalId,
       )
     val labOrdersToday =
@@ -262,7 +262,8 @@ class AnalyticsService {
   }
 
   fun queue(hospitalId: UUID?): QueueStats {
-    val today = LocalDate.now(utc)
+    // Queue entries are written with the server-local date; analytics must read the same basis.
+    val today = LocalDate.now()
     val waiting =
       count(
         "select count(q) from QueueEntry q where q.status in ('waiting', 'called') and (:hid is null or q.hospitalId = :hid)",

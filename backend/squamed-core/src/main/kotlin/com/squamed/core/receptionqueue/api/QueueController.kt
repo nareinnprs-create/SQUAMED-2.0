@@ -54,7 +54,7 @@ class QueueController(
   fun board(
     @RequestParam(name = "queueType") queueType: String,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<List<BoardEntry>> = ApiResponse.ok(queueService.board(queueType, principal.hospitalId))
+  ): ApiResponse<List<BoardEntry>> = ApiResponse.ok(queueService.board(queueType, tenantResolver.pinOrDefault(principal, null)))
 
   // 01.06 TV display app: whole-hospital board grouped per counter for the waiting-room screen.
   @GetMapping("/display-board")
@@ -62,7 +62,7 @@ class QueueController(
   @Transactional(readOnly = true)
   fun displayBoard(
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<DisplayBoardView> = ApiResponse.ok(queueService.displayBoard(principal.hospitalId))
+  ): ApiResponse<DisplayBoardView> = ApiResponse.ok(queueService.displayBoard(tenantResolver.pinOrDefault(principal, null)))
 
   @PostMapping("/entries/call-next")
   @RequiresPermission("queue:manage:queue")
@@ -71,7 +71,7 @@ class QueueController(
     @RequestBody dto: QueueTypeDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<BoardEntry> =
-    ApiResponse.ok(queueService.callNext(dto.queueType ?: throw IllegalArgumentException("QUEUE_TYPE_REQUIRED"), principal.hospitalId))
+    ApiResponse.ok(queueService.callNext(dto.queueType ?: throw IllegalArgumentException("QUEUE_TYPE_REQUIRED"), tenantResolver.pinOrDefault(principal, null)))
 
   // 01.02: transfer moves a waiting entry to another queue; it gets a fresh token from the target sequence.
   @PostMapping("/entries/{queueType}/{tokenNumber}/transfer")
@@ -88,7 +88,7 @@ class QueueController(
         queueType,
         tokenNumber,
         dto.queueType ?: throw IllegalArgumentException("QUEUE_TYPE_REQUIRED"),
-        principal.hospitalId,
+        tenantResolver.pinOrDefault(principal, null),
       ),
     )
 
@@ -100,7 +100,7 @@ class QueueController(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.bump(queueType, tokenNumber, principal.hospitalId))
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.bump(queueType, tokenNumber, tenantResolver.pinOrDefault(principal, null)))
 
   // 01.09 emergency fast-path: walk-in triage-lite tag boosts the live queue entry
   // (red -> emergency + queue.bumped + queue.urgent_arrival, yellow -> urgent, green -> no change).
@@ -118,7 +118,7 @@ class QueueController(
         queueType,
         tokenNumber,
         dto.tag ?: throw IllegalArgumentException("TRIAGE_TAG_REQUIRED"),
-        principal.hospitalId,
+        tenantResolver.pinOrDefault(principal, null),
       ),
     )
 
@@ -130,7 +130,7 @@ class QueueController(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.getEntry(queueType, tokenNumber, principal.hospitalId))
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.getEntry(queueType, tokenNumber, tenantResolver.pinOrDefault(principal, null)))
 
   @PatchMapping("/entries/{queueType}/{tokenNumber}/call")
   @RequiresPermission("queue:manage:queue")
@@ -139,7 +139,7 @@ class QueueController(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.call(queueType, tokenNumber, principal.hospitalId))
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.call(queueType, tokenNumber, tenantResolver.pinOrDefault(principal, null)))
 
   @PatchMapping("/entries/{queueType}/{tokenNumber}/start")
   @RequiresPermission("queue:manage:queue")
@@ -149,7 +149,7 @@ class QueueController(
     @PathVariable tokenNumber: String,
     @RequestBody dto: QueueStartDto,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.start(queueType, tokenNumber, dto.servedBy, principal.hospitalId))
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.start(queueType, tokenNumber, dto.servedBy, tenantResolver.pinOrDefault(principal, null)))
 
   @PatchMapping("/entries/{queueType}/{tokenNumber}/complete")
   @RequiresPermission("queue:manage:queue")
@@ -158,7 +158,7 @@ class QueueController(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.complete(queueType, tokenNumber, principal.hospitalId))
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.complete(queueType, tokenNumber, tenantResolver.pinOrDefault(principal, null)))
 
   @PatchMapping("/entries/{queueType}/{tokenNumber}/skip")
   @RequiresPermission("queue:manage:queue")
@@ -167,7 +167,7 @@ class QueueController(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.skip(queueType, tokenNumber, principal.hospitalId))
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.skip(queueType, tokenNumber, tenantResolver.pinOrDefault(principal, null)))
 
   @PatchMapping("/entries/{queueType}/{tokenNumber}/postpone")
   @RequiresPermission("queue:manage:queue")
@@ -176,7 +176,7 @@ class QueueController(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.postpone(queueType, tokenNumber, principal.hospitalId))
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.postpone(queueType, tokenNumber, tenantResolver.pinOrDefault(principal, null)))
 
   @PatchMapping("/entries/{queueType}/{tokenNumber}/no-show")
   @RequiresPermission("queue:manage:queue")
@@ -185,7 +185,7 @@ class QueueController(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.noShow(queueType, tokenNumber, principal.hospitalId))
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.noShow(queueType, tokenNumber, tenantResolver.pinOrDefault(principal, null)))
 
   @GetMapping("/entries/{queueType}/{tokenNumber}")
   @RequiresPermission("queue:read:queue")
@@ -194,7 +194,7 @@ class QueueController(
     @PathVariable queueType: String,
     @PathVariable tokenNumber: String,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.getEntry(queueType, tokenNumber, principal.hospitalId))
+  ): ApiResponse<QueueEntryView> = ApiResponse.ok(queueService.getEntry(queueType, tokenNumber, tenantResolver.pinOrDefault(principal, null)))
 
   @GetMapping("/service-points")
   @RequiresPermission("queue:read:queue")
@@ -202,7 +202,7 @@ class QueueController(
   fun listServicePoints(
     @RequestParam(name = "queueType", required = false) queueType: String?,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<List<ServicePointDto>> = ApiResponse.ok(queueService.listServicePoints(queueType, principal.hospitalId))
+  ): ApiResponse<List<ServicePointDto>> = ApiResponse.ok(queueService.listServicePoints(queueType, tenantResolver.pinOrDefault(principal, null)))
 
   @PostMapping("/service-points")
   @ResponseStatus(HttpStatus.CREATED)
@@ -229,7 +229,7 @@ class QueueController(
   fun statistics(
     @RequestParam(name = "queueType") queueType: String,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<QueueStatsView> = ApiResponse.ok(queueService.statistics(queueType, principal.hospitalId))
+  ): ApiResponse<QueueStatsView> = ApiResponse.ok(queueService.statistics(queueType, tenantResolver.pinOrDefault(principal, null)))
 
   // 01.07 voice announcements: zones map audio output to displays/counters; rules carry repeat + languages.
   @GetMapping("/zones")
@@ -237,7 +237,7 @@ class QueueController(
   @Transactional(readOnly = true)
   fun listZones(
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<List<DisplayZoneDto>> = ApiResponse.ok(announcementService.listZones(principal.hospitalId))
+  ): ApiResponse<List<DisplayZoneDto>> = ApiResponse.ok(announcementService.listZones(tenantResolver.pinOrDefault(principal, null)))
 
   @PostMapping("/zones")
   @ResponseStatus(HttpStatus.CREATED)
@@ -261,7 +261,7 @@ class QueueController(
   @Transactional(readOnly = true)
   fun listRules(
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<List<AnnouncementRuleDto>> = ApiResponse.ok(announcementService.listRules(principal.hospitalId))
+  ): ApiResponse<List<AnnouncementRuleDto>> = ApiResponse.ok(announcementService.listRules(tenantResolver.pinOrDefault(principal, null)))
 
   @PostMapping("/announcement-rules")
   @ResponseStatus(HttpStatus.CREATED)

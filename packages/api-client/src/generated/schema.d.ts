@@ -2836,6 +2836,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lab/pathology/specimens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["specimens"];
+        put?: never;
+        post: operations["accessionSpecimen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/pathology/specimens/{id}/slides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["addSlide"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/pathology/specimens/{id}/slides/{slideId}/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["markSlideReady"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/pathology/specimens/{id}/sign-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["signOut"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/pathology/specimens/{id}/gross": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["gross"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lab/orders": {
         parameters: {
             query?: never;
@@ -2996,6 +3076,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lab/micro/cultures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["cultures"];
+        put?: never;
+        post: operations["createCulture"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/micro/cultures/{id}/identify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["identifyOrganism"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/micro/cultures/{id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["finalizeCulture"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/micro/cultures/{id}/ast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["recordAst"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lab/critical-results/{id}/ack": {
         parameters: {
             query?: never;
@@ -3006,6 +3150,102 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["acknowledgeCriticalResult"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kitchen/trays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["trays_1"];
+        put?: never;
+        post: operations["prepareTray"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kitchen/trays/{id}/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["deliverTray"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kitchen/production/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["startProduction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kitchen/production/{id}/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["markProductionReady"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kitchen/production/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["generateProductionPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kitchen/menu-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["menuItems"];
+        put?: never;
+        post: operations["createMenuItem"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4014,6 +4254,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["screenUnit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blood-bank/units/{id}/nat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["natScreenings"];
+        put?: never;
+        post: operations["recordNat"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6740,6 +6996,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lab/pathology/specimens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["specimenDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lab/orders/{id}": {
         parameters: {
             query?: never;
@@ -6788,6 +7060,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lab/micro/cultures/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["cultureDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lab/micro/antibiogram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["antibiogram"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lab/critical-results": {
         parameters: {
             query?: never;
@@ -6812,6 +7116,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listCriticalResultAcks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kitchen/production": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["productionPlan"];
         put?: never;
         post?: never;
         delete?: never;
@@ -11752,6 +12072,22 @@ export interface components {
             /** Format: date-time */
             runAt?: string;
         };
+        PathSpecimenRequest: {
+            /** Format: uuid */
+            patientId: string;
+            specimenType: string;
+            site?: string;
+        };
+        SlideRequest: {
+            stain: string;
+        };
+        PathSignOutRequest: {
+            diagnosisCode: string;
+            diagnosisText: string;
+        };
+        GrossRequest: {
+            description: string;
+        };
         CreateLabOrderDto: {
             /** Format: uuid */
             patientId: string;
@@ -11885,6 +12221,26 @@ export interface components {
             /** Format: uuid */
             collectedBy?: string;
         };
+        MicroCultureRequest: {
+            /** Format: uuid */
+            labOrderId: string;
+            specimenType: string;
+            notes?: string;
+        };
+        OrganismRequest: {
+            organismCode: string;
+            organismName: string;
+        };
+        AstRequest: {
+            panel: string;
+            results: components["schemas"]["AstResultDto"][];
+        };
+        AstResultDto: {
+            antibioticCode: string;
+            antibioticName: string;
+            result: string;
+            mic?: number;
+        };
         AckCriticalResultDto: {
             note?: string;
         };
@@ -11924,6 +12280,24 @@ export interface components {
             ackedAt?: string;
             /** Format: date-time */
             createdAt?: string;
+        };
+        TrayRequest: {
+            /** Format: uuid */
+            dietOrderId: string;
+            /** Format: date */
+            productionDate: string;
+            meal: string;
+        };
+        ProductionPlanRequest: {
+            /** Format: date */
+            productionDate: string;
+            meal: string;
+        };
+        MenuItemRequest: {
+            dietType: string;
+            meal: string;
+            name: string;
+            allergens?: string;
         };
         KioskCheckInRequest: {
             identifierType: string;
@@ -13419,6 +13793,11 @@ export interface components {
         UnitScreeningDto: {
             ttiResult: string;
             natResult?: string;
+        };
+        NatScreeningDto: {
+            assay: string;
+            result: string;
+            notes?: string;
         };
         TransfusionCreateDto: {
             /** Format: uuid */
@@ -23323,6 +23702,151 @@ export interface operations {
             };
         };
     };
+    specimens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    accessionSpecimen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PathSpecimenRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    addSlide: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SlideRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    markSlideReady: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                slideId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    signOut: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PathSignOutRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    gross: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrossRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     listOrders: {
         parameters: {
             query?: {
@@ -23612,6 +24136,126 @@ export interface operations {
             };
         };
     };
+    cultures: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    createCulture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MicroCultureRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    identifyOrganism: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganismRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    finalizeCulture: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    recordAst: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AstRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     acknowledgeCriticalResult: {
         parameters: {
             query?: never;
@@ -23634,6 +24278,189 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseCriticalResultView"];
+                };
+            };
+        };
+    };
+    trays_1: {
+        parameters: {
+            query: {
+                productionDate: string;
+                meal: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    prepareTray: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrayRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    deliverTray: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    startProduction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    markProductionReady: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    generateProductionPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductionPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    menuItems: {
+        parameters: {
+            query?: {
+                meal?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    createMenuItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MenuItemRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
                 };
             };
         };
@@ -25953,6 +26780,54 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseUnitView"];
+                };
+            };
+        };
+    };
+    natScreenings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    recordNat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NatScreeningDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
                 };
             };
         };
@@ -30669,6 +31544,28 @@ export interface operations {
             };
         };
     };
+    specimenDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     getOrder: {
         parameters: {
             query?: never;
@@ -30735,6 +31632,52 @@ export interface operations {
             };
         };
     };
+    cultureDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    antibiogram: {
+        parameters: {
+            query: {
+                organismCode: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     listCriticalResults: {
         parameters: {
             query?: {
@@ -30775,6 +31718,29 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListCriticalResultAckView"];
+                };
+            };
+        };
+    };
+    productionPlan: {
+        parameters: {
+            query: {
+                productionDate: string;
+                meal: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
                 };
             };
         };
@@ -32716,4 +33682,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 5840710fadb29d529f5c09cd4452c115f6a812a11ddfb09185b08840c2ee9c33
+// openapi snapshot sha256: 46593156c55fbad4cd9ef0d48fbebd0dd2d09d8baa6f459830ff8f967dfd1b34

@@ -6,6 +6,7 @@ import com.squamed.core.bloodbank.domain.BloodIssue
 import com.squamed.core.bloodbank.domain.BloodReservation
 import com.squamed.core.bloodbank.domain.BloodUnit
 import com.squamed.core.bloodbank.domain.Crossmatch
+import com.squamed.core.bloodbank.domain.NatScreening
 import com.squamed.core.bloodbank.domain.TransfusionReaction
 import com.squamed.core.bloodbank.domain.TransfusionRecord
 import org.springframework.data.jpa.repository.JpaRepository
@@ -120,4 +121,16 @@ interface TransfusionRecordRepository : JpaRepository<TransfusionRecord, UUID> {
 
 interface TransfusionReactionRepository : JpaRepository<TransfusionReaction, UUID> {
   fun findByTransfusionRecordId(transfusionRecordId: UUID): List<TransfusionReaction>
+}
+
+interface NatScreeningRepository : JpaRepository<NatScreening, UUID> {
+  fun findByUnitIdAndAssay(
+    unitId: UUID,
+    assay: String,
+  ): NatScreening?
+
+  fun findByHospitalIdAndUnitIdOrderByTestedAtDesc(
+    hospitalId: UUID,
+    unitId: UUID,
+  ): List<NatScreening>
 }

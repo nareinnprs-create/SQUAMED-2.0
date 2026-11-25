@@ -32,4 +32,16 @@ interface PaymentRepository : JpaRepository<Payment, UUID> {
     @Param("from") from: Instant,
     @Param("to") to: Instant,
   ): List<Payment>
+
+  // 07.04 GL: every payment in a window, hospital via the invoice.
+  @Query(
+    "select p from Payment p, com.squamed.core.billing.domain.Invoice i " +
+      "where i.id = p.invoiceId and (:hid is null or i.hospitalId = :hid) " +
+      "and p.receivedAt >= :from and p.receivedAt < :to",
+  )
+  fun findAllForPeriod(
+    @Param("hid") hospitalId: UUID?,
+    @Param("from") from: Instant,
+    @Param("to") to: Instant,
+  ): List<Payment>
 }

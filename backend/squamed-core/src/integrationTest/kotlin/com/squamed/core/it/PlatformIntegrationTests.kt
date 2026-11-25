@@ -17478,5 +17478,290 @@ class PlatformIntegrationTests {
         "clinical agent proposes a clinical task",
       )
     }
+
+    @Test
+    fun fullFinancialsCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Finance $s", "code" to "FI-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+      val sysEmail = "finance.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to sysEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Finance",
+            "lastName" to "Admin$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register finance admin",
+      )
+      val sys = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to sysEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+      val today = java.time.LocalDate.now()
+      val period = today.toString().substring(0, 7)
+      val periodStart = java.time.LocalDate.parse("$period-01")
+
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/tax-profile",
+          json("hospitalId" to hospitalId, "gstin" to "27AABCS1429B1Z1", "stateCode" to "27", "eInvoiceThresholdQar" to 1000.0),
+          sys,
+        ),
+        "GST profile",
+      )
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Fin$s",
+              "lastName" to "Patient",
+              "gender" to "female",
+              "dateOfBirth" to "1982-03-03",
+              "phone" to "68$s".take(11),
+              "qid" to "FI$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            sys,
+          ),
+        )["patient"]["id"].asText()
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/charges",
+          json(
+            "patientId" to patientId,
+            "hospitalId" to hospitalId,
+            "chargeCode" to "FIN-$s",
+            "chargeName" to "Finance procedure",
+            "quantity" to 1,
+            "unitPriceQar" to 1000.0,
+            "reason" to "finance coverage",
+            "taxCategory" to "GOODS_GST_5",
+            "hsnCode" to "3004",
+          ),
+          sys,
+        ),
+        "taxable charge",
+      )
+      val invoice = `data`(api(HttpMethod.POST, "/api/v1/billing/invoices", json("patientId" to patientId), sys))["invoice"]
+      val invoiceId = invoice["id"].asText()
+      assertEquals(1000.0, invoice["subtotalQar"].asDouble(), 1e-9, "invoice subtotal")
+      assertEquals(50.0, invoice["taxQar"].asDouble(), 1e-9, "5% GST")
+      assertEquals(1050.0, invoice["totalQar"].asDouble(), 1e-9, "invoice total")
+      val payment =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/invoices/$invoiceId/payments",
+            json("method" to "cash", "amountQar" to 1050.0, "reference" to "CASH-$s"),
+            sys,
+          ),
+        )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/payments/${payment["id"].asText()}/refund",
+          json("amountQar" to 50.0, "reason" to "price correction"),
+          sys,
+        ),
+        "refund issued",
+      )
+
+      // GL chart + operational postings.
+      assertEquals(13, `data`(api(HttpMethod.POST, "/api/v1/finance/accounts/seed", json(), sys)).size(), "standard chart seeded")
+      assertEquals(13, `data`(api(HttpMethod.GET, "/api/v1/finance/accounts", token = sys)).size(), "chart is idempotent")
+      val ap =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/finance/ap/invoices",
+            json(
+              "vendorName" to "Vendor $s",
+              "number" to "AP-$s",
+              "invoiceDate" to today.toString(),
+              "dueDate" to today.plusDays(30).toString(),
+              "amountQar" to 300.0,
+              "costCentre" to "THEATRE",
+            ),
+            sys,
+          ),
+        )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/finance/ap/invoices/${ap["id"].asText()}/pay",
+          json("amountQar" to 100.0, "paidOn" to today.toString(), "method" to "bank"),
+          sys,
+        ),
+        "AP part payment",
+      )
+      assertEquals(
+        400,
+        api(
+          HttpMethod.POST,
+          "/api/v1/finance/ap/invoices",
+          json(
+            "vendorName" to "V",
+            "number" to "AP-$s",
+            "invoiceDate" to today.toString(),
+            "amountQar" to 1.0,
+          ),
+          sys,
+        ).status,
+        "AP number unique",
+      )
+
+      val posted = `data`(api(HttpMethod.POST, "/api/v1/finance/gl/post-operations", json("period" to period), sys))
+      assertEquals(5, posted["posted"].asInt(), "invoice + payment + refund + AP invoice + AP payment")
+      assertEquals(
+        0,
+        `data`(api(HttpMethod.POST, "/api/v1/finance/gl/post-operations", json("period" to period), sys))["posted"].asInt(),
+        "posting is idempotent",
+      )
+
+      val trial = `data`(api(HttpMethod.GET, "/api/v1/finance/reports/trial-balance?period=$period", token = sys))
+      assertEquals(true, trial["balanced"].asBoolean(), "trial balance balances")
+      assertEquals(trial["totalDebit"].asDouble(), trial["totalCredit"].asDouble(), 1e-9, "debits equal credits")
+      val arRow = trial["rows"].first { it["accountCode"].asText() == "1100" }
+      assertEquals(50.0, arRow["balance"].asDouble(), 1e-9, "AR carries the refunded 50")
+      val cashRow = trial["rows"].first { it["accountCode"].asText() == "1000" }
+      assertEquals(900.0, cashRow["balance"].asDouble(), 1e-9, "cash = 1050 - 50 - 100")
+
+      // Cost centre + budget vs actual.
+      assertEquals(
+        "THEATRE",
+        `data`(api(HttpMethod.POST, "/api/v1/finance/cost-centres", json("code" to "theatre", "name" to "Theatre"), sys))["code"].asText(),
+        "cost centre",
+      )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/finance/budgets",
+          json(
+            "accountCode" to "5100",
+            "period" to period,
+            "amountQar" to 500.0,
+            "costCentre" to "THEATRE",
+          ),
+          sys,
+        ),
+        "budget upsert",
+      )
+      val budget = `data`(api(HttpMethod.GET, "/api/v1/finance/budgets/vs-actual?period=$period", token = sys))
+      val suppliesRow = budget["rows"].first { it["accountCode"].asText() == "5100" }
+      assertEquals(300.0, suppliesRow["actual"].asDouble(), 1e-9, "supplies actual")
+      assertEquals(200.0, suppliesRow["variance"].asDouble(), 1e-9, "under budget")
+
+      // Fixed asset + depreciation.
+      val asset =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/finance/assets",
+            json(
+              "code" to "CT-$s",
+              "name" to "CT scanner",
+              "category" to "imaging",
+              "costQar" to 12000.0,
+              "usefulLifeMonths" to 12,
+              "acquiredOn" to periodStart.toString(),
+            ),
+            sys,
+          ),
+        )
+      assertEquals(0.0, asset["accumulatedDepreciation"].asDouble(), 1e-9, "new asset not depreciated")
+      val dep = `data`(api(HttpMethod.POST, "/api/v1/finance/depreciation/$period", json(), sys))
+      assertEquals(1000.0, dep["totalQar"].asDouble(), 1e-9, "monthly depreciation")
+      val assets = `data`(api(HttpMethod.GET, "/api/v1/finance/assets", token = sys))
+      assertEquals(1000.0, assets.first { it["id"].asText() == asset["id"].asText() }["accumulatedDepreciation"].asDouble(), 1e-9, "accumulated depreciation")
+      val pnl = `data`(api(HttpMethod.GET, "/api/v1/finance/reports/pnl?period=$period", token = sys))
+      assertEquals(1000.0, pnl["revenue"].asDouble(), 1e-9, "revenue")
+      assertEquals(1300.0, pnl["expense"].asDouble(), 1e-9, "supplies + depreciation")
+      assertEquals(-300.0, pnl["net"].asDouble(), 1e-9, "net loss")
+      assertEquals(
+        true,
+        `data`(api(HttpMethod.GET, "/api/v1/finance/reports/balance-sheet?period=$period", token = sys))["balanced"].asBoolean(),
+        "balance sheet balances",
+      )
+      val aging = `data`(api(HttpMethod.GET, "/api/v1/finance/reports/ar-aging", token = sys))
+      assertEquals(50.0, aging["totalDue"].asDouble(), 1e-9, "AR aging carries the refunded balance")
+      assertEquals(1, aging["buckets"]["current"].asInt(), "current bucket")
+      val forecast = `data`(api(HttpMethod.GET, "/api/v1/finance/reports/forecast?period=$period", token = sys))
+      assertEquals(3, forecast["months"].size(), "three forecast months")
+      assertEquals(1000.0, forecast["months"][0]["revenue"].asDouble(), 1e-9, "flat run-rate revenue")
+
+      // GST pack.
+      val gst = `data`(api(HttpMethod.POST, "/api/v1/finance/gst/$period/generate", json(), sys))
+      assertEquals(1000.0, gst["taxableValue"].asDouble(), 1e-9, "taxable value")
+      assertEquals(25.0, gst["cgstQar"].asDouble(), 1e-9, "CGST half")
+      assertEquals(25.0, gst["sgstQar"].asDouble(), 1e-9, "SGST half")
+      assertEquals("DRAFT", gst["status"].asText(), "return draft")
+      assertEquals("FILED", `data`(api(HttpMethod.POST, "/api/v1/finance/gst/$period/file", json(), sys))["status"].asText(), "return filed")
+      assertEquals(409, api(HttpMethod.POST, "/api/v1/finance/gst/$period/file", json(), sys).status, "filing is once")
+
+      // Bank reconciliation: the 1050 payment matches, the 999 line stays open.
+      val bank =
+        `data`(api(HttpMethod.POST, "/api/v1/finance/bank/accounts", json("code" to "MAIN", "name" to "Main bank", "openingBalance" to 0.0), sys))
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/finance/bank/accounts/${bank["id"].asText()}/statement-lines",
+          json(
+            "statementDate" to today.toString(),
+            "amountQar" to 1050.0,
+            "reference" to "CASH-$s",
+          ),
+          sys,
+        ),
+        "statement line",
+      )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/finance/bank/accounts/${bank["id"].asText()}/statement-lines",
+          json(
+            "statementDate" to today.toString(),
+            "amountQar" to 999.0,
+          ),
+          sys,
+        ),
+        "unmatched line",
+      )
+      val matched = `data`(api(HttpMethod.POST, "/api/v1/finance/bank/auto-match", json(), sys))
+      assertEquals(1, matched["matched"].asInt(), "one statement line matched")
+      assertEquals(1, matched["remaining"].asInt(), "one line stays unmatched")
+
+      // Month close ties the trial balance to the operational ledger.
+      val close = `data`(api(HttpMethod.POST, "/api/v1/finance/close/$period", json(), sys))
+      assertEquals("CLOSED", close["status"].asText(), "period closed")
+      assertEquals(0.0, close["varianceQar"].asDouble(), 1e-9, "no close variance")
+      assertEquals(409, api(HttpMethod.POST, "/api/v1/finance/close/$period", json(), sys).status, "close is once")
+      assertEquals(400, api(HttpMethod.GET, "/api/v1/finance/reports/trial-balance?period=2026-13", token = sys).status, "period format validated")
+
+      // Cross-tenant: the primary hospital has no postings.
+      assertEquals(
+        0.0,
+        `data`(api(HttpMethod.GET, "/api/v1/finance/reports/trial-balance?period=$period", token = admin))["totalDebit"].asDouble(),
+        1e-9,
+        "cross-tenant GL isolated",
+      )
+    }
   }
 }

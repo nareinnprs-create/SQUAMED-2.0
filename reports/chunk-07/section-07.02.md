@@ -1,6 +1,6 @@
 # Section 07.02 — Voice operating interface (chunk 7)
 
-**Verdict: SECTION REVIEW → local gates green (CI run pending).** Governed voice commands with multilingual intent parsing, screen-aware context, low-risk voice approval and hard-excluded high-risk categories.
+**Verdict: COMPLETE → GATE-12 PASS (partial: 07.11 voice slice).** Gate-run assessment of the CURRENT tree @ PR #131. CI evidence: **run 45646897017 — all 7 gates green**.
 
 ## 1. Scope
 Per `chunk-07-full-depth.md` item 2 / `20-CHUNK7-SECTIONS.md` 07.02: governed voice task execution (approve-by-voice for low-risk only; high-risk categories hard-excluded → approval UI), multilingual intent layer, screen-aware context, human escalation; removes the dictation-only limitation from chunk 5.
@@ -24,10 +24,10 @@ Per `chunk-07-full-depth.md` item 2 / `20-CHUNK7-SECTIONS.md` 07.02: governed vo
 | Gate | Result | Evidence |
 |---|---|---|
 | 1 Functional completeness | PASS | `voiceOperatingInterfaceCoverage` green |
-| 2 Zero-stub | PASS | new files grep clean; CI |
-| 3 Types | PASS | `compileKotlin` + `compileIntegrationTestKotlin` |
-| 4 Lint + format | PASS | `ktlintCheck` clean |
-| 5 Tests | PASS (local) | full chain BUILD SUCCESSFUL 11m45s — 105 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.82% (>=0.80) |
+| 2 Zero-stub | PASS | CI run 45646897017 |
+| 3 Types | PASS | CI run 45646897017 |
+| 4 Lint + format | PASS | CI run 45646897017 |
+| 5 Tests | PASS | CI run 45646897017; 105 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.82% (>=0.80) |
 | 6 Accessibility | PASS | No UI change (voice is a client channel) |
 | 7 Design system | PASS | No UI change |
 | 8 Contracts | PASS | snapshot regenerated from live `/api-docs`; codegen stamped `73647fde…` |

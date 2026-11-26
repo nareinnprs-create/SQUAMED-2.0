@@ -14739,8 +14739,9 @@ class PlatformIntegrationTests {
           ),
         )
       val admissionId = admission["id"].asText()
-      val draftDischarge =
-        `data`(api(HttpMethod.POST, "/api/v1/ai/command", json("query" to "prepare discharge $admissionId"), govAdmin))["draft"]
+      val dischargeCmd = api(HttpMethod.POST, "/api/v1/ai/command", json("query" to "prepare discharge $admissionId"), govAdmin)
+      assert2xx(dischargeCmd, "ai command prepare discharge")
+      val draftDischarge = `data`(dischargeCmd)["draft"]
       assertEquals("plan_discharge", draftDischarge["actionType"].asText(), "discharge draft type")
       val doctorApprove = api(HttpMethod.POST, "/api/v1/ai/actions/${draftDischarge["id"].asText()}/approve", json(), doctor)
       assertEquals(403, doctorApprove.status, "approval needs the underlying permission: ${doctorApprove.body.take(200)}")

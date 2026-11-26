@@ -64,6 +64,8 @@ dependencies {
 
     implementation("org.postgresql:postgresql")
     implementation("org.springframework.kafka:spring-kafka")
+    // 06.06 BI: ClickHouse JDBC (HTTP interface)
+    implementation("com.clickhouse:clickhouse-jdbc:0.6.5")
 
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")

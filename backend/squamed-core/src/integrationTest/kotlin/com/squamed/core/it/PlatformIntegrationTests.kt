@@ -18678,4 +18678,166 @@ class PlatformIntegrationTests {
       assertTrue(om.readTree(foreign.body)["data"].isNull, "cross-tenant snapshot is empty")
     }
   }
+
+  @Nested
+  inner class BiTests {
+    @Test
+    fun biClickHouseCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+      val period =
+        java.time.LocalDate
+          .now()
+          .toString()
+          .substring(0, 7)
+
+      fun hospital(tag: String): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "BI $tag $s", "code" to "BI$tag-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+      val hospitalId = hospital("A")
+      val sysEmail = "bi.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to sysEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "BI",
+            "lastName" to "Admin$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register bi admin",
+      )
+      val sys = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to sysEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+      val wardId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json("name" to "BI Ward $s", "code" to "BIW-$s", "type" to "general"),
+            sys,
+          ),
+        )["id"].asText()
+      val bedId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+            json("label" to "BIB-$s", "type" to "standard", "status" to "available", "wardId" to wardId),
+            sys,
+          ),
+        )["id"].asText()
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "BI$s",
+              "lastName" to "Patient",
+              "gender" to "female",
+              "dateOfBirth" to "1983-03-03",
+              "phone" to "75$s".take(11),
+              "qid" to "BI$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            sys,
+          ),
+        )["patient"]["id"].asText()
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/admissions",
+          json("hospitalId" to hospitalId, "patientId" to patientId, "bedId" to bedId, "admissionType" to "elective"),
+          sys,
+        ),
+        "seed admission",
+      )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/billing/charges",
+          json(
+            "patientId" to patientId,
+            "hospitalId" to hospitalId,
+            "chargeCode" to "BIC-$s",
+            "chargeName" to "BI charge",
+            "quantity" to 1,
+            "unitPriceQar" to 500.0,
+            "reason" to "bi coverage",
+          ),
+          sys,
+        ),
+        "seed charge",
+      )
+      assert2xx(api(HttpMethod.POST, "/api/v1/billing/invoices", json("patientId" to patientId), sys), "seed invoice")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/lab/orders",
+          json("patientId" to patientId, "tests" to listOf(mapOf("testCode" to "BI-$s", "testName" to "BI test"))),
+          sys,
+        ),
+        "seed lab order",
+      )
+
+      val sync = `data`(api(HttpMethod.POST, "/api/v1/bi/sync", json(), sys))
+      assertEquals(period, sync["period"].asText(), "sync period")
+      assertEquals(1.0, sync["kpis"]["ADMISSIONS"].asDouble(), 1e-9, "admissions KPI")
+      assertEquals(500.0, sync["kpis"]["REVENUE_QAR"].asDouble(), 1e-9, "revenue KPI")
+      assertEquals(1.0, sync["kpis"]["LAB_ORDERS"].asDouble(), 1e-9, "lab orders KPI")
+
+      val kpis = `data`(api(HttpMethod.GET, "/api/v1/bi/kpis?period=$period", token = sys))
+      val byCode = kpis["kpis"].associateBy { it["code"].asText() }
+      assertEquals(1.0, byCode.getValue("ADMISSIONS")["value"].asDouble(), 1e-9, "dictionary admissions")
+      assertEquals("QAR", byCode.getValue("REVENUE_QAR")["unit"].asText(), "dictionary unit")
+
+      val ceo = `data`(api(HttpMethod.GET, "/api/v1/bi/dashboards/ceo?period=$period", token = sys))
+      assertEquals("CEO", ceo["role"].asText(), "role command centre")
+      assertEquals(3, ceo["metrics"].size(), "CEO sees three KPIs")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/bi/dashboards/cfo?period=$period", token = sys))["metrics"].size(), "CFO sees revenue")
+      assertEquals(400, api(HttpMethod.GET, "/api/v1/bi/dashboards/chef?period=$period", token = sys).status, "unknown role rejected")
+
+      val csv = api(HttpMethod.GET, "/api/v1/bi/exports?period=$period", token = sys)
+      assertEquals(200, csv.status, "CSV export")
+      assertTrue(csv.body.contains("metric,value,unit") && csv.body.contains("ADMISSIONS,1"), "CSV contents")
+
+      val reconciled = `data`(api(HttpMethod.GET, "/api/v1/bi/reconcile?period=$period", token = sys))
+      assertEquals(true, reconciled["reconciled"].asBoolean(), "mart reconciles with operational DB")
+      assertEquals(0, reconciled["mismatches"].size(), "no KPI drift")
+
+      // Tenant isolation: a second hospital has no mart rows.
+      val hospitalB = hospital("B")
+      val sys2Email = "bi2.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to sys2Email,
+            "password" to "Passw0rd!123",
+            "firstName" to "BI2",
+            "lastName" to "Admin$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalB,
+          ),
+        ),
+        "register second bi admin",
+      )
+      val sys2 = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to sys2Email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      val foreign = `data`(api(HttpMethod.GET, "/api/v1/bi/kpis?period=$period", token = sys2))
+      assertTrue(foreign["kpis"].all { it["value"].asDouble() == 0.0 }, "cross-tenant KPI rows isolated")
+    }
+  }
 }

@@ -4,6 +4,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: squamed-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: squamed
       POSTGRES_USER: squamed
@@ -24,6 +25,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: squamed-redis
+    restart: unless-stopped
     command: redis-server --appendonly yes
     ports:
       - "6380:6379"
@@ -38,6 +40,7 @@ services:
   kafka:
     image: apache/kafka:3.7.1
     container_name: squamed-kafka
+    restart: unless-stopped
     environment:
       - KAFKA_NODE_ID=1
       - KAFKA_PROCESS_ROLES=controller,broker
@@ -66,6 +69,7 @@ services:
   opensearch:
     image: opensearchproject/opensearch:2.14.0
     container_name: squamed-opensearch
+    restart: unless-stopped
     environment:
       - discovery.type=single-node
       - DISABLE_SECURITY_PLUGIN=true
@@ -91,6 +95,7 @@ services:
     # is the maintained AGPL MinIO fork that honors the same MINIO_* env and S3 API.
     image: pgsty/silo:RELEASE.2026-11-12T00-00-00Z
     container_name: squamed-minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: squamed
@@ -197,6 +202,28 @@ services:
     ports:
       - "9093:9093"
 
+  # 06.06 BI: event-fed marts + nightly dimensional sync (HTTP interface used by the backend JDBC).
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    container_name: squamed-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+      CLICKHOUSE_DB: squamed_bi
+    ports:
+      - "8123:8123"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
   redis_data:
@@ -206,3 +233,4 @@ volumes:
   temporal_data:
   prometheus_data:
   grafana_data:
+  clickhouse_data:

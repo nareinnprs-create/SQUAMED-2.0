@@ -3252,6 +3252,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kiosk/reports/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reportLookup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kiosk/reports/collect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["collectReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kiosk/payment/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["pay_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kiosk/payment/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["paymentLookup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kiosk/map/route": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["route"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kiosk/map/campuses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["campuses"];
+        put?: never;
+        post: operations["createCampus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kiosk/map/campuses/{id}/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["addNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kiosk/map/campuses/{id}/edges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["addEdge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kiosk/check-in": {
         parameters: {
             query?: never;
@@ -13034,6 +13162,94 @@ export interface components {
             meal: string;
             name: string;
             allergens?: string;
+        };
+        KioskIdentifierRequest: {
+            identifierType: string;
+            identifier: string;
+            locale: string;
+        };
+        KioskCollectRequest: {
+            identifierType: string;
+            identifier: string;
+            reportType: string;
+            /** Format: uuid */
+            reportId: string;
+            locale: string;
+        };
+        KioskPayRequest: {
+            identifierType: string;
+            identifier: string;
+            /** Format: uuid */
+            invoiceId: string;
+            amountQar: number;
+            method: string;
+            locale: string;
+        };
+        ApiResponseKioskPaymentLookupView: {
+            data?: components["schemas"]["KioskPaymentLookupView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        KioskInvoiceView: {
+            /** Format: uuid */
+            invoiceId: string;
+            invoiceNumber: string;
+            totalQar: number;
+            dueQar: number;
+            issuedAt: string;
+        };
+        KioskPaymentLookupView: {
+            /** Format: uuid */
+            patientId: string;
+            patientMrn?: string;
+            patientName: string;
+            invoices: components["schemas"]["KioskInvoiceView"][];
+        };
+        KioskRouteRequest: {
+            /** Format: uuid */
+            campusId: string;
+            fromCode: string;
+            toCode: string;
+            accessibleOnly: boolean;
+            locale: string;
+        };
+        ApiResponseKioskRouteView: {
+            data?: components["schemas"]["KioskRouteView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        KioskRouteView: {
+            /** Format: uuid */
+            campusId: string;
+            from: string;
+            to: string;
+            path: string[];
+            nodeNames: string[];
+            distanceM: number;
+            message: string;
+        };
+        KioskCampusRequest: {
+            code: string;
+            name: string;
+        };
+        KioskNodeRequest: {
+            code: string;
+            name: string;
+            nodeType: string;
+            floor?: string;
+            x?: number;
+            y?: number;
+        };
+        KioskEdgeRequest: {
+            fromCode: string;
+            toCode: string;
+            distanceM: number;
+            accessible: boolean;
+            bidirectional: boolean;
         };
         KioskCheckInRequest: {
             identifierType: string;
@@ -25489,6 +25705,222 @@ export interface operations {
             };
         };
     };
+    reportLookup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KioskIdentifierRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    collectReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KioskCollectRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    pay_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KioskPayRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    paymentLookup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KioskIdentifierRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseKioskPaymentLookupView"];
+                };
+            };
+        };
+    };
+    route: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KioskRouteRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseKioskRouteView"];
+                };
+            };
+        };
+    };
+    campuses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    createCampus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KioskCampusRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    addNode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KioskNodeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    addEdge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KioskEdgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     checkIn: {
         parameters: {
             query?: never;
@@ -35941,4 +36373,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: d73d7f38c554596a3b4090bb02b40eb1ee5033fb30fb8b06bed000ab9889ecc4
+// openapi snapshot sha256: 4343a0de2f339650c9d09d9d2c394cbe16fc64ebbc4986611b253a0a02c8cea5

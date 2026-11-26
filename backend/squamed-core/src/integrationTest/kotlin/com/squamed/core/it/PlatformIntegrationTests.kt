@@ -18084,4 +18084,301 @@ class PlatformIntegrationTests {
       assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/cx/feedback", token = admin)).size(), "cross-tenant feedback isolated")
     }
   }
+
+  @Nested
+  inner class KioskFullTests {
+    @org.springframework.beans.factory.annotation.Autowired
+    private lateinit var kioskJdbc: org.springframework.jdbc.core.JdbcTemplate
+
+    @Test
+    fun fullKioskWayfindingCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Kiosk $s", "code" to "KS-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+      val sysEmail = "kiosk.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to sysEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Kiosk",
+            "lastName" to "Admin$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register kiosk admin",
+      )
+      val sys = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to sysEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+      val kioskEmail = "kiosk.device.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to kioskEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Kiosk",
+            "lastName" to "Device$s",
+            "roles" to listOf("KIOSK"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register kiosk device",
+      )
+      val kiosk = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to kioskEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+
+      fun patient(
+        tag: String,
+        phone: String,
+      ): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Kiosk$tag$s",
+              "lastName" to "Patient",
+              "gender" to "male",
+              "dateOfBirth" to "1988-08-08",
+              "phone" to phone,
+              "qid" to "KS$tag$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            sys,
+          ),
+        )["patient"]["id"].asText()
+
+      val phone = "70$s".take(11)
+      val patientId = patient("A", phone)
+      val otherPatientId = patient("B", "71$s".take(11))
+
+      fun invoiceFor(
+        pid: String,
+        code: String,
+      ): String {
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/billing/charges",
+            json(
+              "patientId" to pid,
+              "hospitalId" to hospitalId,
+              "chargeCode" to code,
+              "chargeName" to "Kiosk charge",
+              "quantity" to 1,
+              "unitPriceQar" to 200.0,
+              "reason" to "kiosk coverage",
+            ),
+            sys,
+          ),
+          "charge $code",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/billing/invoices", json("patientId" to pid), sys))["invoice"]["id"].asText()
+      }
+      val invoiceId = invoiceFor(patientId, "KIO-$s")
+      val otherInvoiceId = invoiceFor(otherPatientId, "KIO2-$s")
+
+      // Payment kiosk: lookup by mobile, partial pay, overpay guard, ownership guard.
+      val lookup =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/kiosk/payment/lookup", json("identifierType" to "mobile", "identifier" to phone), kiosk),
+        )
+      assertEquals(patientId, lookup["patientId"].asText(), "lookup resolves the patient")
+      val dueInvoice = lookup["invoices"].first { it["invoiceId"].asText() == invoiceId }
+      assertEquals(200.0, dueInvoice["dueQar"].asDouble(), 1e-9, "invoice due")
+      val receipt =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/kiosk/payment/pay",
+            json(
+              "identifierType" to "mobile",
+              "identifier" to phone,
+              "invoiceId" to invoiceId,
+              "amountQar" to 50.0,
+              "method" to "card",
+              "locale" to "en",
+            ),
+            kiosk,
+          ),
+        )
+      assertTrue(receipt["receiptNumber"].asText().startsWith("KP-"), "payment receipt number")
+      assertEquals(150.0, receipt["remainingDueQar"].asDouble(), 1e-9, "remaining due")
+      assertEquals(
+        400,
+        api(
+          HttpMethod.POST,
+          "/api/v1/kiosk/payment/pay",
+          json("identifierType" to "mobile", "identifier" to phone, "invoiceId" to invoiceId, "amountQar" to 999.0, "method" to "card"),
+          kiosk,
+        ).status,
+        "overpay blocked",
+      )
+      assertEquals(
+        400,
+        api(
+          HttpMethod.POST,
+          "/api/v1/kiosk/payment/pay",
+          json("identifierType" to "mobile", "identifier" to phone, "invoiceId" to otherInvoiceId, "amountQar" to 10.0, "method" to "cash"),
+          kiosk,
+        ).status,
+        "another patient's invoice is hidden",
+      )
+      val afterPay = `data`(api(HttpMethod.POST, "/api/v1/kiosk/payment/lookup", json("identifierType" to "mobile", "identifier" to phone), kiosk))
+      assertEquals(150.0, afterPay["invoices"].first { it["invoiceId"].asText() == invoiceId }["dueQar"].asDouble(), 1e-9, "due reduced")
+
+      // Report collection kiosk: seed a released lab report for this patient's order.
+      val orderId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/lab/orders",
+            json("patientId" to patientId, "tests" to listOf(mapOf("testCode" to "K-$s", "testName" to "Potassium $s"))),
+            sys,
+          ),
+        )["order"]["id"].asText()
+      kioskJdbc.update(
+        "INSERT INTO laboratory.lab_report (id, hospital_id, lab_order_id, report_version, storage_key, published_at, created_at, updated_at, version) " +
+          "VALUES (gen_random_uuid(), ?::uuid, ?::uuid, 1, ?, NOW(), NOW(), NOW(), 0)",
+        hospitalId,
+        orderId,
+        "kiosk/test-$s.pdf",
+      )
+      val reports = `data`(api(HttpMethod.POST, "/api/v1/kiosk/reports/lookup", json("identifierType" to "mobile", "identifier" to phone), kiosk))
+      val labReport = reports["reports"].first { it["reportType"].asText() == "LAB" }
+      assertEquals(false, labReport["collected"].asBoolean(), "report not yet collected")
+      val collect =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/kiosk/reports/collect",
+            json("identifierType" to "mobile", "identifier" to phone, "reportType" to "LAB", "reportId" to labReport["reportId"].asText(), "locale" to "hi"),
+            kiosk,
+          ),
+        )
+      assertTrue(collect["receiptNumber"].asText().startsWith("KR-"), "report receipt number")
+      assertTrue(collect["message"].asText().contains("रिपोर्ट"), "Hindi report message")
+      assertEquals(
+        409,
+        api(
+          HttpMethod.POST,
+          "/api/v1/kiosk/reports/collect",
+          json("identifierType" to "mobile", "identifier" to phone, "reportType" to "LAB", "reportId" to labReport["reportId"].asText()),
+          kiosk,
+        ).status,
+        "collection is once",
+      )
+
+      // Indoor wayfinding: graph, shortest path, accessibility filter, Hindi instruction.
+      val campus =
+        `data`(api(HttpMethod.POST, "/api/v1/kiosk/map/campuses", json("code" to "MAIN", "name" to "Main campus"), kiosk))
+      val campusId = campus["id"].asText()
+      listOf(
+        Triple("ENTRANCE", "Main entrance", "ENTRANCE"),
+        Triple("CORRIDOR", "Ground corridor", "CORRIDOR"),
+        Triple("RADIOLOGY", "Radiology", "DEPARTMENT"),
+      ).forEach { (code, name, type) ->
+        assert2xx(
+          api(HttpMethod.POST, "/api/v1/kiosk/map/campuses/$campusId/nodes", json("code" to code, "name" to name, "nodeType" to type), kiosk),
+          "node $code",
+        )
+      }
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/kiosk/map/campuses/$campusId/edges",
+          json("fromCode" to "ENTRANCE", "toCode" to "CORRIDOR", "distanceM" to 10.0, "accessible" to true),
+          kiosk,
+        ),
+        "edge entrance-corridor",
+      )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/kiosk/map/campuses/$campusId/edges",
+          json("fromCode" to "CORRIDOR", "toCode" to "RADIOLOGY", "distanceM" to 15.0, "accessible" to false),
+          kiosk,
+        ),
+        "edge corridor-radiology (stairs)",
+      )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/kiosk/map/campuses/$campusId/edges",
+          json("fromCode" to "ENTRANCE", "toCode" to "RADIOLOGY", "distanceM" to 40.0, "accessible" to true),
+          kiosk,
+        ),
+        "edge entrance-radiology (accessible)",
+      )
+      val stepFree =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/kiosk/map/route",
+            json("campusId" to campusId, "fromCode" to "ENTRANCE", "toCode" to "RADIOLOGY", "accessibleOnly" to true),
+            kiosk,
+          ),
+        )
+      assertEquals(40.0, stepFree["distanceM"].asDouble(), 1e-9, "step-free route takes the direct accessible edge")
+      val shortest =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/kiosk/map/route",
+            json("campusId" to campusId, "fromCode" to "ENTRANCE", "toCode" to "RADIOLOGY", "locale" to "hi"),
+            kiosk,
+          ),
+        )
+      assertEquals(25.0, shortest["distanceM"].asDouble(), 1e-9, "shortest route uses the corridor")
+      assertEquals(listOf("ENTRANCE", "CORRIDOR", "RADIOLOGY"), shortest["path"].map { it.asText() }, "route path")
+      assertTrue(shortest["message"].asText().contains("कृपया"), "Hindi direction message")
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/kiosk/map/route", json("campusId" to campusId, "fromCode" to "ENTRANCE", "toCode" to "NOWHERE"), kiosk).status,
+        "unknown node rejected",
+      )
+
+      // Tenant isolation: a second kiosk hospital cannot see this campus.
+      val hid2 =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hospital-config/hospitals", json("name" to "Kiosk2 $s", "code" to "KS2-$s", "country" to "Qatar"), admin),
+        )["id"].asText()
+      val kiosk2Email = "kiosk2.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to kiosk2Email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Kiosk2",
+            "lastName" to "Device$s",
+            "roles" to listOf("KIOSK"),
+            "hospitalId" to hid2,
+          ),
+        ),
+        "register second kiosk",
+      )
+      val kiosk2 = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to kiosk2Email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/kiosk/map/campuses", token = kiosk2)).size(), "cross-tenant campuses isolated")
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/kiosk/map/route", json("campusId" to campusId, "fromCode" to "ENTRANCE", "toCode" to "RADIOLOGY"), kiosk2).status,
+        "foreign campus hidden",
+      )
+    }
+  }
 }

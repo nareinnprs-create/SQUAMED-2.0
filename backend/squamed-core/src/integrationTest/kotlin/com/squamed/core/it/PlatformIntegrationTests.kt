@@ -19198,4 +19198,116 @@ class PlatformIntegrationTests {
       assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/packs/installs", token = other)).size(), "cross-tenant install history isolated")
     }
   }
+
+  @Nested
+  inner class EdDrillTests {
+    @Test
+    fun edMassCasualtyDrillCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+
+      fun hospital(tag: String): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Drill $tag $s", "code" to "DR$tag-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+
+      fun adminOf(
+        tag: String,
+        hospitalId: String,
+      ): String {
+        val email = "drill${tag.lowercase()}.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to "Drill$tag",
+              "lastName" to "Admin$s",
+              "roles" to listOf("SYSTEM_ADMIN"),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register drill admin $tag",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))[
+          "accessToken",
+        ].asText()
+      }
+
+      fun patient(
+        hospitalId: String,
+        token: String,
+        tag: String,
+      ): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Casualty$tag$s",
+              "lastName" to "Drill",
+              "gender" to "male",
+              "dateOfBirth" to "1990-01-01",
+              "phone" to "78$s".take(11),
+              "qid" to "DR$tag$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]["id"].asText()
+
+      val hospitalId = hospital("A")
+      val sys = adminOf("A", hospitalId)
+      val casualties =
+        listOf(
+          mapOf("patientId" to patient(hospitalId, sys, "1"), "triageLevel" to 2, "chiefComplaint" to "blast injury"),
+          mapOf("patientId" to patient(hospitalId, sys, "2"), "triageLevel" to 3, "chiefComplaint" to "laceration"),
+          mapOf("patientId" to patient(hospitalId, sys, "3"), "triageLevel" to 4, "chiefComplaint" to "sprain"),
+        )
+
+      // 1. The drill declares, registers every casualty through the real ED path, and stands down.
+      val drill = `data`(api(HttpMethod.POST, "/api/v1/ops/ed/drills", json("name" to "Drill $s", "casualties" to casualties), sys))
+      assertEquals("COMPLETED", drill["status"].asText(), "drill completed")
+      assertEquals(3, drill["planned"].asInt(), "three casualties planned")
+      assertEquals(3, drill["created"].asInt(), "three casualties registered")
+      assertEquals(1, drill["triageDistribution"]["2"].asInt(), "one level-2 casualty")
+      assertEquals(1, drill["triageDistribution"]["4"].asInt(), "one level-4 casualty")
+      assertFalse(drill["stoodDownAt"].isNull, "drill stood down")
+      assertTrue(drill["elapsedMs"].asLong() >= 0, "drill timing recorded")
+
+      // 2. The ED is not left in mass-casualty mode.
+      assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/ops/ed/mass-casualty", token = sys)).size(), "no active mass casualty after the drill")
+
+      // 3. An invalid casualty is rejected before anything is declared or recorded.
+      assertEquals(
+        400,
+        api(
+          HttpMethod.POST,
+          "/api/v1/ops/ed/drills",
+          json(
+            "name" to "Bad drill $s",
+            "casualties" to listOf(mapOf("patientId" to casualties[0]["patientId"], "triageLevel" to 6, "chiefComplaint" to "x")),
+          ),
+          sys,
+        ).status,
+        "invalid triage rejected",
+      )
+      assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/ops/ed/mass-casualty", token = sys)).size(), "rejected drill declared nothing")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/ops/ed/drills", token = sys)).size(), "rejected drill was not recorded")
+
+      // 4. Tenant isolation: the other hospital sees no drills.
+      val otherHospital = hospital("B")
+      val other = adminOf("B", otherHospital)
+      assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/ops/ed/drills", token = other)).size(), "cross-tenant drill history isolated")
+    }
+  }
 }

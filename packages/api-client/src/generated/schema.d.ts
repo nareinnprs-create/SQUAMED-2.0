@@ -516,6 +516,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/twin/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["latest"];
+        put?: never;
+        post: operations["snapshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/twin/capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["capacity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks": {
         parameters: {
             query?: never;
@@ -6964,6 +6996,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/twin/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["reconcile_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/subject": {
         parameters: {
             query?: never;
@@ -10551,6 +10599,10 @@ export interface components {
             /** Format: int64 */
             version: number;
             steps: components["schemas"]["WorkflowStepConfigDto"][];
+        };
+        CapacityRequest: {
+            /** Format: int32 */
+            additionalAdmissions: number;
         };
         TaskCreateDto: {
             /** Format: uuid */
@@ -20049,6 +20101,70 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseWorkflowDefinitionDto"];
+                };
+            };
+        };
+    };
+    latest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    snapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    capacity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CapacityRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
                 };
             };
         };
@@ -33301,6 +33417,26 @@ export interface operations {
             };
         };
     };
+    reconcile_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     tasksForSubject: {
         parameters: {
             query: {
@@ -36825,4 +36961,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 58528aa475d4a9ef9ec50e4929b1426786d93550edbf56c2eb92b4657a006e29
+// openapi snapshot sha256: 43a2e5cdfff50796f84653711f5dc1c74801eb97a6880187b53b591dc2c225ab

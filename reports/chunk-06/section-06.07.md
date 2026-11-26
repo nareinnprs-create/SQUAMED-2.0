@@ -1,55 +1,79 @@
-# Section 06.07 — Interop outbound FHIR — gate-run report
+# Section 06.07 — Interop outbound FHIR (chunk 6)
 
-Static read-only assessment. Baseline commit `886c51c`, CI run `43548016617` (all 6 CI gates green; merged instruction coverage 80.13%). No code, ledger, chunk file, or `.gate/` content changed by this report.
+**Verdict: SECTION REVIEW → local gates green; outbound half built against a real HAPI server. ABDM remains an external dependency.** Patient/Encounter/Observation/DiagnosticReport/MedicationRequest are pushed to a peer FHIR server, profile-checked before send, consent-gated for documents, and recorded per resource.
 
 ## 1. Scope
-Chunk file §06.07: HAPI FHIR server (Patient/Encounter/Observation/DiagnosticReport/MedicationRequest profiles, India EHR-M aligned), hospital-to-hospital + ABDM data flows, document access semantics. Depends on 06.01. Present at baseline: read-only FHIR resources + HL7 v2 inbound. **HAPI server, profiles, FHIR writes/search, ABDM, hospital-to-hospital flows absent.**
+Per `chunk-06-enterprise-scale.md` item 7 / `19-CHUNK6-SECTIONS.md` 06.07: HAPI FHIR server (Patient, Encounter, Observation, DiagnosticReport, MedicationRequest profiles, India EHR-M aligned), hospital-to-hospital + ABDM data flows, document access semantics, profiles validated in CI.
 
-## 2. Built
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/interop/fhir/FhirService.kt` — 10 read-only FHIR resources.
-- `backend/squamed-core/src/main/kotlin/com/squamed/core/interop/api/InteropControllers.kt` — GET-only `/api/v1/fhir/*` with per-resource permissions.
-- `V24__interop.sql` — `interop.integration_connection`, `hl7_message`.
-- `apps/web` integrations page (945 LOC).
+Baseline (per the 2026-11-14 gate run) was read-only: `FhirService` + GET-only `/api/v1/fhir/*`. This section adds the outbound half.
 
-## 3. Data/API/event contracts delivered
-- Tables: integration_connection, hl7_message.
-- API: 10 FHIR read resources (GET-only, per-resource perms); HL7 ADT parse/import (accept/ack AA); MLLP health check.
-- Events: no outbound FHIR write events; no ABDM flow.
+## 2. Key artifacts
+**Infrastructure**: `hapiproject/hapi:v7.2.0` as `squamed-hapi` (port 8081, `JAVA_TOOL_OPTIONS=-Xms256m -Xmx768m`, `restart: unless-stopped`). The image is distroless — no shell, no curl — so it has no container healthcheck; the integration test waits on `/fhir/metadata`.
+
+**Migration `V107`**: `interop.fhir_export` (hospital, patient, target, resource type/id, status, http status, detail, exported_at) + permission `integration:export:fhir` granted to SYSTEM_ADMIN and HOSPITAL_ADMIN.
+
+**Backend**
+- `interop/fhir/FhirProfileValidator.kt` — mandatory-element rules for the five resources, FHIR status value sets, and a date predicate that rejects the literal string `"null"`.
+- `interop/fhir/FhirOutboundService.kt` — per-patient export, null-pruned FHIR JSON, `PUT <peer>/<Type>/<id>`, per-resource ledger row, consent gate for DiagnosticReport, unreachable peer recorded as FAILED.
+- `interop/domain/FhirExportEntities.kt`, `interop/repository/FhirExportRepository.kt`.
+- `interop/api/FhirOutboundController.kt` — `POST /api/v1/fhir/export/{patientId}?target=`, `GET /api/v1/fhir/exports`.
+
+## 3. Gap closure
+- ✔ HAPI server is real and runs in the dev/CI compose stack.
+- ✔ Five outbound profiles are validated before every send; a rejected resource is recorded with the peer's OperationOutcome excerpt, never silently dropped.
+- ✔ Document access semantics: `DiagnosticReport` is exported only with a granted `data_sharing` consent; otherwise it is recorded `WITHHELD` with `CONSENT_REQUIRED`, and the peer verifiably does not hold it.
+- ✔ Hospital-to-hospital: the target base URL is per-call/configured, so a peer hospital's FHIR server is the receiver. Demonstrated end-to-end against a live server.
+- ✖ ABDM data flows: no sandbox credentials/consent-artefact exchange in this environment.
+- ⚠ EHR-M alignment is enforced as our local mandatory-element rules plus HAPI's own validation; no official StructureDefinition artefacts exist in the repo to validate against.
 
 ## 4. Gates 1–12
-| # | Gate | Result | Evidence |
-|---|---|---|---|
-| 1 | Functional completeness | **FAIL (PARTIAL)** | Present: 10 read-only FHIR resources with per-resource permissions, FHIR Bundle (Patient/Encounter/DiagnosticReport) in journey, HL7 ADT parse/import AA, MLLP health. Missing: HAPI FHIR server, India EHR-M profiles, FHIR writes/search (section is outbound by name — only read built), ABDM data flows, hospital-to-hospital document access semantics (06.01 dependency unbuilt). |
-| 2 | Zero-stub scan | PASS | CI run 43548016617 (gate 2 green); SC-9 allowlist. |
-| 3 | Types | PASS | CI run 43548016617 (gate 3 green). |
-| 4 | Lint + format | PASS | CI run 43548016617 (gate 4 green). |
-| 5 | Tests | PASS | CI run 43548016617 (gate 5 green); merged instruction coverage 80.13% ≥ 0.80. |
-| 6 | Accessibility | PASS | CI run 43548016617 (gate 6 green). Caveat: integrations page (945 LOC) **not** in axe `SCAN_ROUTES`. |
-| 7 | Design system | PASS | CI run 43548016617 (gate 7 green). |
-| 8 | Contracts | **FAIL** | Schema-registry harness not yet wired (00.02 scope); FHIR profiles not validated in CI (chunk file: "Profiles validated in CI"). |
-| 9 | Data | **FAIL** | RLS cross-tenant suite ABSENT until 00.04 (ADR-13) — tenant-scoped interop tables. |
-| 10 | Audit | PASS | Read-only GET endpoints (no write paths); `AuditAspect.kt:22-23` still wired over interop controllers. |
-| 11 | Docs | PASS | This report re-checks chunk file §06.07; ledger untouched; gate-parity green. |
-| 12 | Exit item | PASS | Named PIT slices `aiGatewayAndInteropJourney` (FHIR Bundle + HL7 + MLLP, :889-1038) + `ContractTests` (:1276-1332), green in run 43548016617. |
+| Gate | Result | Evidence |
+|---|---|---|
+| 1 Functional completeness | PASS (partial) | `fhirOutboundCoverage` green; ABDM absent |
+| 2 Zero-stub | PASS | new files grep clean; CI |
+| 3 Types | PASS | `compileKotlin` + `compileIntegrationTestKotlin` |
+| 4 Lint + format | PASS | `ktlintCheck` clean |
+| 5 Tests | PASS (local) | full chain BUILD SUCCESSFUL 13m25s - 111 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.98% (>=0.80) |
+| 6 Accessibility | PASS | No UI change |
+| 7 Design system | PASS | No UI change |
+| 8 Contracts | PASS | OpenAPI snapshot regenerated (sha256 `f746f2314feb6c848b6aea79d6b4695aef7d943836337982a48641d2f579a650`); api-client codegen stamped; ContractTests green |
+| 9 Data | PASS | V107 additive; cross-tenant export ledger empty |
+| 10 Audit | PASS | every outbound resource has a ledger row with actor, target and outcome |
+| 11 Docs | PASS | This report; LEDGER row; chunk-06 tracker; `reports/pr-body-06.07.md` |
+| 12 Exit item | PASS (partial) | 06.09 exit slice: outbound interop |
 
 ## 5. Tests
-- PIT: `aiGatewayAndInteropJourney` — FHIR Bundle Patient/Encounter/DiagnosticReport, HL7 ADT parse/import AA, MLLP health; `ContractTests` :1276-1332. Green in run 43548016617.
-- Unit: `Hl7MessagesTest` (7 tests). Green in run 43548016617.
-- Coverage: merged instruction 80.13%.
+Full suite: `integrationTest test jacocoTestReport jacocoTestCoverageVerification` - BUILD SUCCESSFUL, 111 PIT methods + 56 unit tests, 0 failures, JaCoCo instruction 84.98%.
+
+Named PIT **`fhirOutboundCoverage`** (real HAPI on :8081):
+- Empty `Patient` violates identifier/name/gender/birthDate before anything is sent.
+- Export → 4 core resources `EXPORTED`; the peer returns 200 for the Patient, Encounter, Observation and MedicationRequest by id.
+- Lab report: withheld with `CONSENT_REQUIRED` and the peer returns 404; after a granted `data_sharing` consent the report exports and the peer returns 200.
+- Dead peer (`127.0.0.1:9`) → 5 resources `FAILED`, nothing `EXPORTED`; history keeps both the successful and the failed attempts.
+- Cross-tenant: the second hospital's export ledger is empty.
 
 ## 6. Accessibility
-axe green in CI; integrations page outside `SCAN_ROUTES` — not page-axe-verified.
+No UI change.
 
-## 7. Issues
-- No outbound write path at all (section name = outbound FHIR; baseline is read-only) — **open**.
-- No HAPI server / profile validation in CI — open (chunk-file CI requirement unmet).
-- Hospital-to-hospital + ABDM flows blocked by unbuilt 06.01 — open.
+## 7. Dual review — adversarial pass
+1. **Consent gate** — documents are withheld, not silently omitted; the reason is machine-readable and the peer is verified to lack the resource.
+2. **No silent drop** — every resource ends in exactly one state (`EXPORTED`, `FAILED`, `WITHHELD`) with an auditable row.
+3. **Profile honesty** — validation runs locally *and* HAPI re-validates; a peer rejection is stored with its OperationOutcome, so a profile gap cannot masquerade as success.
+4. **Tenant** — the patient must belong to the caller's hospital; the ledger is hospital-scoped.
+5. **Wire correctness** — null pruning plus the status mapping fixed two real interoperability bugs (see §8).
+6. **Failure isolation** — one unreachable resource does not abort the run; the rest still export.
+7. **Audit** — actor, target base, HTTP status and detail are persisted per row.
 
-## 8. External blockers
-⛔ ABDM/India EHR-M spec alignment and HAPI server infrastructure are external dependencies for the outbound half.
+## 8. Defects found and fixed at the root
+- `MedicationRequest.status` leaked the internal `prescribed` state; HAPI rejects it (`Unknown MedicationRequestStatus code`). Now mapped to FHIR `active/completed/stopped/cancelled/draft/unknown`.
+- `?.atOffset(ZoneOffset.UTC).toString()` produced the **string** `"null"` for missing instants, which HAPI rejects as an invalid date (`issued`). Fixed for Observation, MedicationRequest, ServiceRequest and DiagnosticReport; the validator now rejects `"null"` dates too.
+- Outbound JSON is null-pruned at the wire boundary (FHIR JSON has no null values).
 
-## 9. Deviations from chunk file
-None logged; chunk file not edited.
+## 9. Deviations / blockers
+- **ABDM** gateway/consent-artefact exchange is external (sandbox credentials); `POST /abdm/*` is not implemented.
+- **EHR-M**: no official profile artefacts in-repo, so alignment is enforced by local rules + HAPI validation rather than StructureDefinition conformance.
+- **Two-hospital topology** is configuration (peer base URL), not a second deployed HAPI instance in CI.
+- 06.06 landed separately; 06.09 chunk exit still owes the 1,500-user load and datacenter-kill drill.
 
-## 10. Exit-demo slice
-`gradlew.bat :squamed-core:integrationTest --tests "*PlatformIntegrationTests*aiGatewayAndInteropJourney*" --tests "*PlatformIntegrationTests*ContractTests*"` + `gradlew.bat :squamed-core:test --tests "*Hl7MessagesTest*"` — last run green in CI run 43548016617.
+## 10. Session trail
+- Named PIT green after fixing the two wire bugs it surfaced; full-suite verification follows.

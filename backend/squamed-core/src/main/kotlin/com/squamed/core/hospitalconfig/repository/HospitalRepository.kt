@@ -6,4 +6,6 @@ import java.util.UUID
 
 interface HospitalRepository : JpaRepository<Hospital, UUID> {
   fun findFirstByOrderByCreatedAtAsc(): Hospital?
+
+  fun findByGroupId(groupId: UUID): List<Hospital>
 }

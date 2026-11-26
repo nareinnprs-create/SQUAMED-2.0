@@ -11,9 +11,19 @@ interface LabReportRepository : JpaRepository<LabReport, UUID> {
 
   fun findAllByLabOrderIdOrderByReportVersionDesc(labOrderId: UUID): List<LabReport>
 
-  // 00.04 tenant sweep: null-safe hospital scope (U8) — admin callers pass null.
+  // 00.04 tenant sweep: null-safe hospital scope (U8) - admin callers pass null.
   @Query("select r from LabReport r where (:hid is null or r.hospitalId = :hid)")
   fun findAllForHospital(
     @Param("hid") hospitalId: UUID?,
+  ): List<LabReport>
+
+  // 07.06 kiosk report collection: released reports for one patient.
+  @Query(
+    "select r from LabReport r, com.squamed.core.laboratory.domain.LabOrder o " +
+      "where o.id = r.labOrderId and o.patientId = :pid and r.hospitalId = :hid order by r.publishedAt desc",
+  )
+  fun findForPatient(
+    @Param("hid") hospitalId: UUID,
+    @Param("pid") patientId: UUID,
   ): List<LabReport>
 }

@@ -80,6 +80,13 @@ class KioskService(
     return slip(patient, findTodayAppointment(patient, hospitalId), QueueEntryView.from(entry))
   }
 
+  /** Shared by the full kiosk surfaces (payment, report collection): one unambiguous live patient. */
+  fun lookupPatient(
+    identifierType: String,
+    identifier: String,
+    hospitalId: UUID,
+  ): PatientRecord = resolvePatient(identifierType, identifier, hospitalId)
+
   private fun resolvePatient(
     identifierType: String,
     identifier: String,

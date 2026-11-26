@@ -356,6 +356,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/benchmark/participation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["participation"];
+        put: operations["setParticipation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/appointments/{id}": {
         parameters: {
             query?: never;
@@ -2580,6 +2596,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/migration/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["jobs"];
+        put?: never;
+        post: operations["create_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/migration/jobs/{id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rollback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/migration/jobs/{id}/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/medication-safety/overrides": {
         parameters: {
             query?: never;
@@ -3405,7 +3469,7 @@ export interface paths {
         };
         get: operations["list_1"];
         put?: never;
-        post: operations["create_2"];
+        post: operations["create_3"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4238,6 +4302,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["seedAccounts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/esg/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["metrics"];
+        put?: never;
+        post: operations["recordMetric"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7604,6 +7684,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/migration/jobs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["detail_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/medication-safety/override-kpis": {
         parameters: {
             query?: never;
@@ -8644,6 +8740,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/esg/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["summary_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/encounters/{id}": {
         parameters: {
             query?: never;
@@ -8844,6 +8956,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getInvoice"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/benchmark/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["summary_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9067,7 +9195,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["detail_1"];
+        get: operations["detail_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10209,6 +10337,16 @@ export interface components {
         };
         ApiResponseTariffDto: {
             data?: components["schemas"]["TariffDto"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        BenchmarkParticipationRequest: {
+            enabled: boolean;
+        };
+        ApiResponseObject: {
+            data?: unknown;
             success: boolean;
             meta: {
                 [key: string]: unknown;
@@ -11385,13 +11523,6 @@ export interface components {
             /** Format: int32 */
             impact: number;
             owner?: string;
-        };
-        ApiResponseObject: {
-            data?: unknown;
-            success: boolean;
-            meta: {
-                [key: string]: unknown;
-            };
         };
         LitigationHoldDto: {
             caseRef: string;
@@ -12750,6 +12881,77 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        MigrationJobRequest: {
+            sourceType: string;
+            rows: {
+                [key: string]: unknown;
+            }[];
+        };
+        ApiResponseMigrationJobDetailView: {
+            data?: components["schemas"]["MigrationJobDetailView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        MigrationJob: {
+            /** Format: uuid */
+            hospitalId: string;
+            sourceType: string;
+            entityType: string;
+            status: string;
+            /** Format: int32 */
+            totalRows: number;
+            /** Format: int32 */
+            validRows: number;
+            /** Format: int32 */
+            errorRows: number;
+            /** Format: date-time */
+            importedAt?: string;
+            /** Format: date-time */
+            rolledBackAt?: string;
+            /** Format: uuid */
+            id?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: uuid */
+            createdBy?: string;
+            /** Format: uuid */
+            updatedBy?: string;
+            /** Format: int64 */
+            version: number;
+        };
+        MigrationJobDetailView: {
+            job: components["schemas"]["MigrationJob"];
+            rows: components["schemas"]["StagedRow"][];
+        };
+        StagedRow: {
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            jobId: string;
+            /** Format: int32 */
+            rowNo: number;
+            payload: components["schemas"]["JsonNode"];
+            status: string;
+            errorMessage?: string;
+            /** Format: uuid */
+            entityId?: string;
+            /** Format: uuid */
+            id?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: uuid */
+            createdBy?: string;
+            /** Format: uuid */
+            updatedBy?: string;
+            /** Format: int64 */
+            version: number;
         };
         MedSafetyOverrideDto: {
             /** Format: uuid */
@@ -14172,6 +14374,11 @@ export interface components {
             /** Format: date */
             paidOn: string;
             method: string;
+        };
+        EsgMetricRequest: {
+            period: string;
+            metricType: string;
+            value: number;
         };
         StartEncounterDto: {
             /** Format: uuid */
@@ -19497,6 +19704,50 @@ export interface operations {
             };
         };
     };
+    participation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    setParticipation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BenchmarkParticipationRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     getAppointment: {
         parameters: {
             query?: never;
@@ -24236,6 +24487,94 @@ export interface operations {
             };
         };
     };
+    jobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    create_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MigrationJobRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMigrationJobDetailView"];
+                };
+            };
+        };
+    };
+    rollback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMigrationJobDetailView"];
+                };
+            };
+        };
+    };
+    import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMigrationJobDetailView"];
+                };
+            };
+        };
+    };
     recordOverride: {
         parameters: {
             query?: never;
@@ -25965,7 +26304,7 @@ export interface operations {
             };
         };
     };
-    create_2: {
+    create_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -27762,6 +28101,52 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    metrics: {
+        parameters: {
+            query: {
+                period: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    recordMetric: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EsgMetricRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
@@ -33897,6 +34282,28 @@ export interface operations {
             };
         };
     };
+    detail_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMigrationJobDetailView"];
+                };
+            };
+        };
+    };
     overrideKpis: {
         parameters: {
             query?: {
@@ -35300,6 +35707,28 @@ export interface operations {
             };
         };
     };
+    summary_1: {
+        parameters: {
+            query: {
+                period: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     getEncounterDetail: {
         parameters: {
             query?: never;
@@ -35577,6 +36006,29 @@ export interface operations {
             };
         };
     };
+    summary_2: {
+        parameters: {
+            query: {
+                metric: string;
+                period: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     dietManifest: {
         parameters: {
             query?: {
@@ -35845,7 +36297,7 @@ export interface operations {
             };
         };
     };
-    detail_1: {
+    detail_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -36373,4 +36825,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 4343a0de2f339650c9d09d9d2c394cbe16fc64ebbc4986611b253a0a02c8cea5
+// openapi snapshot sha256: 58528aa475d4a9ef9ec50e4929b1426786d93550edbf56c2eb92b4657a006e29

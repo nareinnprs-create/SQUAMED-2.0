@@ -18381,4 +18381,189 @@ class PlatformIntegrationTests {
       )
     }
   }
+
+  @Nested
+  inner class MigrationBenchmarkTests {
+    @Test
+    fun migrationBenchmarkEsgCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+      val period =
+        java.time.LocalDate
+          .now()
+          .toString()
+          .substring(0, 7)
+
+      fun hospital(tag: String): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Mig $tag $s", "code" to "MG$tag-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+      val hospitalA = hospital("A")
+      val hospitalB = hospital("B")
+      val group = `data`(api(HttpMethod.POST, "/api/v1/group/groups", json("code" to "GRP-$s", "name" to "Group $s"), admin))
+      val groupId = group["id"].asText()
+      assert2xx(api(HttpMethod.POST, "/api/v1/group/groups/$groupId/hospitals/$hospitalA", json(), admin), "attach A")
+      assert2xx(api(HttpMethod.POST, "/api/v1/group/groups/$groupId/hospitals/$hospitalB", json(), admin), "attach B")
+
+      fun user(
+        role: String,
+        hospitalId: String,
+        tag: String,
+      ): String {
+        val email = "$tag.mig.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to tag,
+              "lastName" to "User$s",
+              "roles" to listOf(role),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register $tag",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))["accessToken"].asText()
+      }
+      val sysA = user("SYSTEM_ADMIN", hospitalA, "miga")
+      val sysB = user("SYSTEM_ADMIN", hospitalB, "migb")
+
+      fun seedAdmission(
+        hospitalId: String,
+        token: String,
+        tag: String,
+      ) {
+        val ward =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+              json("name" to "W$tag$s", "code" to "W$tag-$s", "type" to "general"),
+              token,
+            ),
+          )["id"].asText()
+        val bed =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+              json("label" to "B$tag-$s", "type" to "standard", "status" to "available", "wardId" to ward),
+              token,
+            ),
+          )["id"].asText()
+        val patient =
+          `data`(
+            api(
+              HttpMethod.POST,
+              "/api/v1/patients",
+              json(
+                "firstName" to "Mig$tag$s",
+                "lastName" to "Patient",
+                "gender" to "male",
+                "dateOfBirth" to "1975-01-01",
+                "phone" to "72$tag$s".take(11),
+                "qid" to "MG$tag$s".take(11),
+                "nationality" to "QA",
+                "city" to "Doha",
+                "hospitalId" to hospitalId,
+              ),
+              token,
+            ),
+          )["patient"]["id"].asText()
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json("hospitalId" to hospitalId, "patientId" to patient, "bedId" to bed, "admissionType" to "elective"),
+            token,
+          ),
+          "admission $tag",
+        )
+      }
+      seedAdmission(hospitalA, sysA, "1")
+      seedAdmission(hospitalA, sysA, "2")
+      seedAdmission(hospitalB, sysB, "3")
+
+      // Benchmarking is consent-gated and anonymized inside the group.
+      assert2xx(api(HttpMethod.PUT, "/api/v1/benchmark/participation", json("enabled" to true), sysA), "A participates")
+      assert2xx(api(HttpMethod.PUT, "/api/v1/benchmark/participation", json("enabled" to true), sysB), "B participates")
+      val summary = `data`(api(HttpMethod.GET, "/api/v1/benchmark/summary?metric=ADMISSIONS&period=$period", token = sysA))
+      assertEquals(2.0, summary["ownValue"].asDouble(), 1e-9, "own admissions")
+      assertEquals(2, summary["peerCount"].asInt(), "two participating peers")
+      assertEquals(1.5, summary["median"].asDouble(), 1e-9, "median of 1 and 2")
+      assertEquals(1.25, summary["p25"].asDouble(), 1e-9, "p25")
+      assertEquals(1.75, summary["p75"].asDouble(), 1e-9, "p75")
+      assert2xx(api(HttpMethod.PUT, "/api/v1/benchmark/participation", json("enabled" to false), sysB), "B opts out")
+      assertEquals(
+        1,
+        `data`(api(HttpMethod.GET, "/api/v1/benchmark/summary?metric=ADMISSIONS&period=$period", token = sysA))["peerCount"].asInt(),
+        "opted-out peer excluded",
+      )
+      assert2xx(api(HttpMethod.PUT, "/api/v1/benchmark/participation", json("enabled" to false), sysA), "A opts out")
+      assertEquals(
+        400,
+        api(HttpMethod.GET, "/api/v1/benchmark/summary?metric=ADMISSIONS&period=$period", token = sysA).status,
+        "non-participating hospital blocked",
+      )
+
+      // ESG metrics + intensity.
+      assert2xx(api(HttpMethod.POST, "/api/v1/esg/metrics", json("period" to period, "metricType" to "ENERGY_KWH", "value" to 1000.0), sysA), "energy")
+      assert2xx(api(HttpMethod.POST, "/api/v1/esg/metrics", json("period" to period, "metricType" to "WATER_L", "value" to 500.0), sysA), "water")
+      assert2xx(api(HttpMethod.POST, "/api/v1/esg/metrics", json("period" to period, "metricType" to "CARBON_KG", "value" to 250.0), sysA), "carbon")
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/esg/metrics", json("period" to period, "metricType" to "MAGIC", "value" to 1.0), sysA).status,
+        "metric vocabulary enforced",
+      )
+      val esg = `data`(api(HttpMethod.GET, "/api/v1/esg/summary?period=$period", token = sysA))
+      assertEquals(1000.0, esg["totals"]["ENERGY_KWH"].asDouble(), 1e-9, "energy total")
+      assertEquals(2, esg["admissions"].asInt(), "admissions counted")
+      assertEquals(125.0, esg["carbonPerAdmissionKg"].asDouble(), 1e-9, "carbon intensity")
+
+      // Migration studio: validate -> import -> reconcile -> rollback.
+      val job =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/migration/jobs",
+            json(
+              "sourceType" to "his",
+              "rows" to
+                listOf(
+                  mapOf("firstName" to "Legacy1", "lastName" to "One$s", "gender" to "male", "dateOfBirth" to "1985-01-01", "phone" to "73$s".take(11)),
+                  mapOf("firstName" to "Legacy2", "lastName" to "Two$s", "gender" to "female", "dateOfBirth" to "1990-02-02"),
+                  mapOf("firstName" to "Bad", "lastName" to "Row$s", "gender" to "x"),
+                ),
+            ),
+            sysA,
+          ),
+        )
+      val jobId = job["job"]["id"].asText()
+      assertEquals("VALIDATED", job["job"]["status"].asText(), "job validated")
+      assertEquals(2, job["job"]["validRows"].asInt(), "two valid rows")
+      assertEquals(1, job["job"]["errorRows"].asInt(), "one invalid row")
+      assertEquals(3, job["rows"].size(), "staged rows kept")
+      val imported = `data`(api(HttpMethod.POST, "/api/v1/migration/jobs/$jobId/import", json(), sysA))
+      assertEquals("IMPORTED", imported["job"]["status"].asText(), "job imported")
+      assertEquals(2, imported["job"]["validRows"].asInt(), "two patients imported")
+      assertTrue(imported["rows"].filter { it["entityId"].isNull }.size == 1, "one row remains errored")
+      assertEquals(409, api(HttpMethod.POST, "/api/v1/migration/jobs/$jobId/import", json(), sysA).status, "import is once")
+      val rolledBack = `data`(api(HttpMethod.POST, "/api/v1/migration/jobs/$jobId/rollback", json(), sysA))
+      assertEquals("ROLLED_BACK", rolledBack["job"]["status"].asText(), "job rolled back")
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/migration/jobs", json("sourceType" to "MAGIC", "rows" to listOf(mapOf("firstName" to "x"))), sysA).status,
+        "source vocabulary enforced",
+      )
+      assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/migration/jobs", token = admin)).size(), "cross-tenant migration jobs isolated")
+    }
+  }
 }

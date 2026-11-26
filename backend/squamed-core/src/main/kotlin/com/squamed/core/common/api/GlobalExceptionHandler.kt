@@ -10,6 +10,7 @@ import org.springframework.validation.FieldError
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.servlet.resource.NoResourceFoundException
 import java.time.Instant
 
 private val logger = LoggerFactory.getLogger("GlobalExceptionHandler")
@@ -89,6 +90,18 @@ class GlobalExceptionHandler {
         timestamp = Instant.now().toString(),
       )
     return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body)
+  }
+
+  // An unmatched path is a client error, not a server fault: without this the catch-all below
+  // turns NoResourceFoundException into a 500 for any typo'd /api/v1/... URL.
+  @ExceptionHandler(NoResourceFoundException::class)
+  fun handleNoResource(ex: NoResourceFoundException): ResponseEntity<ErrorBody> {
+    val body =
+      ErrorBody(
+        error = ErrorBody.ErrorInfo("NOT_FOUND", "No resource at ${ex.resourcePath}"),
+        timestamp = Instant.now().toString(),
+      )
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body)
   }
 
   @ExceptionHandler(Exception::class)

@@ -2292,6 +2292,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ops/ed/drills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["drills"];
+        put?: never;
+        post: operations["run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ops/ed/bays": {
         parameters: {
             query?: never;
@@ -12550,6 +12566,17 @@ export interface components {
         BayAssignDto: {
             /** Format: uuid */
             bayId: string;
+        };
+        DrillCasualtyDto: {
+            /** Format: uuid */
+            patientId: string;
+            /** Format: int32 */
+            triageLevel: number;
+            chiefComplaint: string;
+        };
+        DrillRunDto: {
+            name: string;
+            casualties: components["schemas"]["DrillCasualtyDto"][];
         };
         EdBayDto: {
             code: string;
@@ -24033,6 +24060,50 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseEdEncounterView"];
+                };
+            };
+        };
+    };
+    drills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DrillRunDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
                 };
             };
         };
@@ -37373,4 +37444,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 047fd7933d624c2ac12a4bcb857baa15a51e3d97c2996ebf0a61e1565278d381
+// openapi snapshot sha256: f528c16e2a982a32abdf2b627604b759343e9cd87fe91e93bab6993a2607d1dd

@@ -1,6 +1,6 @@
 # Section 07.03 — Digital twin + capacity intelligence (chunk 7)
 
-**Verdict: SECTION REVIEW → local gates green; dependency deviation recorded (06.06 ClickHouse marts not available).** Materialized operational snapshots and a capacity answer with evidence.
+**Verdict: SECTION REVIEW → local gates green; staffing/demand forecasting and true event replay remain owed (the 06.06 marts dependency is closed).** Materialized operational snapshots and a capacity answer with evidence.
 
 ## 1. Scope
 Per `chunk-07-full-depth.md` item 3 / `20-CHUNK7-SECTIONS.md` 07.03: live operational model (beds/OT/staff/diagnostics/equipment/demand), constraint analysis answering "can we take N more admissions tonight?" with evidence, and a 30-day replay that reconciles with actuals.
@@ -15,7 +15,7 @@ Per `chunk-07-full-depth.md` item 3 / `20-CHUNK7-SECTIONS.md` 07.03: live operat
 - ✔ Snapshot materializes beds (total/available/occupied), OT rooms (total/free), active admissions, expected discharges today, diagnostics backlog (lab + radiology), equipment down and open work orders.
 - ✔ Capacity answer for N additional admissions with per-factor evidence (beds, diagnostics backlog, equipment down) and a human-readable answer.
 - ✔ Reconcile compares the last materialized view with live operational counts and reports drift.
-- ⚠ Staffing/demand forecasting and the 30-day event replay are not modelled; 06.06 ClickHouse marts are not available, so the twin reads operational tables directly.
+- ⚠ Staffing/demand forecasting and the 30-day event replay are not modelled; the twin reads operational tables directly because capacity must be live.
 
 ## 4. Gates 1–12
 | Gate | Result | Evidence |
@@ -51,10 +51,10 @@ No UI change.
 4. **Reconciliation** — drift between the last snapshot and live counts is surfaced, not hidden.
 5. **Tenant** — every snapshot/query is hospital-scoped.
 6. **Determinism** — the answer is a pure function of the live snapshot.
-7. **No ClickHouse dependency** — the twin reads governed tables directly until 06.06 lands.
+7. **Live by design** — the twin reads governed tables directly rather than the nightly marts, so a capacity answer cannot be stale.
 
 ## 8. Deviations / blockers
-- **Dependency deviation:** 06.06 (BI/ClickHouse) is still IN PROGRESS; the twin uses operational tables instead of ClickHouse marts.
+- **06.06 dependency resolved (2026-11-26):** ClickHouse marts now exist, but the twin deliberately reads operational tables — a capacity answer must reflect live state, and the marts only refresh on the nightly sync. The earlier "not available" deviation is closed.
 - Staffing (roster) and demand forecasting are not part of the capacity model yet.
 - The "30-day replay" is implemented as snapshot-vs-live reconciliation, not an event replay.
 - Role command centres (CEO/COO/CFO/CMO/Nursing/Facilities) are 06.06 scope, not built here.

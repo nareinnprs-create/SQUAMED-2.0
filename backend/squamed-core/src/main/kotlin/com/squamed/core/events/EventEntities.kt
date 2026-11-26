@@ -11,6 +11,8 @@ import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import java.time.Instant
 import java.util.UUID
 
@@ -132,6 +134,16 @@ interface EventOutboxRepository : JpaRepository<EventOutbox, UUID> {
     status: String,
     cutoff: Instant,
     pageable: Pageable,
+  ): List<EventOutbox>
+
+  // 06.06 BI: events already relayed for one hospital after the mart cursor.
+  @Query(
+    "select e from EventOutbox e where e.status = 'SENT' and e.hospitalId = :hid " +
+      "and e.occurredAt > :after order by e.occurredAt asc",
+  )
+  fun findSentForHospitalAfter(
+    @Param("hid") hospitalId: UUID,
+    @Param("after") after: Instant,
   ): List<EventOutbox>
 
   fun findByStatusAndUpdatedAtBefore(

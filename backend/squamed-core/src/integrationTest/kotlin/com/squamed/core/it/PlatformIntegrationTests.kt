@@ -1585,6 +1585,11 @@ class PlatformIntegrationTests {
 
       val unknown = api(HttpMethod.GET, "/api/v1/patients/" + UUID.randomUUID(), token = token)
       assertTrue(unknown.status in 404..409 || unknown.status == 400, "unknown patient -> 4xx (${unknown.status})")
+
+      // A typo'd path is a client error; the catch-all used to turn it into a 500.
+      val missing = api(HttpMethod.GET, "/api/v1/no-such-endpoint", token = token)
+      assertEquals(404, missing.status, "unmatched path -> 404")
+      assertEquals("NOT_FOUND", om.readTree(missing.body)["error"]["code"].asText(), "unmatched path error code")
     }
 
     @Test
@@ -9917,7 +9922,9 @@ class PlatformIntegrationTests {
           api(HttpMethod.POST, "/api/v1/tasks", json("title" to "SLA normal $s", "priority" to "normal", "assigneeId" to doctorId, "hospitalId" to h), doctor),
         )["id"].asText()
 
-      val scan = `data`(api(HttpMethod.POST, "/api/v1/tasks/sla/scan", json(), doctor))
+      val scanResp = api(HttpMethod.POST, "/api/v1/tasks/sla/scan", json(), doctor)
+      assert2xx(scanResp, "sla scan")
+      val scan = `data`(scanResp)
       assertTrue(scan["escalated"].asInt() >= 1, "scan escalates breaches: $scan")
       assertEquals(
         "escalated",
@@ -18815,7 +18822,9 @@ class PlatformIntegrationTests {
         "seed lab order",
       )
 
-      val sync = `data`(api(HttpMethod.POST, "/api/v1/bi/sync", json(), sys))
+      val syncResp = api(HttpMethod.POST, "/api/v1/bi/sync", json(), sys)
+      assert2xx(syncResp, "bi sync")
+      val sync = `data`(syncResp)
       assertEquals(period, sync["period"].asText(), "sync period")
       assertEquals(1.0, sync["kpis"]["ADMISSIONS"].asDouble(), 1e-9, "admissions KPI")
       assertEquals(500.0, sync["kpis"]["REVENUE_QAR"].asDouble(), 1e-9, "revenue KPI")

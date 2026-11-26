@@ -14,6 +14,8 @@ import com.squamed.core.task.domain.TaskLink
 import com.squamed.core.task.repository.TaskLinkRepository
 import com.squamed.core.task.repository.TaskRepository
 import io.micrometer.core.instrument.MeterRegistry
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -261,11 +263,19 @@ class TaskService(
         } else {
           emptyList()
         }
-      escalateTask(task.id!!, actorId, "SLA_BREACH:${task.priority}", task.hospitalId, roleTargets)
-      meterRegistry
-        .counter("squamed.sla.breaches", "priority", task.priority)
-        .increment()
-      escalated += 1
+      // The scheduled pass and an on-demand POST /tasks/sla/scan can overlap; whichever loses the
+      // optimistic-lock race must skip that task, not fail the whole scan with a 500.
+      try {
+        escalateTask(task.id!!, actorId, "SLA_BREACH:${task.priority}", task.hospitalId, roleTargets)
+        meterRegistry
+          .counter("squamed.sla.breaches", "priority", task.priority)
+          .increment()
+        escalated += 1
+      } catch (ex: ObjectOptimisticLockingFailureException) {
+        continue
+      } catch (ex: DataIntegrityViolationException) {
+        continue
+      }
     }
     return mapOf("escalated" to escalated, "checked" to open.size)
   }

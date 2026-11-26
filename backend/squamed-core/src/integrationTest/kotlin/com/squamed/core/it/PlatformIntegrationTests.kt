@@ -19051,4 +19051,148 @@ class PlatformIntegrationTests {
       assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/fhir/exports", token = other)).size(), "cross-tenant export ledger isolated")
     }
   }
+
+  @Nested
+  inner class SpecialtyPackTests {
+    @Test
+    fun specialtyPackInstallCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+
+      fun hospital(tag: String): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Pack $tag $s", "code" to "PK$tag-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+
+      fun adminOf(
+        tag: String,
+        hospitalId: String,
+      ): String {
+        val email = "pack${tag.lowercase()}.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to "Pack$tag",
+              "lastName" to "Admin$s",
+              "roles" to listOf("SYSTEM_ADMIN"),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register pack admin $tag",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))[
+          "accessToken",
+        ].asText()
+      }
+
+      val hospitalId = hospital("A")
+      val sys = adminOf("A", hospitalId)
+      val roleName = "CARDIOLOGY-$s"
+
+      // 1. A pack is configuration: one CONFIG document + one ROLE grant set.
+      val created =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/packs",
+            json(
+              "code" to "CARDIO-$s",
+              "name" to "Cardiology reference $s",
+              "specialty" to "cardiology",
+              "components" to
+                listOf(
+                  mapOf(
+                    "componentType" to "CONFIG",
+                    "componentKey" to "task-sla",
+                    "payload" to
+                      mapOf(
+                        "rules" to listOf(mapOf("priority" to "urgent", "slaHours" to 2, "escalateToRole" to roleName)),
+                        "defaultSlaHours" to 48,
+                      ),
+                  ),
+                  mapOf(
+                    "componentType" to "ROLE",
+                    "componentKey" to roleName,
+                    "payload" to
+                      mapOf(
+                        "displayName" to "Cardiology $s",
+                        "permissions" to listOf("clinical:read:encounter"),
+                      ),
+                  ),
+                ),
+            ),
+            sys,
+          ),
+        )
+      assertEquals(2, created["components"].asInt(), "two components registered")
+      assertEquals("PUBLISHED", created["status"].asText(), "pack published")
+
+      // 2. Install writes configuration and records the install.
+      val installed = `data`(api(HttpMethod.POST, "/api/v1/packs/CARDIO-$s/install", json(), sys))
+      assertEquals("INSTALLED", installed["status"].asText(), "pack installed")
+      assertEquals(2, installed["components"].size(), "both components applied")
+      val sla = `data`(api(HttpMethod.GET, "/api/v1/hospital-config/hospitals/$hospitalId/config/task-sla", token = sys))
+      assertEquals(48, sla["content"]["defaultSlaHours"].asInt(), "installed config document is active")
+      assertEquals(roleName, sla["content"]["rules"][0]["escalateToRole"].asText(), "installed rule targets the pack role")
+
+      // 3. Re-install is idempotent and does not republish.
+      val again = `data`(api(HttpMethod.POST, "/api/v1/packs/CARDIO-$s/install", json(), sys))
+      assertEquals("ALREADY_INSTALLED", again["status"].asText(), "second install is a no-op")
+      assertEquals(1, `data`(api(HttpMethod.GET, "/api/v1/packs/installs", token = sys)).size(), "one install recorded")
+
+      // 4. Invalid packs are rejected before anything is written.
+      assertEquals(
+        400,
+        api(
+          HttpMethod.POST,
+          "/api/v1/packs",
+          json(
+            "code" to "BADCFG-$s",
+            "name" to "Bad config",
+            "specialty" to "cardiology",
+            "components" to
+              listOf(mapOf("componentType" to "CONFIG", "componentKey" to "not-a-config-type", "payload" to mapOf("x" to 1))),
+          ),
+          sys,
+        ).status,
+        "unknown config type rejected",
+      )
+      assertEquals(
+        400,
+        api(
+          HttpMethod.POST,
+          "/api/v1/packs",
+          json(
+            "code" to "BADROLE-$s",
+            "name" to "Bad role",
+            "specialty" to "cardiology",
+            "components" to
+              listOf(
+                mapOf(
+                  "componentType" to "ROLE",
+                  "componentKey" to "ROLE-$s",
+                  "payload" to mapOf("permissions" to listOf("nope:nope:nope")),
+                ),
+              ),
+          ),
+          sys,
+        ).status,
+        "unknown permission rejected",
+      )
+
+      // 5. Tenant isolation: another hospital sees no installs.
+      val otherHospital = hospital("B")
+      val other = adminOf("B", otherHospital)
+      assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/packs/installs", token = other)).size(), "cross-tenant install history isolated")
+    }
+  }
 }

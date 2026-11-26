@@ -202,6 +202,17 @@ services:
     ports:
       - "9093:9093"
 
+  # 06.07 outbound interop: peer FHIR server the exporter pushes to (Patient/Encounter/Observation/
+  # DiagnosticReport/MedicationRequest). R4 by default in v7. The image is distroless (no shell,
+  # no curl), so there is no container healthcheck - the integration test waits on /fhir/metadata.
+  hapi:
+    image: hapiproject/hapi:v7.2.0
+    container_name: squamed-hapi
+    restart: unless-stopped
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xms256m -Xmx768m"
+    ports:
+      - "8081:8080"
   # 06.06 BI: event-fed marts + nightly dimensional sync (HTTP interface used by the backend JDBC).
   clickhouse:
     image: clickhouse/clickhouse-server:24.8-alpine

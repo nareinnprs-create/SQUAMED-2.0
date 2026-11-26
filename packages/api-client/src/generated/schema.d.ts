@@ -4340,6 +4340,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fhir/export/{patientId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["export"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/esg/metrics": {
         parameters: {
             query?: never;
@@ -5515,7 +5531,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["history_1"];
+        get: operations["history_2"];
         put?: never;
         post: operations["receive_2"];
         delete?: never;
@@ -8484,6 +8500,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fhir/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["history_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fhir/ServiceRequest": {
         parameters: {
             query?: never;
@@ -9067,7 +9099,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["export"];
+        get: operations["export_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -28309,6 +28341,30 @@ export interface operations {
             };
         };
     };
+    export: {
+        parameters: {
+            query?: {
+                target?: string;
+            };
+            header?: never;
+            path: {
+                patientId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     metrics: {
         parameters: {
             query: {
@@ -30878,7 +30934,7 @@ export interface operations {
             };
         };
     };
-    history_1: {
+    history_2: {
         parameters: {
             query?: {
                 limit?: number;
@@ -35525,6 +35581,26 @@ export interface operations {
             };
         };
     };
+    history_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     allServiceRequests: {
         parameters: {
             query?: never;
@@ -36286,7 +36362,7 @@ export interface operations {
             };
         };
     };
-    export: {
+    export_1: {
         parameters: {
             query: {
                 period: string;
@@ -37151,4 +37227,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: c85320e0da8c125e2f24af0522d590438baa4281b027bc90d069d4f67be8f6c6
+// openapi snapshot sha256: f746f2314feb6c848b6aea79d6b4695aef7d943836337982a48641d2f579a650

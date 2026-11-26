@@ -255,7 +255,7 @@ class FhirService(
         ),
       "code" to mapOf("coding" to listOf(mapOf("system" to "http://loinc.org", "code" to "8716-3", "display" to "Vital signs"))),
       "subject" to v.patientId?.let { reference("Patient", it) },
-      "effectiveDateTime" to v.recordedAt?.atOffset(ZoneOffset.UTC).toString(),
+      "effectiveDateTime" to v.recordedAt?.atOffset(ZoneOffset.UTC)?.toString(),
       "performer" to v.recordedBy?.let { listOf(reference("Practitioner", it)) },
       if (components.isEmpty()) "valueString" to v.notes else "component" to components,
     )
@@ -287,13 +287,13 @@ class FhirService(
     mapOf(
       "resourceType" to "MedicationRequest",
       "id" to id?.toString(),
-      "status" to (p.status ?: "draft"),
+      "status" to medicationRequestStatus(p.status),
       "intent" to "order",
       "subject" to p.patientId?.let { reference("Patient", it) },
       "encounter" to p.encounterId?.let { reference("Encounter", it) },
       "medicationCodeableConcept" to mapOf("text" to p.drugName),
       "requester" to p.prescribedBy?.let { reference("Practitioner", it) },
-      "authoredOn" to p.prescribedAt?.atOffset(ZoneOffset.UTC).toString(),
+      "authoredOn" to p.prescribedAt?.atOffset(ZoneOffset.UTC)?.toString(),
       "dosageInstruction" to
         listOfNotNull(
           buildMap {
@@ -303,6 +303,18 @@ class FhirService(
           }.ifEmpty { null },
         ),
     )
+
+  // 06.07: internal prescription states are not FHIR MedicationRequestStatus codes; HAPI rejects
+  // "prescribed" outright, so map them here instead of leaking domain vocabulary onto the wire.
+  private fun medicationRequestStatus(status: String?): String =
+    when (status) {
+      "active", "prescribed", "dispensed", "partially_dispensed" -> "active"
+      "completed", "closed" -> "completed"
+      "cancelled" -> "cancelled"
+      "stopped", "discontinued" -> "stopped"
+      "draft" -> "draft"
+      else -> "unknown"
+    }
 
   fun serviceRequest(id: UUID): Map<String, Any?> = serviceRequest(id, orderEntryRepository.findById(id).orElseThrow())
 
@@ -319,7 +331,7 @@ class FhirService(
       "encounter" to o.encounterId?.let { reference("Encounter", it) },
       "code" to code(o.orderName ?: o.orderCode),
       "requester" to o.orderedBy?.let { reference("Practitioner", it) },
-      "authoredOn" to o.orderedAt?.atOffset(ZoneOffset.UTC).toString(),
+      "authoredOn" to o.orderedAt?.atOffset(ZoneOffset.UTC)?.toString(),
     )
 
   fun allergyIntolerance(id: UUID): Map<String, Any?> {
@@ -362,7 +374,7 @@ class FhirService(
       "subject" to l.patientId?.let { reference("Patient", it) },
       "encounter" to l.encounterId?.let { reference("Encounter", it) },
       "code" to mapOf("coding" to listOf(mapOf("code" to (l.orderNumber ?: "LAB"))), "text" to l.orderNumber),
-      "issued" to l.releasedAt?.atOffset(ZoneOffset.UTC).toString(),
+      "issued" to l.releasedAt?.atOffset(ZoneOffset.UTC)?.toString(),
       "conclusion" to l.clinicalNote,
     )
 

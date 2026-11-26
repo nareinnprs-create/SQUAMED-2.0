@@ -18566,4 +18566,116 @@ class PlatformIntegrationTests {
       assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/migration/jobs", token = admin)).size(), "cross-tenant migration jobs isolated")
     }
   }
+
+  @Nested
+  inner class DigitalTwinTests {
+    @Test
+    fun digitalTwinCapacityCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Twin $s", "code" to "TW-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+      val sysEmail = "twin.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to sysEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Twin",
+            "lastName" to "Admin$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register twin admin",
+      )
+      val sys = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to sysEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+      val wardId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json("name" to "Twin Ward $s", "code" to "TWW-$s", "type" to "general"),
+            sys,
+          ),
+        )["id"].asText()
+
+      fun bed(tag: String): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+            json("label" to "T$tag-$s", "type" to "standard", "status" to "available", "wardId" to wardId),
+            sys,
+          ),
+        )["id"].asText()
+      val bed1 = bed("1")
+      bed("2")
+      bed("3")
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Twin$s",
+              "lastName" to "Patient",
+              "gender" to "male",
+              "dateOfBirth" to "1970-01-01",
+              "phone" to "74$s".take(11),
+              "qid" to "TW$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            sys,
+          ),
+        )["patient"]["id"].asText()
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/admissions",
+          json("hospitalId" to hospitalId, "patientId" to patientId, "bedId" to bed1, "admissionType" to "elective"),
+          sys,
+        ),
+        "occupy one bed",
+      )
+
+      val snapshot = `data`(api(HttpMethod.POST, "/api/v1/twin/snapshot", json(), sys))
+      assertEquals(3, snapshot["bedsTotal"].asInt(), "three beds")
+      assertEquals(2, snapshot["bedsAvailable"].asInt(), "two available")
+      assertEquals(1, snapshot["bedsOccupied"].asInt(), "one occupied")
+      assertEquals(1, snapshot["admissionsActive"].asInt(), "one active admission")
+
+      val one = `data`(api(HttpMethod.POST, "/api/v1/twin/capacity", json("additionalAdmissions" to 1), sys))
+      assertEquals(true, one["canAccept"].asBoolean(), "one more admission fits")
+      assertEquals(1, one["bedHeadroom"].asInt(), "one bed of headroom")
+      val five = `data`(api(HttpMethod.POST, "/api/v1/twin/capacity", json("additionalAdmissions" to 5), sys))
+      assertEquals(false, five["canAccept"].asBoolean(), "five more admissions do not fit")
+      assertEquals(-3, five["bedHeadroom"].asInt(), "three beds short")
+      assertEquals(
+        400,
+        api(HttpMethod.POST, "/api/v1/twin/capacity", json("additionalAdmissions" to -1), sys).status,
+        "negative admissions rejected",
+      )
+      val reconciled = `data`(api(HttpMethod.GET, "/api/v1/twin/reconcile", token = sys))
+      assertEquals(true, reconciled["reconciled"].asBoolean(), "snapshot reconciles with live state")
+      assertEquals(0, reconciled["mismatches"].size(), "no drift")
+      assertEquals(3, `data`(api(HttpMethod.GET, "/api/v1/twin/snapshot", token = sys))["bedsTotal"].asInt(), "latest snapshot readable")
+
+      // Cross-tenant: the primary hospital has no snapshot.
+      val foreign = api(HttpMethod.GET, "/api/v1/twin/snapshot", token = admin)
+      assertEquals(200, foreign.status, "cross-tenant snapshot call succeeds")
+      assertTrue(om.readTree(foreign.body)["data"].isNull, "cross-tenant snapshot is empty")
+    }
+  }
 }

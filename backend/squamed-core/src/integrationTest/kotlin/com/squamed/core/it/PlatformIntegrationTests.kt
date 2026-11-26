@@ -14729,16 +14729,19 @@ class PlatformIntegrationTests {
             token,
           ),
         )["id"].asText()
-      val admission =
-        `data`(
-          api(
-            HttpMethod.POST,
-            "/api/v1/admissions",
-            json("hospitalId" to hospitalId, "patientId" to patient["id"].asText(), "bedId" to bed, "admissionType" to "elective"),
-            token,
-          ),
+      val admissionResp =
+        api(
+          HttpMethod.POST,
+          "/api/v1/admissions",
+          json("hospitalId" to hospitalId, "patientId" to patient["id"].asText(), "bedId" to bed, "admissionType" to "elective"),
+          token,
         )
+      assert2xx(admissionResp, "create admission for the discharge draft")
+      val admission = `data`(admissionResp)
+      // Jackson turns a JSON null into NullNode, whose asText() is the string "null" - which then
+      // reaches the command bar as "prepare discharge null" and surfaces as ADMISSION_REQUIRED.
       val admissionId = admission["id"].asText()
+      assertTrue(admissionId.matches(Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")), "admission id is a uuid: $admission")
       val dischargeCmd = api(HttpMethod.POST, "/api/v1/ai/command", json("query" to "prepare discharge $admissionId"), govAdmin)
       assert2xx(dischargeCmd, "ai command prepare discharge")
       val draftDischarge = `data`(dischargeCmd)["draft"]

@@ -48,6 +48,29 @@ class PlatformIntegrationTests {
     RestTemplateBuilder().rootUri("http://localhost:$port").build()
   }
 
+  // 06.07: the peer FHIR server is a separate process, so it needs its own absolute-URL client.
+  private val peerRest: RestTemplate by lazy { RestTemplateBuilder().build() }
+
+  private fun awaitPeerFhir(timeoutMs: Long = 180_000) {
+    val deadline = System.currentTimeMillis() + timeoutMs
+    while (System.currentTimeMillis() < deadline) {
+      try {
+        val body = peerRest.getForObject("http://localhost:8081/fhir/metadata", String::class.java)
+        if (body != null && body.contains("CapabilityStatement")) return
+      } catch (ex: Exception) {
+        Thread.sleep(2000)
+      }
+    }
+    throw AssertionError("peer HAPI FHIR server not reachable on :8081")
+  }
+
+  private fun peerStatus(path: String): Int =
+    try {
+      peerRest.getForEntity("http://localhost:8081$path", String::class.java).statusCode.value()
+    } catch (ex: org.springframework.web.client.HttpClientErrorException) {
+      ex.statusCode.value()
+    }
+
   data class ApiResp(
     val status: Int,
     val body: String,
@@ -18838,6 +18861,184 @@ class PlatformIntegrationTests {
       val sys2 = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to sys2Email, "password" to "Passw0rd!123")))["accessToken"].asText()
       val foreign = `data`(api(HttpMethod.GET, "/api/v1/bi/kpis?period=$period", token = sys2))
       assertTrue(foreign["kpis"].all { it["value"].asDouble() == 0.0 }, "cross-tenant KPI rows isolated")
+    }
+  }
+
+  @Nested
+  inner class FhirOutboundTests {
+    @Test
+    fun fhirOutboundCoverage() {
+      awaitPeerFhir()
+      val admin = adminToken()
+      val s = suffix()
+
+      fun hospital(tag: String): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Fhir $tag $s", "code" to "FO$tag-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+
+      fun adminOf(
+        tag: String,
+        hospitalId: String,
+      ): String {
+        val email = "fhir${tag.lowercase()}.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to "Fhir$tag",
+              "lastName" to "Admin$s",
+              "roles" to listOf("SYSTEM_ADMIN"),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register fhir admin $tag",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))[
+          "accessToken",
+        ].asText()
+      }
+
+      val hospitalId = hospital("A")
+      val sys = adminOf("A", hospitalId)
+      val patient =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Fhir$s",
+              "lastName" to "Outbound",
+              "gender" to "female",
+              "dateOfBirth" to "1988-05-05",
+              "phone" to "76$s".take(11),
+              "qid" to "FO$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            sys,
+          ),
+        )["patient"]
+      val patientId = patient["id"].asText()
+      val mrn = patient["mrn"].asText()
+      val encounterId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters",
+            json("patientId" to patientId, "reason" to "Outbound FHIR", "chiefComplaint" to "cough"),
+            sys,
+          ),
+        )["id"].asText()
+      val vitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/encounters/$encounterId/vitals",
+            json(
+              "bloodPressureSystolic" to 118,
+              "bloodPressureDiastolic" to 76,
+              "heartRate" to 72,
+              "spo2Percent" to 99,
+              "painScore" to 0,
+              "patientMrn" to mrn,
+            ),
+            sys,
+          ),
+        )["id"].asText()
+      // CS-03: a documented allergy is required before prescribing.
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/patients/$patientId/allergies",
+          json("allergen" to "Latex", "reaction" to "Urticaria", "severity" to "mild"),
+          sys,
+        ),
+        "document allergy",
+      )
+      val rxResp =
+        api(
+          HttpMethod.POST,
+          "/api/v1/encounters/$encounterId/prescriptions",
+          json("drugName" to "Paracetamol", "dose" to "500 mg", "frequency" to "TID", "quantity" to 9, "patientMrn" to mrn),
+          sys,
+        )
+      assert2xx(rxResp, "seed prescription")
+      val rxId = `data`(rxResp)["id"].asText()
+
+      // 1. Profile rules reject an empty resource before anything is sent.
+      assertTrue(
+        com.squamed.core.interop.fhir.FhirProfileValidator
+          .validate("Patient", mapOf("resourceType" to "Patient"))
+          .size >= 4,
+        "empty Patient violates identifier/name/gender/birthDate",
+      )
+
+      // 2. Core export: Patient, Encounter, Observation, MedicationRequest reach the peer.
+      val first = `data`(api(HttpMethod.POST, "/api/v1/fhir/export/$patientId", json(), sys))
+      assertEquals(4, first["exported"].asInt(), "four core resources exported: ${first["resources"]}")
+      assertEquals(0, first["failed"].asInt(), "no failures")
+      assertEquals(0, first["withheld"].size(), "nothing withheld without documents")
+      assertEquals(200, peerStatus("/fhir/Patient/$patientId"), "peer holds the Patient")
+      assertEquals(200, peerStatus("/fhir/Encounter/$encounterId"), "peer holds the Encounter")
+      assertEquals(200, peerStatus("/fhir/Observation/$vitalId"), "peer holds the Observation")
+      assertEquals(200, peerStatus("/fhir/MedicationRequest/$rxId"), "peer holds the MedicationRequest")
+
+      // 3. Document access semantics: a lab report is withheld until data_sharing consent exists.
+      val labOrderResp =
+        api(
+          HttpMethod.POST,
+          "/api/v1/lab/orders",
+          json("patientId" to patientId, "tests" to listOf(mapOf("testCode" to "FO-$s", "testName" to "Outbound test"))),
+          sys,
+        )
+      assert2xx(labOrderResp, "create lab order")
+      val labOrderId = `data`(labOrderResp)["order"]["id"].asText()
+      val withoutConsent = `data`(api(HttpMethod.POST, "/api/v1/fhir/export/$patientId", json(), sys))
+      val withheld = withoutConsent["withheld"]
+      assertEquals(1, withheld.size(), "one document withheld")
+      assertEquals("DiagnosticReport", withheld[0]["resourceType"].asText(), "withheld resource is the report")
+      assertTrue(withheld[0]["detail"].asText().startsWith("CONSENT_REQUIRED"), "withheld reason names consent")
+      assertEquals(404, peerStatus("/fhir/DiagnosticReport/$labOrderId"), "peer never received the report")
+
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/consents",
+          json("hospitalId" to hospitalId, "patientId" to patientId, "purpose" to "data_sharing", "signedByName" to "Fhir$s"),
+          sys,
+        ),
+        "capture data_sharing consent",
+      )
+      val withConsent = `data`(api(HttpMethod.POST, "/api/v1/fhir/export/$patientId", json(), sys))
+      assertEquals(0, withConsent["withheld"].size(), "nothing withheld once consent is granted")
+      assertEquals(5, withConsent["exported"].asInt(), "five resources exported with the report: ${withConsent["resources"]}")
+      assertEquals(200, peerStatus("/fhir/DiagnosticReport/$labOrderId"), "peer holds the DiagnosticReport")
+
+      // 4. Unreachable peer is recorded, not silently dropped.
+      val badTarget =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/fhir/export/$patientId?target=http://127.0.0.1:9/fhir", json(), sys),
+        )
+      assertEquals(0, badTarget["exported"].asInt(), "nothing exported to a dead peer")
+      assertEquals(5, badTarget["failed"].asInt(), "every resource recorded as failed")
+      val history = `data`(api(HttpMethod.GET, "/api/v1/fhir/exports", token = sys))
+      assertTrue(history.any { it["status"].asText() == "EXPORTED" }, "history keeps successful exports")
+      assertTrue(history.any { it["status"].asText() == "FAILED" }, "history keeps the failed attempt")
+
+      // 5. Tenant isolation: the other hospital sees no export ledger rows.
+      val otherHospital = hospital("B")
+      val other = adminOf("B", otherHospital)
+      assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/fhir/exports", token = other)).size(), "cross-tenant export ledger isolated")
     }
   }
 }

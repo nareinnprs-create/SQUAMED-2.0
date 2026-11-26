@@ -2052,6 +2052,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/packs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["packs"];
+        put?: never;
+        post: operations["create_2"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/packs/{code}/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["install"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ops/procurement/requisitions": {
         parameters: {
             query?: never;
@@ -2637,7 +2669,7 @@ export interface paths {
         };
         get: operations["jobs"];
         put?: never;
-        post: operations["create_2"];
+        post: operations["create_3"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3501,7 +3533,7 @@ export interface paths {
         };
         get: operations["list_1"];
         put?: never;
-        post: operations["create_3"];
+        post: operations["create_4"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7628,6 +7660,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getPatient360"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/packs/installs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["installs"];
         put?: never;
         post?: never;
         delete?: never;
@@ -12270,6 +12318,18 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        PackComponentDto: {
+            componentType: string;
+            componentKey: string;
+            payload: components["schemas"]["JsonNode"];
+        };
+        PackCreateDto: {
+            code: string;
+            name: string;
+            specialty: string;
+            description?: string;
+            components: components["schemas"]["PackComponentDto"][];
         };
         RequisitionCreateDto: {
             department: string;
@@ -23467,6 +23527,72 @@ export interface operations {
             };
         };
     };
+    packs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    create_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PackCreateDto"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    install: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     requisitions: {
         parameters: {
             query?: never;
@@ -24735,7 +24861,7 @@ export interface operations {
             };
         };
     };
-    create_2: {
+    create_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -26532,7 +26658,7 @@ export interface operations {
             };
         };
     };
-    create_3: {
+    create_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -34408,6 +34534,26 @@ export interface operations {
             };
         };
     };
+    installs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     vendorPerformance: {
         parameters: {
             query?: never;
@@ -37227,4 +37373,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: f746f2314feb6c848b6aea79d6b4695aef7d943836337982a48641d2f579a650
+// openapi snapshot sha256: 047fd7933d624c2ac12a4bcb857baa15a51e3d97c2996ebf0a61e1565278d381

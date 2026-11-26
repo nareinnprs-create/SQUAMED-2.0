@@ -1,6 +1,6 @@
 # Section 07.10 — Specialty packs + migration studio + benchmarking/ESG (chunk 7)
 
-**Verdict: SECTION REVIEW → local gates green; EXTERNAL-BLOCKED item remains (22 specialty packs need human clinical review).** Migration studio, consent-gated benchmarking and ESG reporting are built; the specialty-pack library is not.
+**Verdict: SECTION REVIEW → local gates green; EXTERNAL-BLOCKED item remains (the 22 pack CONTENTS need human clinical review).** Migration studio, consent-gated benchmarking, ESG reporting and the config-only pack installer are built; the 22 reviewed pack CONTENTS are not.
 
 ## 1. Scope
 Per `chunk-07-full-depth.md` item 8/11/12 / `20-CHUNK7-SECTIONS.md` 07.10: 22 specialty packs install config-only in <1 day; migration studio (extract→map→clean→transform→validate→import→reconcile, rollback, legacy dry-run); anonymized consent-gated benchmarking; ESG reporting.
@@ -19,22 +19,23 @@ Per `chunk-07-full-depth.md` item 8/11/12 / `20-CHUNK7-SECTIONS.md` 07.10: 22 sp
 - ✔ Per-row transaction isolation so one bad row cannot poison the batch.
 - ✔ Benchmarking: participation consent, group-scoped peers, anonymized own/median/p25/p75 for ADMISSIONS and REVENUE_QAR; non-participants blocked; opted-out peers excluded.
 - ✔ ESG: ENERGY_KWH/WATER_L/WASTE_KG/CARBON_KG per period, totals, carbon per admission.
-- ⚠ Specialty-pack library (22 packs) and the config-only installer are not built — content requires human clinical review.
+- ⚠ Config-only pack installer built (V108): a pack is CONFIG documents of existing validated types plus ROLE grant sets, installed per hospital and idempotent per (hospital, pack, version); a reference cardiology pack proves the mechanism.
+- ⚠ The 22 reviewed pack CONTENTS are not shipped — they require human clinical review.
 
 ## 4. Gates 1–12
 | Gate | Result | Evidence |
 |---|---|---|
-| 1 Functional completeness | PASS (partial) | `migrationBenchmarkEsgCoverage` green; packs absent |
+| 1 Functional completeness | PASS (partial) | `migrationBenchmarkEsgCoverage` + `specialtyPackInstallCoverage` green; 22 pack contents await clinical review |
 | 2 Zero-stub | PASS | new files grep clean; CI |
 | 3 Types | PASS | `compileKotlin` + `compileIntegrationTestKotlin` |
 | 4 Lint + format | PASS | `ktlintCheck` clean |
-| 5 Tests | PASS (local) | full chain BUILD SUCCESSFUL 15m36s — 108 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.79% (>=0.80) |
+| 5 Tests | PASS (local) | full chain BUILD SUCCESSFUL 14m11s - 112 PIT methods + 56 unit tests, 0 failures; JaCoCo instruction 84.98% (>=0.80) |
 | 6 Accessibility | PASS | No UI change |
 | 7 Design system | PASS | No UI change |
-| 8 Contracts | PASS | snapshot regenerated from live `/api-docs`; codegen stamped `58528aa4…` |
+| 8 Contracts | PASS | OpenAPI snapshot regenerated from live /api-docs (sha256 047fd793...); api-client codegen stamped; ContractTests green |
 | 9 Data | PASS | V104 additive; cross-tenant job list empty |
 | 10 Audit | PASS | Controller-mediated writes; jobs carry actor |
-| 11 Docs | PASS | This report; LEDGER; tracker |
+| 11 Docs | PASS | This report; LEDGER row; chunk-07 tracker; `reports/pr-body-07.10-installer.md` |
 | 12 Exit item | PASS (partial) | 07.11 migration/benchmark/ESG slice |
 
 ## 5. Tests
@@ -59,7 +60,7 @@ No UI change.
 7. **ESG math** — non-negative values; carbon intensity only when admissions > 0.
 
 ## 8. Deviations / blockers
-- **External:** the 22 specialty packs and the config-only installer await human clinical review; not shipped.
+- **External:** the 22 pack CONTENTS await human clinical review; the installer that applies them is built and tested.
 - Migration covers PATIENT rows only; other entities (orders, invoices, documents) are follow-up.
 - Rollback is a soft hide (`recordsStatus=duplicate`), not a hard delete, to preserve referential integrity.
 - Benchmarking is group-scoped with two metrics; no national/consortium benchmark set.

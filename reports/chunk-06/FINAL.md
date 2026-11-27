@@ -51,6 +51,7 @@ Chunk-6 exit per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SEC
 | Web Push delivery + portal UI (06.03) | Web + infra | VAPID keys/HTTPS + screens; SC-5 stays open |
 | Group rate cards/packages | Billing | Owed from 06.01; needed for the <1-day hospital demo to be fully priced |
 | 1,500-user load test | QA + infra | run locally (0 errors); re-run on staging with the client off-box for quotable latency |
+| 10k replay drill | **RUN 2026-11-28** | 10,000 queued, 10,000 replayed, 0 failures, second replay 0, 0 pending (~10.6 writes/s) |
 | DR drill (RTO 4 h / RPO 15 min) | Infra + clinical lead | Second region; runbook ready |
 | 10k replay drill | QA | Load harness |
 | AI Scribe + eval harness (05.05/05.02) | Product | `exp:E8` |

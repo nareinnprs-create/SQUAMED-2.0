@@ -25,7 +25,7 @@ Per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SECTIONS.md` 06.
 | Ops | indent→PO→GRN→stock 5; CSSD PASS; ED triaged |
 | Workforce | roster published with a nurse shift |
 | Event trail | share/referral/erasure events in the outbox |
-| Load + DR drill | Load **RUN** (0 errors at 1,500 users; latency host-dominated, NFR unverified); DR drill **OWED** |
+| Load + DR drill | Load **RUN** (0 errors at 1,500 users; latency host-dominated, NFR unverified); 10k replay **RUN** (no loss, no duplication, ~10.6/s); DR drill **OWED** |
 
 ## 4. Gates 1–12
 | Gate | Result | Evidence |
@@ -59,7 +59,8 @@ Per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SECTIONS.md` 06.
 - Telemedicine (06.02, video SDK), BI (06.06, ClickHouse), outbound FHIR (06.07, HAPI).
 - Web Push delivery + portal UI (06.03); SC-5 open.
 - Group rate cards/packages (06.01).
-- DR drill and the 10k replay drill remain owed. The 1,500-user load has been run: correctness holds (0 errors), latency is host-dominated and the NFR is unverified.
+- 10k replay drill: **run 2026-11-28** - `scripts/drill-06.09-10k-replay.mjs` queued 10,000 writes in degraded mode (0 failures, 79 s), replayed all 10,000 (0 failures, 944 s), a second replay replayed 0 (idempotent) and nothing was left pending. Throughput is the finding: ~10.6 replayed writes/s, so a 10k backlog takes ~16 minutes to drain - acceptable for a degraded window, too slow for a multi-day outage; batching the replay is the obvious fix.
+- Datacenter-kill DR drill remains owed (second region).
 - AI Scribe + eval harness (`exp:E8`).
 
 ## 8. Session trail

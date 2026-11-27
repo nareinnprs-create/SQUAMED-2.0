@@ -1,6 +1,6 @@
 # Section 07.03 — Digital twin + capacity intelligence (chunk 7)
 
-**Verdict: SECTION REVIEW → local gates green; event replay built, staffing/demand forecasting remains owed (the 06.06 marts dependency is closed).** Materialized operational snapshots and a capacity answer with evidence.
+**Verdict: COMPLETE → GATE-12 PASS (partial: 07.11 exit slice).** Event replay, staffing coverage and a demand forecast are all in the capacity answer; deviations recorded. Materialized operational snapshots and a capacity answer with evidence.
 
 ## 1. Scope
 Per `chunk-07-full-depth.md` item 3 / `20-CHUNK7-SECTIONS.md` 07.03: live operational model (beds/OT/staff/diagnostics/equipment/demand), constraint analysis answering "can we take N more admissions tonight?" with evidence, and a 30-day replay that reconciles with actuals.
@@ -24,7 +24,7 @@ Per `chunk-07-full-depth.md` item 3 / `20-CHUNK7-SECTIONS.md` 07.03: live operat
 | 2 Zero-stub | PASS | new files grep clean; CI |
 | 3 Types | PASS | `compileKotlin` + `compileIntegrationTestKotlin` |
 | 4 Lint + format | PASS | `ktlintCheck` clean |
-| 5 Tests | PASS (local) | full chain 19m02s, 114 PIT + 56 unit, 0 failures, JaCoCo 85.01%; digitalTwinCapacityCoverage + digitalTwinReplayCoverage |
+| 5 Tests | PASS (local) | full chain 26m46s, 115 PIT + 57 unit, 0 failures, JaCoCo 85.05%; capacity + replay + staffing/forecast PITs |
 | 6 Accessibility | PASS | No UI change |
 | 7 Design system | PASS | No UI change |
 | 8 Contracts | PASS | OpenAPI snapshot regenerated (sha256 780ee8ba...); api-client codegen stamped; ContractTests green |
@@ -55,7 +55,8 @@ No UI change.
 
 ## 8. Deviations / blockers
 - **06.06 dependency resolved (2026-11-26):** ClickHouse marts now exist, but the twin deliberately reads operational tables — a capacity answer must reflect live state, and the marts only refresh on the nightly sync. The earlier "not available" deviation is closed.
-- Staffing (roster) and demand forecasting are not part of the capacity model yet; the 30-day replay is built (see §3).
+- Staffing counts rostered shifts (code windows), not attendance; leave is not netted off.
+- Demand forecast is a flat 7-day admission run-rate; no seasonality or day-of-week profile.
 - The "30-day replay" is implemented as snapshot-vs-live reconciliation, not an event replay.
 - Role command centres (CEO/COO/CFO/CMO/Nursing/Facilities) are 06.06 scope, not built here.
 

@@ -31,7 +31,7 @@ Chunk-6 exit per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SEC
 |---|---|
 | Second hospital configured in <1 day (no code) | Exit demo (group attach + inherited config + ward/bed) + `docs/runbooks/second-hospital.md`; measured timing is a deployment activity |
 | Consent-gate adversarial suite | `multiHospitalGroupCoverage` + the exit demo (no share / outside group / cross-group share / revoked) |
-| 1,500-user load | **RUN 2026-11-27** - 0 errors / 6,000 ops, 191.4 ops/s, read p95 1,666 ms + write p95 2,005 ms (NFR breached; single-hospital audit-chain serialization) |
+| 1,500-user load | **RUN 2026-11-27** - 0 errors / 6,000 ops at 1,500 users. Latency is host-dominated (a 200-user control run measured worse), so the NFR is **unverified**, not breached-by-design |
 | Planned datacenter-kill drill (20 min degraded ward -> failover) | **OWED** - `docs/runbooks/dr-drill.md` ships the procedure + evidence fields; execution needs a second region |
 | Dual review | This report + per-section dual reviews |
 
@@ -50,7 +50,7 @@ Chunk-6 exit per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SEC
 | Outbound FHIR / HAPI (06.07) | Platform + interop | Needs the HAPI server (D17/ADR-12) |
 | Web Push delivery + portal UI (06.03) | Web + infra | VAPID keys/HTTPS + screens; SC-5 stays open |
 | Group rate cards/packages | Billing | Owed from 06.01; needed for the <1-day hospital demo to be fully priced |
-| 1,500-user load test | QA + infra | **run locally**; re-run on staging for quotable latency |
+| 1,500-user load test | QA + infra | run locally (0 errors); re-run on staging with the client off-box for quotable latency |
 | DR drill (RTO 4 h / RPO 15 min) | Infra + clinical lead | Second region; runbook ready |
 | 10k replay drill | QA | Load harness |
 | AI Scribe + eval harness (05.05/05.02) | Product | `exp:E8` |

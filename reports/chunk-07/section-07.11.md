@@ -50,7 +50,7 @@ Per `20-CHUNK7-SECTIONS.md` 07.11 (⛔ external: prescriptive-CDS counsel opinio
 |---|---|---|
 | 07.01 agents + orchestrator | COMPLETE | 50/50 orchestration accuracy |
 | 07.02 voice | COMPLETE | transcript-only, no audio streaming |
-| 07.03 digital twin | SECTION REVIEW | capacity answer real; reads operational tables, not 06.06 marts |
+| 07.03 digital twin | COMPLETE | capacity answer with 5 evidence factors, 30-day event replay reconciled, staffing + advisory forecast |
 | 07.04 full financials | COMPLETE | GL/AP/AR/close; no multi-entity consolidation |
 | 07.05 ED + mass casualty | COMPLETE | activation/stand-down real; drill harness owed |
 | 07.06 kiosk + wayfinding | SECTION REVIEW | E12 indoor-map vendor import absent |
@@ -63,7 +63,7 @@ Per `20-CHUNK7-SECTIONS.md` 07.11 (⛔ external: prescriptive-CDS counsel opinio
 - **Cardiology specialty pack** — the installer and the 22 reviewed packs are not shipped; clinical review is external.
 - **Mass-casualty drill harness** — activation exists; the timed drill harness does not.
 - **Prescriptive-CDS counsel opinion** — documented external gate, not crossed.
-- **07.03** still reads operational tables rather than 06.06 ClickHouse marts; switching it is a follow-up, not an exit blocker.
+- **07.03** is COMPLETE (replay + staffing + forecast); it reads operational tables by design, since capacity must be live rather than nightly marts.
 - **Chunk-6 carry-over:** 06.09 still owes the 1,500-user load and datacenter-kill drill; 06.07 ABDM remains external.
 
 ## 7. Dual review — adversarial pass

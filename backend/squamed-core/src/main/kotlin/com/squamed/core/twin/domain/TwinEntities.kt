@@ -4,6 +4,7 @@ import com.squamed.core.common.domain.BaseEntity
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Table
+import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 
@@ -22,4 +23,6 @@ class CapacitySnapshot(
   @Column(name = "diagnostics_pending", nullable = false) var diagnosticsPending: Int = 0,
   @Column(name = "equipment_down", nullable = false) var equipmentDown: Int = 0,
   @Column(name = "open_work_orders", nullable = false) var openWorkOrders: Int = 0,
+  @Column(name = "staff_on_duty", nullable = false) var staffOnDuty: Int = 0,
+  @Column(name = "forecast_admissions_next_24h", nullable = false) var forecastAdmissionsNext24h: BigDecimal = BigDecimal.ZERO,
 ) : BaseEntity()

@@ -11,6 +11,7 @@ import com.squamed.core.twin.domain.CapacitySnapshot
 import com.squamed.core.twin.repository.CapacitySnapshotRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -29,10 +30,13 @@ class DigitalTwinService(
   private val assetRepository: AssetRepository,
   private val workOrderRepository: WorkOrderRepository,
   private val outboxRepository: com.squamed.core.events.EventOutboxRepository,
+  private val shiftRepository: com.squamed.core.hr.repository.ShiftRepository,
 ) {
   companion object {
     private const val DIAGNOSTICS_BACKLOG_LIMIT = 100
     private const val EQUIPMENT_DOWN_LIMIT = 5
+    private const val PATIENTS_PER_CLINICIAN_MAX = 6
+    private const val FORECAST_WINDOW_DAYS = 7
   }
 
   @Transactional
@@ -70,6 +74,8 @@ class DigitalTwinService(
         diagnosticsPending = labPending + radPending,
         equipmentDown = assetRepository.findByHospitalIdOrderByCodeAsc(hospitalId).count { it.status == "DOWN" },
         openWorkOrders = workOrderRepository.findByHospitalIdAndStatusOrderByCreatedAtDesc(hospitalId, "OPEN").size,
+        staffOnDuty = staffOnDuty(hospitalId, today),
+        forecastAdmissionsNext24h = forecastAdmissions(admissions),
       ).also { it.createdBy = actorId }
     return snapshotRepository.save(snapshot)
   }
@@ -83,6 +89,7 @@ class DigitalTwinService(
     if (additionalAdmissions < 0) throw IllegalArgumentException("TWIN_ADMISSIONS_INVALID")
     val snapshot = generateSnapshot(hospitalId, actorId)
     val bedHeadroom = snapshot.bedsAvailable - additionalAdmissions
+    val rosteredToday = hasRosterToday(hospitalId)
     val evidence =
       listOf(
         mapOf(
@@ -103,8 +110,33 @@ class DigitalTwinService(
           "threshold" to EQUIPMENT_DOWN_LIMIT,
           "pass" to (snapshot.equipmentDown <= EQUIPMENT_DOWN_LIMIT),
         ),
+        mapOf(
+          "factor" to "staffing",
+          "value" to snapshot.staffOnDuty,
+          "threshold" to PATIENTS_PER_CLINICIAN_MAX,
+          // No roster today is missing data, not evidence of an empty ward: only block when rostered.
+          "blocking" to rosteredToday,
+          "pass" to
+            (
+              if (!rosteredToday) {
+                true
+              } else if (snapshot.staffOnDuty == 0) {
+                snapshot.admissionsActive == 0
+              } else {
+                snapshot.admissionsActive.toDouble() / snapshot.staffOnDuty <= PATIENTS_PER_CLINICIAN_MAX
+              }
+            ),
+        ),
+        mapOf(
+          "factor" to "demandForecast",
+          "value" to snapshot.forecastAdmissionsNext24h,
+          "threshold" to snapshot.bedsAvailable - additionalAdmissions,
+          // Forecast is advisory: it informs the answer but does not by itself block an admission.
+          "blocking" to false,
+          "pass" to (snapshot.forecastAdmissionsNext24h <= BigDecimal.valueOf((snapshot.bedsAvailable + snapshot.expectedDischargesToday).toLong())),
+        ),
       )
-    val canAccept = evidence.all { it["pass"] == true }
+    val canAccept = evidence.filter { it["blocking"] != false }.all { it["pass"] == true }
     return mapOf(
       "snapshot" to snapshot,
       "additionalAdmissions" to additionalAdmissions,
@@ -242,5 +274,35 @@ class DigitalTwinService(
       "mismatches" to mismatches,
       "reconciled" to mismatches.isEmpty(),
     )
+  }
+
+  private fun hasRosterToday(hospitalId: UUID): Boolean = shiftRepository.findByHospitalIdAndShiftDate(hospitalId, LocalDate.now()).isNotEmpty()
+
+  // Staff on duty = today's shifts whose code covers the current window (the HR roster stores a code,
+  // not times): EARLY 07-15, LATE 15-23, NIGHT 23-07.
+  private fun staffOnDuty(
+    hospitalId: UUID,
+    today: LocalDate,
+  ): Int {
+    val code =
+      when (
+        java.time.LocalTime
+          .now()
+          .hour
+      ) {
+        in 7..14 -> "EARLY"
+        in 15..22 -> "LATE"
+        else -> "NIGHT"
+      }
+    return shiftRepository.findByHospitalIdAndShiftDate(hospitalId, today).count { it.shiftCode == code }
+  }
+
+  // 7-day admission run-rate: deliberately a flat mean, not a seasonal model.
+  private fun forecastAdmissions(admissions: List<com.squamed.core.ipd.domain.Admission>): BigDecimal {
+    val from = Instant.now().minusSeconds(FORECAST_WINDOW_DAYS.toLong() * 86_400)
+    val recent = admissions.count { admission -> admission.admittedAt?.isAfter(from) == true }
+    return BigDecimal
+      .valueOf(recent.toLong())
+      .divide(BigDecimal.valueOf(FORECAST_WINDOW_DAYS.toLong()), 2, java.math.RoundingMode.HALF_UP)
   }
 }

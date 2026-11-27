@@ -19471,4 +19471,151 @@ class PlatformIntegrationTests {
       assertEquals(true, emptyReplay["reconciled"].asBoolean(), "empty replay reconciles")
     }
   }
+
+  @Nested
+  inner class TwinStaffingTests {
+    @Test
+    fun digitalTwinStaffingForecastCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+      val hospitalId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Staff $s", "code" to "ST-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+      val email = "staff.$s@squamed.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to email,
+            "password" to "Passw0rd!123",
+            "firstName" to "Staff",
+            "lastName" to "Admin$s",
+            "roles" to listOf("SYSTEM_ADMIN"),
+            "hospitalId" to hospitalId,
+          ),
+        ),
+        "register staffing admin",
+      )
+      val sys =
+        `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))[
+          "accessToken",
+        ].asText()
+      val wardId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json("name" to "Staff Ward $s", "code" to "STW-$s", "type" to "general"),
+            sys,
+          ),
+        )["id"].asText()
+      val bedId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+            json("label" to "STB-$s", "type" to "standard", "status" to "available", "wardId" to wardId),
+            sys,
+          ),
+        )["id"].asText()
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Staff$s",
+              "lastName" to "Patient",
+              "gender" to "male",
+              "dateOfBirth" to "1979-09-09",
+              "phone" to "73$s".take(11),
+              "qid" to "ST$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            sys,
+          ),
+        )["patient"]["id"].asText()
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/admissions",
+          json("hospitalId" to hospitalId, "patientId" to patientId, "bedId" to bedId, "admissionType" to "elective"),
+          sys,
+        ),
+        "admit one patient",
+      )
+
+      // A shift covering the current window, so the twin counts one clinician on duty.
+      val employeeId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/employees",
+            json(
+              "hospitalId" to hospitalId,
+              "code" to "STE-$s",
+              "firstName" to "OnDuty",
+              "lastName" to "Doctor$s",
+              "designation" to "Consultant",
+              "department" to "Medicine",
+              "isActive" to true,
+            ),
+            sys,
+          ),
+        )["id"].asText()
+      val today = java.time.LocalDate.now()
+      val rosterId =
+        `data`(
+          api(HttpMethod.POST, "/api/v1/hr/rosters", json("weekStart" to today.with(java.time.DayOfWeek.MONDAY).toString()), sys),
+        )["id"].asText()
+      val shiftCode =
+        when (
+          java.time.LocalTime
+            .now()
+            .hour
+        ) {
+          in 7..14 -> "EARLY"
+          in 15..22 -> "LATE"
+          else -> "NIGHT"
+        }
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/hr/rosters/$rosterId/shifts",
+          json("employeeId" to employeeId, "shiftDate" to today.toString(), "shiftCode" to shiftCode, "role" to "DOCTOR", "wardId" to wardId),
+          sys,
+        ),
+        "roster a shift covering now",
+      )
+
+      val snapshot = `data`(api(HttpMethod.POST, "/api/v1/twin/snapshot", json(), sys))
+      assertEquals(1, snapshot["staffOnDuty"].asInt(), "one clinician on duty")
+      assertTrue(snapshot["forecastAdmissionsNext24h"].asDouble() > 0.0, "7-day admission run-rate present: $snapshot")
+
+      val capacity = `data`(api(HttpMethod.POST, "/api/v1/twin/capacity", json("additionalAdmissions" to 1), sys))
+      val factors = capacity["evidence"].map { it["factor"].asText() }
+      assertEquals(5, factors.size, "five evidence factors: $factors")
+      assertTrue(factors.contains("staffing"), "staffing is part of the answer")
+      assertTrue(factors.contains("demandForecast"), "forecast is part of the answer")
+      val staffing = capacity["evidence"].first { it["factor"].asText() == "staffing" }
+      assertEquals(true, staffing["pass"].asBoolean(), "1 admission over 1 clinician is within the ratio")
+      val forecast = capacity["evidence"].first { it["factor"].asText() == "demandForecast" }
+      assertEquals(false, forecast["blocking"].asBoolean(), "the forecast informs but does not block")
+      // The only bed is occupied, so one more admission is correctly refused on the beds factor.
+      assertEquals(false, capacity["canAccept"].asBoolean(), "no free bed blocks the extra admission")
+      assertEquals(false, capacity["evidence"].first { it["factor"].asText() == "beds" }["pass"].asBoolean(), "beds factor is the blocker")
+      // Asking for zero additional admissions fits: staffing and diagnostics pass, forecast is advisory.
+      val none = `data`(api(HttpMethod.POST, "/api/v1/twin/capacity", json("additionalAdmissions" to 0), sys))
+      assertEquals(true, none["canAccept"].asBoolean(), "no additional demand is acceptable: $none")
+    }
+  }
 }

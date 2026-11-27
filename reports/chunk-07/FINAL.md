@@ -8,7 +8,7 @@
 |---|---|---|
 | 07.01 | COMPLETE | Six new agents + orchestrator; 50/50 orchestration accuracy; per-agent eval records `ai.eval_run` |
 | 07.02 | COMPLETE | Voice operating interface (transcript-only), deterministic en+hi intents, escalation log |
-| 07.03 | SECTION REVIEW | Digital twin capacity snapshots, N-admission answer with evidence, snapshot-vs-live reconcile |
+| 07.03 | COMPLETE | Digital twin snapshots, 5-factor capacity answer, 30-day event replay, staffing + advisory forecast |
 | 07.04 | COMPLETE | GL/AP/AR, cost centres, budgets, bank recon, depreciation, GST, month close |
 | 07.05 | COMPLETE | ED scales/bays/trauma/mass-casualty activation, ED dashboard |
 | 07.06 | SECTION REVIEW | Full kiosk wayfinding (campus/map nodes/edges), payments recorded; E12 vendor import absent |
@@ -27,7 +27,7 @@
 3. **Prescriptive-CDS counsel opinion** — external gate, documented but not crossed (07.11).
 
 ## Known limits worth carrying forward
-- 07.03 reads operational tables, not the 06.06 ClickHouse marts; staffing/demand forecasting and true 30-day replay are absent.
+- 07.03 reads operational tables by design (capacity must be live, not nightly); its forecast is a flat 7-day run-rate and staffing counts rostered shifts, not attendance.
 - 07.06 has no E12 indoor-map vendor import; the graph is admin-defined.
 - 07.08 evidence packs are register records + summary, no bundle export; hygiene is aggregate, not per-observation.
 - Chunk-6 carry-over: 06.07 ABDM is external (no sandbox credentials); 06.09 owes the 1,500-user load and datacenter-kill drill.

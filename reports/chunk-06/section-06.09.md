@@ -25,7 +25,7 @@ Per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SECTIONS.md` 06.
 | Ops | indent→PO→GRN→stock 5; CSSD PASS; ED triaged |
 | Workforce | roster published with a nurse shift |
 | Event trail | share/referral/erasure events in the outbox |
-| Load + DR drill | **OWED** — reported, not faked |
+| Load + DR drill | Load **RUN** (0 errors, latency NFR breached); DR drill **OWED** |
 
 ## 4. Gates 1–12
 | Gate | Result | Evidence |
@@ -41,12 +41,12 @@ Per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SECTIONS.md` 06.
 | 9 Data | PASS | No migration in this section |
 | 10 Audit | PASS | Demo asserts share/referral/erasure events |
 | 11 Docs | PASS | This report, FINAL, second-hospital runbook, LEDGER + tracker |
-| 12 Exit item | PASS (partial) | Full shipped scenario live; load + DR drills owed |
+| 12 Exit item | PASS (partial) | Full shipped scenario live; 1,500-user load run (0 errors, latency breach recorded); DR drill owed |
 
 ## 5. Contract TESTS status
 - Second hospital <1 day: demo + runbook; the clock is a deployment activity.
 - Consent adversarial suite: PIT + demo.
-- 1,500-user load: **owed** (load harness + staging).
+- 1,500-user load: **run 2026-11-27** - 1,500 authenticated users, 6,000 ops, **errors=0**, 191.4 ops/s; read p95 1,666 ms, write p95 2,005 ms, so the NFR (300/500 ms) is **breached** on this single-laptop deployment. Consistent with the 00.17 finding: every user shares one hospital, so the per-tenant audit hash chain serializes appends. Re-run on staging with per-hospital fan-out before quoting latency.
 - Datacenter-kill drill: **owed** (second region; `docs/runbooks/dr-drill.md`).
 
 ## 6. Safety (chunk-6) status
@@ -59,7 +59,7 @@ Per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SECTIONS.md` 06.
 - Telemedicine (06.02, video SDK), BI (06.06, ClickHouse), outbound FHIR (06.07, HAPI).
 - Web Push delivery + portal UI (06.03); SC-5 open.
 - Group rate cards/packages (06.01).
-- 1,500-user load, DR drill, 10k replay drill.
+- DR drill and the 10k replay drill remain owed; the 1,500-user load has been run with its latency breach recorded.
 - AI Scribe + eval harness (`exp:E8`).
 
 ## 8. Session trail

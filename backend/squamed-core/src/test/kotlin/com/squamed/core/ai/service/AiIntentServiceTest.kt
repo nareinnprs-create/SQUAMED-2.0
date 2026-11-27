@@ -147,4 +147,17 @@ class AiIntentServiceTest {
     assertEquals("/communication", intentService.pageSlug("communication"))
     assertEquals("/integrations", intentService.pageSlug("interop"))
   }
+
+  @Test
+  fun `redactor keeps uuid ids intact even when a group looks like a phone number`() {
+    val redactor = PromptRedactor()
+    // First group is all digits: the phone rule would otherwise eat it and the command bar
+    // would answer AI_ACTION_ADMISSION_REQUIRED for a perfectly valid id.
+    val id = "12345678-1111-2222-3333-444455556666"
+    val result = redactor.redact("prepare discharge $id for MQ-2024-1234 on 55551234")
+    assertTrue(result.redacted, "real PHI in the same prompt is still redacted")
+    assertTrue(result.text.contains(id), "uuid survives redaction: ${result.text}")
+    assertTrue(result.text.contains("[MRN]"), "MRN still redacted")
+    assertTrue(result.text.contains("[PHONE]"), "phone still redacted")
+  }
 }

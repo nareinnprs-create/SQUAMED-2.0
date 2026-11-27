@@ -1,7 +1,10 @@
 package com.squamed.core.scribe.service
 
 import com.squamed.core.common.tenant.requireSameHospital
+import com.squamed.core.consent.repository.ConsentRepository
+import com.squamed.core.scribe.domain.DraftCorrection
 import com.squamed.core.scribe.domain.ScribeSession
+import com.squamed.core.scribe.repository.DraftCorrectionRepository
 import com.squamed.core.scribe.repository.ScribeSessionRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
@@ -16,6 +19,8 @@ class ScribeService(
   private val generator: ScribeDraftGenerator,
   private val segmentCodec: SegmentJsonCodec,
   private val sttProvider: SpeechToTextProvider,
+  private val consentRepository: ConsentRepository,
+  private val correctionRepository: DraftCorrectionRepository,
 ) {
   private val logger = KotlinLogging.logger {}
 
@@ -52,8 +57,21 @@ class ScribeService(
     patientName: String?,
     chiefComplaint: String?,
     hospitalId: UUID?,
-  ): ScribeSession =
-    repository.save(
+    consentId: UUID? = null,
+  ): ScribeSession {
+    // 05.05: recording a patient conversation needs a granted treatment consent, recorded on the session.
+    if (patientId != null) {
+      val consent =
+        consentId?.let { consentRepository.findById(it).orElse(null) }
+          ?: throw IllegalArgumentException("SCRIBE_CONSENT_REQUIRED")
+      if (consent.patientId != patientId || consent.status != "granted" || consent.purpose !in setOf("treatment", "data_sharing")) {
+        throw IllegalArgumentException("SCRIBE_CONSENT_REQUIRED")
+      }
+      if (consent.expiresAt != null && consent.expiresAt!!.isBefore(Instant.now())) {
+        throw IllegalArgumentException("SCRIBE_CONSENT_EXPIRED")
+      }
+    }
+    return repository.save(
       ScribeSession(
         hospitalId = hospitalId,
         patientId = patientId,
@@ -61,13 +79,16 @@ class ScribeService(
         patientName = patientName,
         chiefComplaint = chiefComplaint,
         stage = "CREATED",
+        consentId = consentId,
       ),
     )
+  }
 
   @Transactional
   fun startRecording(id: UUID): ScribeSession {
     val session = find(id, null)
     requireStage(session, "CREATED", "TRANSCRIBING")
+    session.recordingStartedAt = Instant.now()
     session.stage = "TRANSCRIBING"
     return repository.save(session)
   }
@@ -142,13 +163,52 @@ class ScribeService(
   fun updateDraft(
     id: UUID,
     draft: String,
+    actorId: UUID? = null,
   ): ScribeSession {
     val session = find(id, null)
+    val previous = session.draft
+    // 05.05: a clinician edit of the AI draft is eval data, not a silent overwrite.
+    if (previous != null && previous != draft) {
+      correctionRepository.save(
+        DraftCorrection(
+          hospitalId = session.hospitalId,
+          sessionId = id,
+          originalDraft = previous,
+          editedDraft = draft,
+          charsChanged = changedChars(previous, draft),
+        ).also { it.createdBy = actorId },
+      )
+    }
     session.draft = draft
     if (session.stage in setOf("CREATED", "TRANSCRIBED", "SPEAKERS_RESOLVED")) {
       session.stage = "DRAFTED"
     }
     return repository.save(session)
+  }
+
+  @Transactional(readOnly = true)
+  fun corrections(
+    id: UUID,
+    hospitalId: UUID?,
+  ): List<DraftCorrection> {
+    val session = find(id, hospitalId)
+    return correctionRepository.findBySessionIdOrderByCreatedAtDesc(session.id!!)
+  }
+
+  // Characters between the shared prefix and shared suffix: a cheap, explainable edit distance.
+  private fun changedChars(
+    before: String,
+    after: String,
+  ): Int {
+    var prefix = 0
+    while (prefix < before.length && prefix < after.length && before[prefix] == after[prefix]) prefix++
+    var suffix = 0
+    while (suffix < before.length - prefix && suffix < after.length - prefix &&
+      before[before.length - 1 - suffix] == after[after.length - 1 - suffix]
+    ) {
+      suffix++
+    }
+    return maxOf(before.length - prefix - suffix, after.length - prefix - suffix, 0)
   }
 
   @Transactional

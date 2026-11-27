@@ -1,5 +1,12 @@
 # Section 05.05 — AI Scribe + report drafting — gate-run report
 
+> **Update 2026-11-27 (PR #159).** The assessment below is the 2026-11-14 gate run and is kept as history. Since then:
+> - **Consent gate + recording indicator** are built: a patient session requires a granted `treatment`/`data_sharing` consent (patient match, expiry checked) and the consent id is stored on the session (V111).
+> - **Draft corrections are eval data**: clinician edits are kept in `scribe.draft_correction` with original/edited text and characters changed; an unchanged re-save writes nothing. `GET /api/v1/scribe/sessions/{id}/corrections` is hospital-scoped.
+> - **Audio is never persisted** - it is transcribed in memory - so the "30-day audio purge" has nothing to purge; that is a privacy property, not a missing job.
+> - **Still owed (provider-gated, `exp:E8`)**: streaming STT, diarization, en/hi/Hinglish, structured radiology/lab report drafting, and the human-paced eval set.
+> - Evidence: PIT `scribeConsentCorrectionsCoverage`; full chain 116 PIT + 57 unit, JaCoCo 85.05%.
+
 Static read-only assessment. Baseline commit `886c51c`, CI run `43548016617` (all 6 CI gates green; merged instruction coverage 80.13%). No code, ledger, chunk file, or `.gate/` content changed by this report.
 
 ## 1. Scope
@@ -9,13 +16,14 @@ Chunk file §05.05: session record → **streaming** STT (en/hi/Hinglish) → di
 - `backend/squamed-core/src/main/kotlin/com/squamed/core/scribe/service/ScribeService.kt` — 6-stage session machine (create → transcribe → draft → edit → sign → delete).
 - `backend/squamed-core/src/main/kotlin/com/squamed/core/scribe/service/SpeechToTextProviders.kt` — Echo + OpenAI Whisper providers (config `squamed.ai.stt.provider`).
 - `V28__scribe.sql` — `scribe.scribe_session`.
+- `V111__scribe_consent_corrections.sql` - consent id + recording stamp on the session, `scribe.draft_correction` for clinician edits.
 - `apps/web` scribe page (532 LOC).
 
 ## 3. Data/API/event contracts delivered
-- Tables: scribe_session (stage, draft, audio ref, provenance `ai_generated`).
-- API: 6-stage lifecycle endpoints (create→…→sign converts draft to legal record; delete); audio upload drives STT stage.
+- Tables: scribe_session (stage, draft, consent ref, recording stamp, provenance `ai_generated`), scribe.draft_correction (original vs edited, chars changed).
+- API: 6-stage lifecycle endpoints (create→…→sign converts draft to legal record; delete); audio upload drives STT stage. Consent is required for a patient session; `GET /sessions/{id}/corrections` returns the captured edits.
 - Provider contract: STT provider switchable via config; Echo + Whisper-compatible.
-- Events: none (no purge job, no consent event).
+- Events: none. Audio is transcribed in memory and never persisted, so there is no audio to purge; consent is checked at session creation.
 
 ## 4. Gates 1–12
 | # | Gate | Result | Evidence |

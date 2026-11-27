@@ -174,7 +174,9 @@ class FhirController(
 ) {
   @GetMapping("/Patient")
   @RequiresPermission("patient:read:patient")
-  fun allPatients(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allPatients()))
+  fun allPatients(
+    @RequestParam(name = "_count", defaultValue = "100") count: Int,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allPatients(bounded(count))))
 
   @GetMapping("/Patient/{id}")
   @RequiresPermission("patient:read:patient")
@@ -184,7 +186,9 @@ class FhirController(
 
   @GetMapping("/Practitioner")
   @RequiresPermission("identity:read:user")
-  fun allPractitioners(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allPractitioners()))
+  fun allPractitioners(
+    @RequestParam(name = "_count", defaultValue = "100") count: Int,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allPractitioners(bounded(count))))
 
   @GetMapping("/Practitioner/{id}")
   @RequiresPermission("identity:read:user")
@@ -194,14 +198,17 @@ class FhirController(
 
   @GetMapping("/Organization")
   @RequiresPermission("hospital-config:read:hospital")
-  fun allOrganizations(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allOrganizations()))
+  fun allOrganizations(
+    @RequestParam(name = "_count", defaultValue = "100") count: Int,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allOrganizations().take(bounded(count))))
 
   // 01.12 dual review: the Encounter search bundle is filtered to the caller's hospital.
   @GetMapping("/Encounter")
   @RequiresPermission("encounter:read:encounter")
   fun allEncounters(
+    @RequestParam(name = "_count", defaultValue = "100") count: Int,
     @AuthenticationPrincipal principal: SquamedPrincipal,
-  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allEncounters(principal.hospitalId)))
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allEncounters(principal.hospitalId).take(bounded(count))))
 
   @GetMapping("/Encounter/{id}")
   @RequiresPermission("encounter:read:encounter")
@@ -211,7 +218,9 @@ class FhirController(
 
   @GetMapping("/Condition")
   @RequiresPermission("clinical:read:encounter")
-  fun allConditions(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allConditions()))
+  fun allConditions(
+    @RequestParam(name = "_count", defaultValue = "100") count: Int,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allConditions().take(bounded(count))))
 
   @GetMapping("/Condition/{id}")
   @RequiresPermission("clinical:read:encounter")
@@ -221,7 +230,9 @@ class FhirController(
 
   @GetMapping("/Observation")
   @RequiresPermission("clinical:read:vital")
-  fun allObservations(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allObservations()))
+  fun allObservations(
+    @RequestParam(name = "_count", defaultValue = "100") count: Int,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allObservations().take(bounded(count))))
 
   @GetMapping("/Observation/{id}")
   @RequiresPermission("clinical:read:vital")
@@ -231,7 +242,9 @@ class FhirController(
 
   @GetMapping("/MedicationRequest")
   @RequiresPermission("pharmacy:read:stock")
-  fun allMedicationRequests(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allMedicationRequests()))
+  fun allMedicationRequests(
+    @RequestParam(name = "_count", defaultValue = "100") count: Int,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allMedicationRequests().take(bounded(count))))
 
   @GetMapping("/MedicationRequest/{id}")
   @RequiresPermission("pharmacy:read:stock")
@@ -241,7 +254,9 @@ class FhirController(
 
   @GetMapping("/ServiceRequest")
   @RequiresPermission("orders:read:order")
-  fun allServiceRequests(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allServiceRequests()))
+  fun allServiceRequests(
+    @RequestParam(name = "_count", defaultValue = "100") count: Int,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allServiceRequests().take(bounded(count))))
 
   @GetMapping("/ServiceRequest/{id}")
   @RequiresPermission("orders:read:order")
@@ -251,7 +266,9 @@ class FhirController(
 
   @GetMapping("/AllergyIntolerance")
   @RequiresPermission("patient:read:patient")
-  fun allAllergies(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allAllergies()))
+  fun allAllergies(
+    @RequestParam(name = "_count", defaultValue = "100") count: Int,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allAllergies().take(bounded(count))))
 
   @GetMapping("/AllergyIntolerance/{id}")
   @RequiresPermission("patient:read:patient")
@@ -261,7 +278,9 @@ class FhirController(
 
   @GetMapping("/DiagnosticReport")
   @RequiresPermission("laboratory:read:lab")
-  fun allReports(): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allDiagnosticReports()))
+  fun allReports(
+    @RequestParam(name = "_count", defaultValue = "100") count: Int,
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.bundle(fhirService.allDiagnosticReports().take(bounded(count))))
 
   @GetMapping("/DiagnosticReport/{id}")
   @RequiresPermission("laboratory:read:lab")
@@ -269,3 +288,6 @@ class FhirController(
     @PathVariable id: UUID,
   ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(fhirService.diagnosticReport(id))
 }
+
+// 06.07 follow-up: unbounded FHIR lists serialized every row and timed out on a 20k-user database.
+private fun bounded(count: Int): Int = count.coerceIn(1, 500)

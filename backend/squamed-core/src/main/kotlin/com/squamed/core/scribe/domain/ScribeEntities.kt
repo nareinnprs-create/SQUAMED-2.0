@@ -42,4 +42,24 @@ class ScribeSession(
   var durationSeconds: Int = 0,
   @Column(name = "signed_at")
   var signedAt: Instant? = null,
+  @Column(name = "consent_id")
+  var consentId: UUID? = null,
+  @Column(name = "recording_started_at")
+  var recordingStartedAt: Instant? = null,
+) : BaseEntity()
+
+/** A clinician edit of the AI draft, kept as eval data (V111). */
+@Entity
+@Table(name = "draft_correction", schema = "scribe")
+class DraftCorrection(
+  @Column(name = "hospital_id")
+  var hospitalId: UUID? = null,
+  @Column(name = "session_id", nullable = false)
+  var sessionId: UUID,
+  @Column(name = "original_draft", columnDefinition = "TEXT")
+  var originalDraft: String? = null,
+  @Column(name = "edited_draft", nullable = false, columnDefinition = "TEXT")
+  var editedDraft: String,
+  @Column(name = "chars_changed", nullable = false)
+  var charsChanged: Int = 0,
 ) : BaseEntity()

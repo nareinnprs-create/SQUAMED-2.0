@@ -1,5 +1,6 @@
 package com.squamed.core.scribe.repository
 
+import com.squamed.core.scribe.domain.DraftCorrection
 import com.squamed.core.scribe.domain.ScribeSession
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
@@ -18,4 +19,10 @@ interface ScribeSessionRepository : JpaRepository<ScribeSession, UUID> {
   fun findAllByOrderByCreatedAtDesc(
     @Param("hid") hid: UUID?,
   ): List<ScribeSession>
+}
+
+interface DraftCorrectionRepository : JpaRepository<DraftCorrection, UUID> {
+  fun findBySessionIdOrderByCreatedAtDesc(sessionId: UUID): List<DraftCorrection>
+
+  fun findByHospitalIdOrderByCreatedAtDesc(hospitalId: UUID): List<DraftCorrection>
 }

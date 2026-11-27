@@ -7204,6 +7204,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scribe/sessions/{id}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["corrections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/scribe/pipeline": {
         parameters: {
             query?: never;
@@ -11151,6 +11167,8 @@ export interface components {
             encounterId?: string;
             patientName?: string;
             chiefComplaint?: string;
+            /** Format: uuid */
+            consentId?: string;
         };
         ScribeSegmentDto: {
             speaker: string;
@@ -33982,6 +34000,28 @@ export interface operations {
             };
         };
     };
+    corrections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListMapStringObject"];
+                };
+            };
+        };
+    };
     pipeline: {
         parameters: {
             query?: never;
@@ -35858,7 +35898,9 @@ export interface operations {
     };
     allServiceRequests: {
         parameters: {
-            query?: never;
+            query?: {
+                _count?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -35900,7 +35942,9 @@ export interface operations {
     };
     allPractitioners: {
         parameters: {
-            query?: never;
+            query?: {
+                _count?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -35942,7 +35986,9 @@ export interface operations {
     };
     allPatients: {
         parameters: {
-            query?: never;
+            query?: {
+                _count?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -35984,7 +36030,9 @@ export interface operations {
     };
     allOrganizations: {
         parameters: {
-            query?: never;
+            query?: {
+                _count?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -36004,7 +36052,9 @@ export interface operations {
     };
     allObservations: {
         parameters: {
-            query?: never;
+            query?: {
+                _count?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -36046,7 +36096,9 @@ export interface operations {
     };
     allMedicationRequests: {
         parameters: {
-            query?: never;
+            query?: {
+                _count?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -36088,7 +36140,9 @@ export interface operations {
     };
     allEncounters: {
         parameters: {
-            query?: never;
+            query?: {
+                _count?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -36130,7 +36184,9 @@ export interface operations {
     };
     allReports: {
         parameters: {
-            query?: never;
+            query?: {
+                _count?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -36172,7 +36228,9 @@ export interface operations {
     };
     allConditions: {
         parameters: {
-            query?: never;
+            query?: {
+                _count?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -36214,7 +36272,9 @@ export interface operations {
     };
     allAllergies: {
         parameters: {
-            query?: never;
+            query?: {
+                _count?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -37482,4 +37542,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 780ee8ba083191e7ae0938c0359d32656d846c81f3e7ac0ccf9d69e4ad2627ba
+// openapi snapshot sha256: 873fc0a59001de40154e641fc09a5d19f2510ccb70ae41ee7b16c3c9b6c78710

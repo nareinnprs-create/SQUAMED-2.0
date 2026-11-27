@@ -25,6 +25,7 @@ data class ScribeCreateRequest(
   val encounterId: UUID? = null,
   val patientName: String? = null,
   val chiefComplaint: String? = null,
+  val consentId: UUID? = null,
 )
 
 data class ScribeStopRecordingRequest(
@@ -73,7 +74,15 @@ class ScribeController(
     @RequestBody req: ScribeCreateRequest,
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<Map<String, Any?>> {
-    val session = scribeService.create(req.patientId, req.encounterId, req.patientName, req.chiefComplaint, tenantResolver.pinOrDefault(principal, null))
+    val session =
+      scribeService.create(
+        req.patientId,
+        req.encounterId,
+        req.patientName,
+        req.chiefComplaint,
+        tenantResolver.pinOrDefault(principal, null),
+        req.consentId,
+      )
     return ApiResponse.ok(session.toView(segmentCodec))
   }
 
@@ -120,9 +129,10 @@ class ScribeController(
   @PostMapping("/sessions/{id}/draft")
   @RequiresPermission("ai:manage:agent")
   fun updateDraft(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
     @PathVariable id: UUID,
     @RequestBody req: ScribeDraftRequest,
-  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(scribeService.updateDraft(id, req.draft).toView(segmentCodec))
+  ): ApiResponse<Map<String, Any?>> = ApiResponse.ok(scribeService.updateDraft(id, req.draft, principal.userId).toView(segmentCodec))
 
   @PostMapping("/sessions/{id}/sign")
   @RequiresPermission("ai:manage:agent")
@@ -138,6 +148,24 @@ class ScribeController(
     scribeService.delete(id)
     return ApiResponse.ok(mapOf("deleted" to true))
   }
+
+  @GetMapping("/sessions/{id}/corrections")
+  @RequiresPermission("ai:read:agent")
+  fun corrections(
+    @PathVariable id: UUID,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<Map<String, Any?>>> =
+    ApiResponse.ok(
+      scribeService.corrections(id, principal.hospitalId).map {
+        mapOf(
+          "id" to it.id,
+          "charsChanged" to it.charsChanged,
+          "originalDraft" to it.originalDraft,
+          "editedDraft" to it.editedDraft,
+          "createdAt" to it.createdAt,
+        )
+      },
+    )
 
   @GetMapping("/pipeline")
   @RequiresPermission("ai:read:agent")
@@ -160,5 +188,7 @@ private fun com.squamed.core.scribe.domain.ScribeSession.toView(codec: SegmentJs
     "draft" to draft,
     "durationSeconds" to durationSeconds,
     "signedAt" to signedAt,
+    "consentId" to consentId,
+    "recording" to (recordingStartedAt != null && signedAt == null),
     "createdAt" to createdAt,
   )

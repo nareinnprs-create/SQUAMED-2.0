@@ -389,9 +389,22 @@ class FhirService(
       else -> "partial"
     }
 
-  fun allPatients(): List<Map<String, Any?>> = patientRepository.findAll().map { patient(it.id, it) }
+  // 06.07 follow-up: page at the query, not after mapping - a 20k-user table made the map step the bottleneck.
+  fun allPatients(limit: Int = Int.MAX_VALUE): List<Map<String, Any?>> =
+    patientRepository
+      .findAll(
+        org.springframework.data.domain.PageRequest
+          .of(0, limit),
+      ).content
+      .map { patient(it.id, it) }
 
-  fun allPractitioners(): List<Map<String, Any?>> = userAccountRepository.findAll().map { practitioner(it.id, it) }
+  fun allPractitioners(limit: Int = Int.MAX_VALUE): List<Map<String, Any?>> =
+    userAccountRepository
+      .findAll(
+        org.springframework.data.domain.PageRequest
+          .of(0, limit),
+      ).content
+      .map { practitioner(it.id, it) }
 
   fun allOrganizations(): List<Map<String, Any?>> = hospitalRepository.findAll().map { organization(it.id, it) }
 

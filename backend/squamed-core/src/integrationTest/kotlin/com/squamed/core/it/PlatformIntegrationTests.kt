@@ -4585,6 +4585,9 @@ class PlatformIntegrationTests {
       val fhirDoc = api(HttpMethod.GET, "/api/v1/fhir/Practitioner/$adminId", token = token)
       assert2xx(fhirDoc, "fhir practitioner by id")
       assertTrue(`data`(fhirDoc)["resourceType"].asText() == "Practitioner", "practitioner resource shape")
+      // 06.07 follow-up: an unbounded list serialized every row and timed out on a large user table.
+      val bounded = `data`(api(HttpMethod.GET, "/api/v1/fhir/Practitioner?_count=1", token = token))
+      assertEquals(1, bounded["total"].asInt(), "FHIR _count bounds the search bundle")
       assert4xx(
         api(HttpMethod.PUT, "/api/v1/hospital-config/hospitals/${UUID.randomUUID()}", json(), token),
         "hospital update missing 4xx",
@@ -19616,6 +19619,137 @@ class PlatformIntegrationTests {
       // Asking for zero additional admissions fits: staffing and diagnostics pass, forecast is advisory.
       val none = `data`(api(HttpMethod.POST, "/api/v1/twin/capacity", json("additionalAdmissions" to 0), sys))
       assertEquals(true, none["canAccept"].asBoolean(), "no additional demand is acceptable: $none")
+    }
+  }
+
+  @Nested
+  inner class ScribeConsentTests {
+    @Test
+    fun scribeConsentCorrectionsCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+
+      fun hospital(tag: String): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Scribe $tag $s", "code" to "SC$tag-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+
+      fun adminOf(
+        tag: String,
+        hospitalId: String,
+      ): String {
+        val email = "scribe${tag.lowercase()}.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to "Scribe$tag",
+              "lastName" to "Admin$s",
+              "roles" to listOf("SYSTEM_ADMIN"),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register scribe admin $tag",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))[
+          "accessToken",
+        ].asText()
+      }
+
+      val hospitalId = hospital("A")
+      val sys = adminOf("A", hospitalId)
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Scribe$s",
+              "lastName" to "Patient",
+              "gender" to "female",
+              "dateOfBirth" to "1991-11-11",
+              "phone" to "71$s".take(11),
+              "qid" to "SC$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            sys,
+          ),
+        )["patient"]["id"].asText()
+
+      // 1. Recording a patient conversation without a granted treatment consent is refused.
+      val noConsent = api(HttpMethod.POST, "/api/v1/scribe/sessions", json("patientId" to patientId, "hospitalId" to hospitalId), sys)
+      assertEquals(400, noConsent.status, "scribe without consent is blocked")
+      assertTrue(noConsent.body.contains("SCRIBE_CONSENT_REQUIRED"), "consent guard code")
+
+      val consentId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/consents",
+            json("hospitalId" to hospitalId, "patientId" to patientId, "purpose" to "treatment", "signedByName" to "Scribe$s"),
+            sys,
+          ),
+        )["id"].asText()
+      val session =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/scribe/sessions",
+            json("patientId" to patientId, "hospitalId" to hospitalId, "consentId" to consentId),
+            sys,
+          ),
+        )
+      val sessionId = session["id"].asText()
+      assertEquals(consentId, session["consentId"].asText(), "session records the consent")
+      assertEquals(false, session["recording"].asBoolean(), "not recording before start")
+
+      // 2. The recording indicator flips while a session is open and off again once signed.
+      val recording = `data`(api(HttpMethod.POST, "/api/v1/scribe/sessions/$sessionId/start-recording", json(), sys))
+      assertEquals(true, recording["recording"].asBoolean(), "recording indicator on")
+
+      // 3. A clinician edit of the AI draft is kept as eval data.
+      assert2xx(api(HttpMethod.POST, "/api/v1/scribe/sessions/$sessionId/draft", json("draft" to "S: cough. O: clear. A: viral. P: rest."), sys), "first draft")
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/scribe/sessions/$sessionId/draft",
+          json("draft" to "S: dry cough. O: clear chest. A: viral URI. P: rest and fluids."),
+          sys,
+        ),
+        "edited draft",
+      )
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/scribe/sessions/$sessionId/draft",
+          json("draft" to "S: dry cough. O: clear chest. A: viral URI. P: rest and fluids."),
+          sys,
+        ),
+        "identical draft re-saved",
+      )
+      val corrections = `data`(api(HttpMethod.GET, "/api/v1/scribe/sessions/$sessionId/corrections", token = sys))
+      assertEquals(1, corrections.size(), "one correction recorded, not one per save")
+      assertTrue(corrections[0]["charsChanged"].asInt() > 0, "changed characters measured")
+      assertTrue(corrections[0]["originalDraft"].asText().contains("cough"), "original draft preserved")
+
+      val signed = `data`(api(HttpMethod.POST, "/api/v1/scribe/sessions/$sessionId/sign", json(), sys))
+      assertEquals(false, signed["recording"].asBoolean(), "recording indicator off once signed")
+
+      // 4. Tenant isolation: another hospital cannot read this session's corrections.
+      val otherHospital = hospital("B")
+      val other = adminOf("B", otherHospital)
+      val foreign = api(HttpMethod.GET, "/api/v1/scribe/sessions/$sessionId/corrections", token = other)
+      assertTrue(foreign.status in 400..404, "cross-tenant corrections denied (${foreign.status})")
     }
   }
 }

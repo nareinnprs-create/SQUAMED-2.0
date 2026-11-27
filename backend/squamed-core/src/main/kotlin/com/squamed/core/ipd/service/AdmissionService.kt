@@ -199,10 +199,10 @@ class AdmissionService(
         entityType = "admission",
         entityId = admissionId,
         hospitalId = admission.hospitalId,
-        payload = mapOf("fromBedId" to currentBedId, "toBedId" to toBedId, "reason" to dto.reason),
+        payload = mapOf("patientId" to admission.patientId, "fromBedId" to currentBedId, "toBedId" to toBedId, "reason" to dto.reason),
       ),
     )
-    publish(admission, "admission.bed_assigned", now, mapOf("bedId" to toBedId, "fromBedId" to currentBedId))
+    publish(admission, "admission.bed_assigned", now, mapOf("patientId" to admission.patientId, "bedId" to toBedId, "fromBedId" to currentBedId))
     return AdmissionView.from(admission)
   }
 

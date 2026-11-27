@@ -1,5 +1,12 @@
 # Section 05.05 — AI Scribe + report drafting — gate-run report
 
+> **Update 2026-11-27 (PR #159).** The assessment below is the 2026-11-14 gate run and is kept as history. Since then:
+> - **Consent gate + recording indicator** are built: a patient session requires a granted `treatment`/`data_sharing` consent (patient match, expiry checked) and the consent id is stored on the session (V111).
+> - **Draft corrections are eval data**: clinician edits are kept in `scribe.draft_correction` with original/edited text and characters changed; an unchanged re-save writes nothing. `GET /api/v1/scribe/sessions/{id}/corrections` is hospital-scoped.
+> - **Audio is never persisted** - it is transcribed in memory - so the "30-day audio purge" has nothing to purge; that is a privacy property, not a missing job.
+> - **Still owed (provider-gated, `exp:E8`)**: streaming STT, diarization, en/hi/Hinglish, structured radiology/lab report drafting, and the human-paced eval set.
+> - Evidence: PIT `scribeConsentCorrectionsCoverage`; full chain 116 PIT + 57 unit, JaCoCo 85.05%.
+
 Static read-only assessment. Baseline commit `886c51c`, CI run `43548016617` (all 6 CI gates green; merged instruction coverage 80.13%). No code, ledger, chunk file, or `.gate/` content changed by this report.
 
 ## 1. Scope

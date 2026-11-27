@@ -146,6 +146,16 @@ interface EventOutboxRepository : JpaRepository<EventOutbox, UUID> {
     @Param("after") after: Instant,
   ): List<EventOutbox>
 
+  // 07.03 twin replay: every stored event for one hospital in the window, in occurrence order.
+  @Query(
+    "select e from EventOutbox e where e.hospitalId = :hid " +
+      "and e.occurredAt >= :from order by e.occurredAt asc",
+  )
+  fun findForHospitalSince(
+    @Param("hid") hospitalId: UUID,
+    @Param("from") from: Instant,
+  ): List<EventOutbox>
+
   fun findByStatusAndUpdatedAtBefore(
     status: String,
     cutoff: Instant,

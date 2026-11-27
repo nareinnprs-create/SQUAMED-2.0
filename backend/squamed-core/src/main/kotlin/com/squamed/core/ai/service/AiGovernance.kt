@@ -36,8 +36,18 @@ class PromptRedactor {
   private val qid = Regex("\\b\\d{11}\\b")
   private val phone = Regex("(?<!\\d)(?:\\+?974)?[\\s-]?\\d{8}(?!\\d)")
 
+  // A UUID's first group is 8 hex characters, so ~2% of ids are 8 digits and match the phone rule.
+  // Masking ids with a placeholder keeps them intact: the command bar resolves ids from the prompt,
+  // and a redacted id silently turned "prepare discharge <uuid>" into "prepare discharge [PHONE]".
+  private val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
   fun redact(text: String): RedactionResult {
-    var out = text
+    val ids = mutableListOf<String>()
+    var out =
+      uuid.replace(text) { match ->
+        ids.add(match.value)
+        "\u0000ID${ids.size - 1}\u0000"
+      }
     var hits = 0
     listOf(email to "[EMAIL]", mrn to "[MRN]", qid to "[QID]", phone to "[PHONE]").forEach { (pattern, token) ->
       val found = pattern.findAll(out).count()
@@ -46,6 +56,7 @@ class PromptRedactor {
         out = pattern.replace(out, token)
       }
     }
+    ids.forEachIndexed { index, id -> out = out.replace("\u0000ID$index\u0000", id) }
     return RedactionResult(out, hits > 0, hits)
   }
 }

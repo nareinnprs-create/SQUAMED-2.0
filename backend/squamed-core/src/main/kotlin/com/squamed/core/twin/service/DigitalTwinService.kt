@@ -28,6 +28,7 @@ class DigitalTwinService(
   private val radOrderRepository: RadOrderRepository,
   private val assetRepository: AssetRepository,
   private val workOrderRepository: WorkOrderRepository,
+  private val outboxRepository: com.squamed.core.events.EventOutboxRepository,
 ) {
   companion object {
     private const val DIAGNOSTICS_BACKLOG_LIMIT = 100
@@ -121,6 +122,104 @@ class DigitalTwinService(
 
   @Transactional(readOnly = true)
   fun latest(hospitalId: UUID): CapacitySnapshot? = snapshotRepository.findTopByHospitalIdOrderByGeneratedAtDesc(hospitalId)
+
+  /**
+   * 07.03 event replay: rebuild the admitted-patient/bed state from the stored event stream for the
+   * window and compare it with live counts. Transfers and bed assignments carry patientId since
+   * 2026-11-27, so the replayed bed is the patient's current bed rather than their first one.
+   */
+  @Transactional(readOnly = true)
+  fun replay(
+    hospitalId: UUID,
+    days: Int,
+  ): Map<String, Any?> {
+    require(days in 1..90) { "TWIN_REPLAY_WINDOW_INVALID" }
+    val from = Instant.now().minusSeconds(days.toLong() * 86_400)
+    val events = outboxRepository.findForHospitalSince(hospitalId, from)
+    val bedByPatient = mutableMapOf<UUID, UUID>()
+    val perDay = sortedMapOf<String, Int>()
+    var applied = 0
+    var ignored = 0
+    events.forEach { event ->
+      perDay.merge(
+        event.occurredAt
+          .atZone(ZoneOffset.UTC)
+          .toLocalDate()
+          .toString(),
+        1,
+        Int::plus,
+      )
+      val payload = event.payload
+      val patientId =
+        payload
+          .get("patientId")
+          ?.asText()
+          ?.takeIf { it != "null" }
+          ?.let(UUID::fromString)
+      when (event.eventType) {
+        "admission.admitted", "admission.bed_assigned" -> {
+          val bedId =
+            payload
+              .get("bedId")
+              ?.asText()
+              ?.takeIf { it != "null" }
+              ?.let(UUID::fromString)
+          if (patientId != null && bedId != null) {
+            bedByPatient[patientId] = bedId
+            applied++
+          } else {
+            ignored++
+          }
+        }
+
+        "admission.transferred" -> {
+          val toBedId =
+            payload
+              .get("toBedId")
+              ?.asText()
+              ?.takeIf { it != "null" }
+              ?.let(UUID::fromString)
+          if (patientId != null && toBedId != null) {
+            bedByPatient[patientId] = toBedId
+            applied++
+          } else {
+            ignored++
+          }
+        }
+
+        "admission.discharged" -> {
+          if (patientId != null) {
+            bedByPatient.remove(patientId)
+            applied++
+          } else {
+            ignored++
+          }
+        }
+
+        else -> {
+          ignored++
+        }
+      }
+    }
+    val liveAdmissions = admissionRepository.findAllByHospital(hospitalId).count { it.status == "admitted" }
+    val liveBedsOccupied = bedRepository.findByHospitalId(hospitalId).count { it.status == "occupied" }
+    val mismatches =
+      buildList {
+        if (bedByPatient.size != liveAdmissions) add("admissionsActive replayed=${bedByPatient.size} live=$liveAdmissions")
+        if (bedByPatient.values.toSet().size != liveBedsOccupied) add("bedsOccupied replayed=${bedByPatient.values.toSet().size} live=$liveBedsOccupied")
+      }
+    return mapOf(
+      "windowDays" to days,
+      "eventsScanned" to events.size,
+      "eventsApplied" to applied,
+      "eventsIgnored" to ignored,
+      "perDay" to perDay,
+      "replayed" to mapOf("admissionsActive" to bedByPatient.size, "bedsOccupied" to bedByPatient.values.toSet().size),
+      "live" to mapOf("admissionsActive" to liveAdmissions, "bedsOccupied" to liveBedsOccupied),
+      "mismatches" to mismatches,
+      "reconciled" to mismatches.isEmpty(),
+    )
+  }
 
   // Compares the last materialized view with live operational counts; mismatches mean the twin drifted.
   @Transactional

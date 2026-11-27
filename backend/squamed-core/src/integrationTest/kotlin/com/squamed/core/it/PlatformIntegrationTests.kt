@@ -19310,4 +19310,165 @@ class PlatformIntegrationTests {
       assertEquals(0, `data`(api(HttpMethod.GET, "/api/v1/ops/ed/drills", token = other)).size(), "cross-tenant drill history isolated")
     }
   }
+
+  @Nested
+  inner class TwinReplayTests {
+    @Test
+    fun digitalTwinReplayCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+
+      fun hospital(tag: String): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Replay $tag $s", "code" to "RP$tag-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+
+      fun adminOf(
+        tag: String,
+        hospitalId: String,
+      ): String {
+        val email = "replay${tag.lowercase()}.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to "Replay$tag",
+              "lastName" to "Admin$s",
+              "roles" to listOf("SYSTEM_ADMIN"),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register replay admin $tag",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))[
+          "accessToken",
+        ].asText()
+      }
+
+      fun patient(
+        hospitalId: String,
+        token: String,
+        tag: String,
+      ): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Replay$tag$s",
+              "lastName" to "Patient",
+              "gender" to "female",
+              "dateOfBirth" to "1985-04-04",
+              "phone" to "79$s".take(11),
+              "qid" to "RP$tag$s".take(11),
+              "nationality" to "QA",
+              "city" to "Doha",
+              "hospitalId" to hospitalId,
+            ),
+            token,
+          ),
+        )["patient"]["id"].asText()
+
+      fun bed(
+        hospitalId: String,
+        token: String,
+        tag: String,
+        wardId: String,
+      ): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/beds",
+            json("label" to "R$tag-$s", "type" to "standard", "status" to "available", "wardId" to wardId),
+            token,
+          ),
+        )["id"].asText()
+
+      val hospitalId = hospital("A")
+      val sys = adminOf("A", hospitalId)
+      val wardId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals/$hospitalId/wards",
+            json("name" to "Replay Ward $s", "code" to "RPW-$s", "type" to "general"),
+            sys,
+          ),
+        )["id"].asText()
+      val bedOne = bed(hospitalId, sys, "1", wardId)
+      val bedTwo = bed(hospitalId, sys, "2", wardId)
+
+      // History to replay: admit -> discharge -> admit, so the replayed state must end at one admission.
+      val firstAdmission =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json("hospitalId" to hospitalId, "patientId" to patient(hospitalId, sys, "1"), "bedId" to bedOne, "admissionType" to "elective"),
+            sys,
+          ),
+        )["id"].asText()
+      // Discharge is gated by the checklist + signed summary, so walk the real path.
+      assert2xx(
+        api(
+          HttpMethod.PUT,
+          "/api/v1/admissions/$firstAdmission/discharge-summary",
+          json("summaryText" to "Observed overnight; recovered.", "medicationsAtDischarge" to "Paracetamol PRN"),
+          sys,
+        ),
+        "draft discharge summary",
+      )
+      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$firstAdmission/checklist/med_rec", json(), sys), "med-rec review")
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/admissions/$firstAdmission/discharge-summary/sign", json("icdCodes" to listOf("R05")), sys),
+        "sign discharge summary",
+      )
+      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$firstAdmission/checklist/pharmacy_return", json(), sys), "pharmacy return")
+      assert2xx(api(HttpMethod.POST, "/api/v1/admissions/$firstAdmission/checklist/final_bill", json(), sys), "final bill")
+      assert2xx(
+        api(HttpMethod.POST, "/api/v1/admissions/$firstAdmission/discharge", json("dischargeType" to "routine"), sys),
+        "discharge first admission",
+      )
+      val secondAdmission =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/admissions",
+            json("hospitalId" to hospitalId, "patientId" to patient(hospitalId, sys, "2"), "bedId" to bedTwo, "admissionType" to "elective"),
+            sys,
+          ),
+        )["id"].asText()
+      assertTrue(secondAdmission.isNotBlank(), "second admission created")
+
+      val replay = `data`(api(HttpMethod.GET, "/api/v1/twin/replay?days=30", token = sys))
+      assertEquals(30, replay["windowDays"].asInt(), "replay window honoured")
+      assertTrue(replay["eventsScanned"].asInt() >= 4, "events scanned: $replay")
+      assertTrue(replay["eventsApplied"].asInt() >= 3, "admission events applied: $replay")
+      assertEquals(1, replay["replayed"]["admissionsActive"].asInt(), "replayed admissions end at one")
+      assertEquals(1, replay["replayed"]["bedsOccupied"].asInt(), "replayed bed occupancy ends at one")
+      assertEquals(1, replay["live"]["admissionsActive"].asInt(), "live admissions match")
+      assertEquals(true, replay["reconciled"].asBoolean(), "replay reconciles with actuals: $replay")
+      assertEquals(0, replay["mismatches"].size(), "no replay drift")
+      assertTrue(replay["perDay"].size() >= 1, "per-day buckets present")
+
+      // An out-of-range window is rejected rather than silently clamped.
+      assertEquals(400, api(HttpMethod.GET, "/api/v1/twin/replay?days=0", token = sys).status, "invalid window rejected")
+
+      // Tenant isolation: the second hospital's stream holds none of the first hospital's admission events.
+      val otherHospital = hospital("B")
+      val other = adminOf("B", otherHospital)
+      val emptyReplay = `data`(api(HttpMethod.GET, "/api/v1/twin/replay?days=30", token = other))
+      assertEquals(0, emptyReplay["eventsApplied"].asInt(), "cross-tenant admission events isolated")
+      assertEquals(0, emptyReplay["replayed"]["admissionsActive"].asInt(), "nothing replayed as admitted")
+      assertEquals(true, emptyReplay["reconciled"].asBoolean(), "empty replay reconciles")
+    }
+  }
 }

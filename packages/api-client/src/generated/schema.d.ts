@@ -7076,6 +7076,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/twin/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["replay_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/twin/reconcile": {
         parameters: {
             query?: never;
@@ -33770,6 +33786,28 @@ export interface operations {
             };
         };
     };
+    replay_2: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
     reconcile_1: {
         parameters: {
             query?: never;
@@ -37444,4 +37482,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: f528c16e2a982a32abdf2b627604b759343e9cd87fe91e93bab6993a2607d1dd
+// openapi snapshot sha256: 780ee8ba083191e7ae0938c0359d32656d846c81f3e7ac0ccf9d69e4ad2627ba

@@ -54,7 +54,11 @@ Check 'synthesized answer carries an owner' ($null -ne $orch.data.synthesized.ow
 # 2. 07.03 - capacity engine answers tonight's admission question with evidence.
 $cap = Api POST '/api/v1/twin/capacity' @{ additionalAdmissions = 1 } $sys
 Check 'capacity answer returned' ($null -ne $cap.data.canAccept)
-Check 'capacity evidence has three factors' ($cap.data.evidence.Count -eq 3)
+Check 'capacity evidence has five factors' ($cap.data.evidence.Count -eq 5)
+Check 'capacity evidence includes staffing and forecast' (
+  ($cap.data.evidence | Where-Object { $_.factor -eq 'staffing' }).Count -eq 1 -and
+  ($cap.data.evidence | Where-Object { $_.factor -eq 'demandForecast' }).Count -eq 1
+)
 Check 'capacity answer is human readable' ($cap.data.answer.Length -gt 10)
 
 # 3. 07.05 - ED mass-casualty activation and stand-down.
@@ -100,10 +104,58 @@ $bench = Api GET "/api/v1/benchmark/summary?metric=ADMISSIONS&period=$period" $n
 Check 'benchmark summary returned' ($null -ne $bench.data.median)
 Check 'benchmark aggregate is peer-based' ($bench.data.peerCount -ge 0 -and $null -ne $bench.data.ownValue)
 
-# OWED (reported, not faked): cardiology pack install via configuration alone (22 packs await
-# clinical review), the mass-casualty drill harness, and the prescriptive-CDS counsel opinion.
-Write-Output 'OWED cardiology specialty pack install (22-pack clinical review)'
-Write-Output 'OWED mass-casualty drill harness'
+# 7. 07.10 - a specialty pack installs through configuration alone (reference pack; the 22 reviewed
+#    contents are still owed, but the installer is real).
+$packRole = "CARDIO-$s"
+$pack = Api POST '/api/v1/packs' @{
+  code = "CARDIOLOGY-REF-$s"
+  name = "Cardiology reference $s"
+  specialty = 'cardiology'
+  components = @(
+    @{
+      componentType = 'CONFIG'
+      componentKey = 'task-sla'
+      payload = @{
+        rules = @(@{ priority = 'urgent'; slaHours = 2; escalateToRole = $packRole })
+        defaultSlaHours = 48
+      }
+    },
+    @{
+      componentType = 'ROLE'
+      componentKey = $packRole
+      payload = @{ displayName = "Cardiology $s"; permissions = @('clinical:read:encounter') }
+    }
+  )
+} $sys
+Check 'specialty pack registered' ($pack.data.components -eq 2)
+$install = Api POST "/api/v1/packs/CARDIOLOGY-REF-$s/install" $null $sys
+Check 'pack installed by configuration' ($install.data.status -eq 'INSTALLED')
+Check 'pack install was fast (< 1 day)' ($install.data.elapsedMs -lt 86400000)
+$packSla = Api GET "/api/v1/hospital-config/hospitals/$hid/config/task-sla" $null $sys
+Check 'installed config is active' ($packSla.data.content.defaultSlaHours -eq 48)
+$again = Api POST "/api/v1/packs/CARDIOLOGY-REF-$s/install" $null $sys
+Check 'pack install is idempotent' ($again.data.status -eq 'ALREADY_INSTALLED')
+
+# 8. 07.05 - the mass-casualty drill harness runs the real ED paths and stands down.
+$casualties = @()
+$levels = @(2, 3, 4)
+for ($i = 0; $i -lt 3; $i++) {
+  $p = Api POST '/api/v1/patients' @{
+    firstName = "Drill$i$s"; lastName = 'Casualty'; gender = 'male'; dateOfBirth = '1990-01-01'
+    phone = "72$s".Substring(0, 10); qid = "DR$i$s".Substring(0, 10); nationality = 'QA'; city = 'Doha'; hospitalId = $hid
+  } $sys
+  $casualties += @{ patientId = $p.data.patient.id; triageLevel = $levels[$i]; chiefComplaint = 'drill injury' }
+}
+$drill = Api POST '/api/v1/ops/ed/drills' @{ name = "Drill $s"; casualties = $casualties } $sys
+Check 'drill completed' ($drill.data.status -eq 'COMPLETED')
+Check 'drill registered all casualties' ($drill.data.created -eq 3)
+Check 'drill stood down' ($null -ne $drill.data.stoodDownAt)
+$active = Api GET '/api/v1/ops/ed/mass-casualty' $null $sys
+Check 'no mass casualty left active' ($active.data.Count -eq 0)
+
+# OWED (reported, not faked): the 22 clinically reviewed pack CONTENTS and the prescriptive-CDS
+# counsel opinion. The installer and the drill harness above are real and exercised live.
+Write-Output 'OWED 22 clinically reviewed specialty pack contents'
 Write-Output 'OWED prescriptive-CDS counsel opinion (external gate)'
 
 Write-Output ""

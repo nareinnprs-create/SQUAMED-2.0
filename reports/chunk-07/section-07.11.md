@@ -1,6 +1,6 @@
 # Section 07.11 — Chunk-7 exit (digital + intelligence layer)
 
-**Verdict: SECTION REVIEW → exit demo 22/22 live; three items owed.** The chunk-7 exit scenario runs end to end on the shipped sections. The cardiology specialty-pack install, the mass-casualty drill harness and the prescriptive-CDS counsel opinion are not built and are reported, not faked.
+**Verdict: SECTION REVIEW → exit demo 32/32 live; two items owed.** The chunk-7 exit scenario runs end to end on the shipped sections, including the config-only pack installer and the mass-casualty drill harness. The 22 reviewed pack contents and the prescriptive-CDS counsel opinion are not done and are reported, not faked.
 
 ## 1. Scope
 Per `20-CHUNK7-SECTIONS.md` 07.11 (⛔ external: prescriptive-CDS counsel opinion) and `chunk-07-full-depth.md` EXIT CRITERIA: executive question → orchestrator names the primary blocker with owner and action → capacity engine answers tonight's admission question with evidence → ED mass-casualty drill → month-end GL close → one specialty pack installs via configuration alone in < 1 day → migration studio imports a legacy export with a reconciliation report → benchmarking pack generates an anonymized aggregate.
@@ -13,14 +13,14 @@ Per `20-CHUNK7-SECTIONS.md` 07.11 (⛔ external: prescriptive-CDS counsel opinio
 | 1 | admin + tenant admin login | 00.04 | PASS |
 | 2 | orchestrator answers the surgical-delay question | 07.01 | PASS |
 | 3 | orchestrator consulted agents and synthesized an answer with an owner | 07.01 | PASS |
-| 4 | capacity answer returned with three evidence factors and a readable verdict | 07.03 | PASS |
+| 4 | capacity answer with five evidence factors (beds, diagnostics, equipment, staffing, forecast) and a readable verdict | 07.03 | PASS |
 | 5 | ED mass-casualty activated, listed as active, stood down, none left active | 07.05 | PASS |
 | 6 | operations posted to GL; trial balance balances | 07.04 | PASS |
 | 7 | month-end close posted; second close rejected 409 | 07.04 | PASS |
 | 8 | migration job staged (2 rows), imported both, rows reconciled | 07.10 | PASS |
 | 9 | benchmarking participation + peer aggregate summary | 07.10 | PASS |
-| 10 | **cardiology pack install via configuration alone** | 07.10 | **OWED** (22-pack clinical review) |
-| 11 | **mass-casualty drill harness** | 07.05 | **OWED** |
+| 10 | cardiology pack installs via configuration alone (reference pack through `/api/v1/packs`) | 07.10 | PASS |
+| 11 | mass-casualty drill harness (3 casualties, real ED paths, stood down) | 07.05 | PASS |
 | 12 | **prescriptive-CDS counsel opinion** | external | **OWED** (gate documented, not crossed) |
 
 ## 3. Evidence from the sections
@@ -32,7 +32,7 @@ Per `20-CHUNK7-SECTIONS.md` 07.11 (⛔ external: prescriptive-CDS counsel opinio
 ## 4. Gates 1–12
 | Gate | Result | Evidence |
 |---|---|---|
-| 1 Functional completeness | PASS (partial) | exit demo 22/22; three items owed |
+| 1 Functional completeness | PASS (partial) | exit demo 32/32; two items owed (22 pack contents, CDS counsel) |
 | 2 Zero-stub | PASS | demo + docs only; no new runtime code |
 | 3 Types | PASS | no code change (existing `compileKotlin`) |
 | 4 Lint + format | PASS | no code change (existing `ktlintCheck`) |
@@ -43,7 +43,7 @@ Per `20-CHUNK7-SECTIONS.md` 07.11 (⛔ external: prescriptive-CDS counsel opinio
 | 9 Data | PASS | demo data is tenant-scoped; no schema change |
 | 10 Audit | PASS | every demo write is controller-mediated |
 | 11 Docs | PASS | This report; `FINAL.md`; tracker; LEDGER |
-| 12 Exit item | PASS (partial) | exit demo 22/22; pack install + drill harness owed |
+| 12 Exit item | PASS (partial) | exit demo 32/32; pack installer and drill harness now exercised live |
 
 ## 5. Section status entering the exit
 | Section | Status | What the exit can honestly claim |
@@ -52,7 +52,7 @@ Per `20-CHUNK7-SECTIONS.md` 07.11 (⛔ external: prescriptive-CDS counsel opinio
 | 07.02 voice | COMPLETE | transcript-only, no audio streaming |
 | 07.03 digital twin | COMPLETE | capacity answer with 5 evidence factors, 30-day event replay reconciled, staffing + advisory forecast |
 | 07.04 full financials | COMPLETE | GL/AP/AR/close; no multi-entity consolidation |
-| 07.05 ED + mass casualty | COMPLETE | activation/stand-down real; drill harness owed |
+| 07.05 ED + mass casualty | COMPLETE | activation/stand-down + drill harness (V109) |
 | 07.06 kiosk + wayfinding | SECTION REVIEW | E12 indoor-map vendor import absent |
 | 07.07 patient experience | COMPLETE | backend surfaces only |
 | 07.08 QMS/IPC/legal | COMPLETE | evidence packs are register records, no bundle export |

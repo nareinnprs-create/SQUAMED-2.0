@@ -1,6 +1,6 @@
 # Chunk 7 — Digital + intelligence layer: FINAL
 
-**Status: exit demo green (22/22); chunk NOT closed.** Three items are owed and three sections remain SECTION REVIEW. Chunk 8 is not started.
+**Status: exit demo green (32/32); chunk NOT closed.** Two items are owed and two sections remain SECTION REVIEW (07.06, 07.10) plus the exit itself. Chunk 8 is not started.
 
 ## What shipped
 
@@ -19,12 +19,12 @@
 | 07.11 | SECTION REVIEW | This exit: demo 22/22, FINAL, ledger |
 
 ## Exit demo
-`scripts/demo-07.11-chunk7-exit.ps1` → **22 passed, 0 failed**, plus three explicit OWED lines.
+`scripts/demo-07.11-chunk7-exit.ps1` → **32 passed, 0 failed**, plus two explicit OWED lines.
 
 ## Owed before the chunk can close
-1. **Cardiology specialty pack install via configuration alone** — 22 packs await human clinical review (07.10).
-2. **Mass-casualty drill harness** — activation exists, timed drill does not (07.05).
-3. **Prescriptive-CDS counsel opinion** — external gate, documented but not crossed (07.11).
+1. **The 22 clinically reviewed specialty pack contents** — the installer is built and exercised (07.10).
+
+2. **Prescriptive-CDS counsel opinion** — external gate, documented but not crossed (07.11).
 
 ## Known limits worth carrying forward
 - 07.03 reads operational tables by design (capacity must be live, not nightly); its forecast is a flat 7-day run-rate and staffing counts rostered shifts, not attendance.

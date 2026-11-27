@@ -9,13 +9,14 @@ Chunk file §05.05: session record → **streaming** STT (en/hi/Hinglish) → di
 - `backend/squamed-core/src/main/kotlin/com/squamed/core/scribe/service/ScribeService.kt` — 6-stage session machine (create → transcribe → draft → edit → sign → delete).
 - `backend/squamed-core/src/main/kotlin/com/squamed/core/scribe/service/SpeechToTextProviders.kt` — Echo + OpenAI Whisper providers (config `squamed.ai.stt.provider`).
 - `V28__scribe.sql` — `scribe.scribe_session`.
+- `V111__scribe_consent_corrections.sql` - consent id + recording stamp on the session, `scribe.draft_correction` for clinician edits.
 - `apps/web` scribe page (532 LOC).
 
 ## 3. Data/API/event contracts delivered
-- Tables: scribe_session (stage, draft, audio ref, provenance `ai_generated`).
-- API: 6-stage lifecycle endpoints (create→…→sign converts draft to legal record; delete); audio upload drives STT stage.
+- Tables: scribe_session (stage, draft, consent ref, recording stamp, provenance `ai_generated`), scribe.draft_correction (original vs edited, chars changed).
+- API: 6-stage lifecycle endpoints (create→…→sign converts draft to legal record; delete); audio upload drives STT stage. Consent is required for a patient session; `GET /sessions/{id}/corrections` returns the captured edits.
 - Provider contract: STT provider switchable via config; Echo + Whisper-compatible.
-- Events: none (no purge job, no consent event).
+- Events: none. Audio is transcribed in memory and never persisted, so there is no audio to purge; consent is checked at session creation.
 
 ## 4. Gates 1–12
 | # | Gate | Result | Evidence |

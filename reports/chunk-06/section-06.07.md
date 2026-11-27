@@ -70,6 +70,7 @@ No UI change.
 - Outbound JSON is null-pruned at the wire boundary (FHIR JSON has no null values).
 
 ## 9. Deviations / blockers
+- List endpoints are bounded by FHIR `_count` (default 100, max 500) and Patient/Practitioner page at the query; before this an unbounded list timed out on a 20k-user database.
 - **ABDM** gateway/consent-artefact exchange is external (sandbox credentials); `POST /abdm/*` is not implemented.
 - **EHR-M**: no official profile artefacts in-repo, so alignment is enforced by local rules + HAPI validation rather than StructureDefinition conformance.
 - **Two-hospital topology** is configuration (peer base URL), not a second deployed HAPI instance in CI.

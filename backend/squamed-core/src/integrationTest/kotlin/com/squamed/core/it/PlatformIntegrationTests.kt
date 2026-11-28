@@ -9720,7 +9720,7 @@ class PlatformIntegrationTests {
 
       // Chain verifies clean for THIS tenant (stale breaches from previous local runs on other
       // tenants are out of scope here).
-      val verify = `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
+      val verify = `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), auditor))
       assertTrue(verify["checked"].asInt() >= 2, "both chained rows verified: $verify")
       assertTrue(
         verify["breaches"].none { it["hospitalId"].asText() == h1 },
@@ -9728,6 +9728,40 @@ class PlatformIntegrationTests {
       )
 
       // Permissions: auditor (READ_ONLY_VIEWER) reads + verifies but cannot export; doctor denied.
+      // Scoping: a hospital admin cannot verify another tenant's chain, and cannot request the
+      // platform-wide sweep. The default is the caller's own chain, which always completes.
+      val otherHospital =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Audit H2 $s", "code" to "AU2-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+      val otherEmail = "audit-other-$s@test.local"
+      assert2xx(
+        api(
+          HttpMethod.POST,
+          "/api/v1/auth/register",
+          json(
+            "email" to otherEmail,
+            "password" to "Passw0rd!123",
+            "firstName" to "Other",
+            "lastName" to "Admin$s",
+            "roles" to listOf("HOSPITAL_ADMIN"),
+            "hospitalId" to otherHospital,
+          ),
+        ),
+        "register other hospital admin",
+      )
+      val other = `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to otherEmail, "password" to "Passw0rd!123")))["accessToken"].asText()
+      assertEquals(
+        403,
+        api(HttpMethod.POST, "/api/v1/audit/verify?hospitalId=$h1", json(), other).status,
+        "another tenant's chain cannot be verified",
+      )
+      assertEquals(403, api(HttpMethod.POST, "/api/v1/audit/verify?all=true", json(), other).status, "platform sweep is platform-admin only")
       assert2xx(api(HttpMethod.GET, "/api/v1/audit/logs?actor=$doctorId", token = auditor), "auditor reads audit logs")
       assert2xx(api(HttpMethod.POST, "/api/v1/audit/verify", json(), auditor), "auditor runs chain verify")
       assertEquals(403, api(HttpMethod.POST, "/api/v1/audit/export", json(), auditor).status, "auditor denied export")
@@ -9748,7 +9782,7 @@ class PlatformIntegrationTests {
       val tamperId = tamperRow["id"].toString()
       val originalPayload = tamperRow["response_payload"].toString()
       auditJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", "TAMPERED-$s", tamperId)
-      val breach = `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
+      val breach = `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), auditor))
       val h1Breaches = breach["breaches"].filter { it["hospitalId"].asText() == h1 }
       assertTrue(
         h1Breaches.isNotEmpty() && h1Breaches.all { it["reason"].asText().contains("HASH_MISMATCH") },
@@ -9768,7 +9802,7 @@ class PlatformIntegrationTests {
       // Restore the tampered row: the shared dev DB must keep a clean chain baseline
       // (the exit demo asserts gauge=0 before its own tamper; a left breach would break it).
       auditJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", originalPayload, tamperId)
-      `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
+      `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), auditor))
     }
   }
 
@@ -12205,7 +12239,7 @@ class PlatformIntegrationTests {
       )
       // Establish the real baseline: prior failed PIT runs leave tampered tenants in the DB,
       // and the gauge reads 0.0 until the first verify runs in this JVM.
-      `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
+      `data`(api(HttpMethod.POST, "/api/v1/audit/verify?all=true", json(), admin))
       val b0 =
         prom()
           .lines()
@@ -12231,7 +12265,7 @@ class PlatformIntegrationTests {
       val id = target["id"].toString()
       val original = target["response_payload"].toString()
       obsJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", "TAMPERED-OBS-$s2", id)
-      val verify = `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
+      val verify = `data`(api(HttpMethod.POST, "/api/v1/audit/verify?all=true", json(), admin))
       assertTrue(verify["breaches"].any { it["hospitalId"].asText() == h2 }, "tamper detected on the fresh tenant: $verify")
       val afterTamper =
         prom()
@@ -12243,7 +12277,7 @@ class PlatformIntegrationTests {
       assertTrue(prom().contains("squamed_audit_chain_seconds_since_verify"), "staleness gauge present after verify")
 
       obsJdbc.update("UPDATE audit.audit_log SET response_payload = ? WHERE id = ?::uuid", original, id)
-      `data`(api(HttpMethod.POST, "/api/v1/audit/verify", json(), admin))
+      `data`(api(HttpMethod.POST, "/api/v1/audit/verify?all=true", json(), admin))
       val afterRestore =
         prom()
           .lines()

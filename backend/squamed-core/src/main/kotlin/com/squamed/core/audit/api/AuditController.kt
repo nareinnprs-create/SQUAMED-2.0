@@ -5,7 +5,10 @@ import com.squamed.core.audit.service.AuditChainService
 import com.squamed.core.audit.service.AuditExportService
 import com.squamed.core.common.api.ApiResponse
 import com.squamed.core.identity.security.RequiresPermission
+import com.squamed.core.identity.security.SquamedPrincipal
 import org.springframework.data.domain.PageRequest
+import org.springframework.security.access.AccessDeniedException
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
@@ -58,10 +61,29 @@ class AuditController(
     return ApiResponse.ok(page.map { AuditLogView.from(it) }, meta)
   }
 
-  /** ADR-9 on-demand chain verification (auditor "chain-integrity check" in the viewer). */
+  /**
+   * ADR-9 on-demand chain verification (auditor "chain-integrity check" in the viewer).
+   * Scoped to the caller's tenant by default: the platform-wide sweep is unbounded and returns
+   * other tenants' chain keys, so it is only reachable by an explicit `all=true` from a platform
+   * admin (no hospital on the principal).
+   */
   @PostMapping("/verify")
   @RequiresPermission("audit:read:audit")
-  fun verifyChain(): ApiResponse<AuditVerifyView> = ApiResponse.ok(AuditVerifyView.from(auditChainService.verifyAndAlert()))
+  fun verifyChain(
+    @RequestParam(name = "all", required = false, defaultValue = "false") all: Boolean,
+    @RequestParam(name = "hospitalId", required = false) hospitalId: UUID?,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<AuditVerifyView> {
+    val callerHospital = principal.hospitalId
+    if (all) {
+      if (callerHospital != null) throw AccessDeniedException("AUDIT_VERIFY_ALL_PLATFORM_ONLY")
+      return ApiResponse.ok(AuditVerifyView.from(auditChainService.verifyAllAndAlert()))
+    }
+    if (hospitalId != null && callerHospital != null && hospitalId != callerHospital) {
+      throw AccessDeniedException("AUDIT_VERIFY_TENANT_MISMATCH")
+    }
+    return ApiResponse.ok(AuditVerifyView.from(auditChainService.verifyAndAlert(hospitalId ?: callerHospital)))
+  }
 
   /** Runs the WORM export immediately (nightly job runs on its own schedule). */
   @PostMapping("/export")

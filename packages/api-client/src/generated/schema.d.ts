@@ -31667,7 +31667,10 @@ export interface operations {
     };
     verifyChain: {
         parameters: {
-            query?: never;
+            query?: {
+                all?: boolean;
+                hospitalId?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -38374,4 +38377,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 33a0157a5b62f1e4b9fc157d283d6016f13c8aac549bc6e62ccb53c0931e9990
+// openapi snapshot sha256: d927f08c50a209c333a53955c4999bf2a31945f98db9bc3fc68dff7b890d2567

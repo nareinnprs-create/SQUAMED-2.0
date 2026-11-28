@@ -58,15 +58,22 @@ class AuditChainService(
     val ok: Boolean get() = breaches.isEmpty()
   }
 
+  // Scoped verification. A tenant asks about its own chain; a platform admin with no hospital
+  // verifies the platform chain. The full sweep is verifyAll(), used by the nightly job and by an
+  // explicit ?all=true - it is unbounded, so it must not be what a normal call triggers.
   @Transactional(readOnly = true)
-  fun verify(): VerifyResult {
-    val chainKeys = jdbcTemplate.queryForList("SELECT hospital_id FROM audit.chain_head", UUID::class.java)
+  fun verify(hospitalId: UUID? = null): VerifyResult = verifyChains(listOf(hospitalId ?: AuditRecorder.SYSTEM_CHAIN))
+
+  @Transactional(readOnly = true)
+  fun verifyAll(): VerifyResult = verifyChains(jdbcTemplate.queryForList("SELECT hospital_id FROM audit.chain_head", UUID::class.java))
+
+  private fun verifyChains(chainKeys: List<UUID>): VerifyResult {
     var checked = 0
     var legacy = 0L
     val breaches = mutableListOf<Breach>()
     for (key in chainKeys) {
-      val hospitalId = if (key == AuditRecorder.SYSTEM_CHAIN) null else key
-      val rows = auditLogRepository.findChainedByHospital(hospitalId)
+      val chainHospitalId = if (key == AuditRecorder.SYSTEM_CHAIN) null else key
+      val rows = auditLogRepository.findChainedByHospital(chainHospitalId)
       var previousHash: String? = null
       for (row in rows) {
         checked++
@@ -84,7 +91,7 @@ class AuditChainService(
         }
         previousHash = row.rowHash
       }
-      val unchained = auditLogRepository.countByHospitalIdAndChainSeqIsNull(hospitalId)
+      val unchained = auditLogRepository.countByHospitalIdAndChainSeqIsNull(chainHospitalId)
       legacy += unchained
     }
     return VerifyResult(checked = checked, breachedTenants = breaches.map { it.hospitalId }.distinct().size, legacyRows = legacy.toInt(), breaches = breaches)
@@ -93,14 +100,24 @@ class AuditChainService(
   /** Nightly verification (ADR-9: breach pages admins via the event fabric + in-app channel). */
   @Scheduled(cron = "\${squamed.audit.verify-cron:0 0 3 * * *}")
   fun verifyNightly() {
-    verifyAndAlert()
+    alert(verifyAll(), platform = true)
   }
 
-  /** On-demand verify used by the endpoint + nightly job: publishes alerts when breached. */
-  fun verifyAndAlert(): VerifyResult {
-    val result = verify()
-    lastResult = result
-    lastVerifiedAt = result.verifiedAt
+  /** Scoped on-demand check: bounded by one tenant, so it always completes. */
+  fun verifyAndAlert(hospitalId: UUID? = null): VerifyResult = alert(verify(hospitalId), platform = false)
+
+  /** Full sweep on demand. Same cost as the nightly job; the caller must ask for it explicitly. */
+  fun verifyAllAndAlert(): VerifyResult = alert(verifyAll(), platform = true)
+
+  private fun alert(
+    result: VerifyResult,
+    platform: Boolean,
+  ): VerifyResult {
+    // The freshness gauges describe the platform sweep; a tenant-scoped check must not reset them.
+    if (platform) {
+      lastResult = result
+      lastVerifiedAt = result.verifiedAt
+    }
     if (!result.ok) {
       logger.error { "Audit chain verification FAILED: ${result.breaches.size} breach(es), ${result.checked} rows checked" }
       publishAlerts(result)

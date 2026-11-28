@@ -1,6 +1,6 @@
 # Open items — what is blocked, on what, and how to close it
 
-Status as of 2026-11-28. Ledger totals: **66 COMPLETE / 1 IN PROGRESS / 10 SECTION REVIEW / 13 PLANNED** (90 sections).
+Status as of 2026-11-28. Ledger totals: **66 COMPLETE / 1 IN PROGRESS / 13 SECTION REVIEW / 10 PLANNED** (90 sections).
 
 Every open item below needs something this repository cannot produce by itself. Each entry states the
 blocker, what the platform already provides, and the acceptance check to run when the input arrives.
@@ -76,3 +76,19 @@ blocker, what the platform already provides, and the acceptance check to run whe
 ## Also worth doing, not blocking anything
 - Re-run the 1,500-user load on staging with the load client **off-box** and users fanned out across hospitals. The local numbers are host-dominated and cannot be quoted.
 - Batch the store-and-forward replay: ~10.6 writes/s means a 10k backlog takes ~16 minutes.
+
+---
+
+## Moved since this list was first written (same day)
+
+Three sections that were PLANNED are now **SECTION REVIEW** because their internal half needed nothing from outside:
+
+| Section | Built | Still owed |
+|---|---|---|
+| 05.02 Eval framework | datasets, pass@k harness, enforced gates, adversarial leak suite, 500-sim agent harness | the 200 recorded consults (human-paced, `exp:E8`) |
+| 01.10 Entitlement | plans, subscriptions, module gates, brand payload | per-tenant DLT/WABA sender (`exp:E2`), eSign certs (`exp:E5`) |
+| 06.02 Telemedicine | RMP licence gate, first-consult-video, encounter documentation, support escape | video SDK (`exp:E9`), payment link (`exp:E4`) |
+
+What remains genuinely unbuilt: **03.04** (payer claim formats, `exp:E4`/D6), **04.04** (device specs, `exp:E7`), and **chunk 8** (08.01-08.08), which the plan gates behind chunk-7 exit and whose own exit requires a third-party developer to ship an agent into a live marketplace.
+
+Recorded while running the gates, not fixed: `POST /api/v1/audit/verify` re-hashes every chained audit row for every tenant in one request. At 209,905 rows across 2,364 chain heads it exceeded a 30 s client timeout. The fix is incremental verification from each chain head's last verified sequence (or an async sweep) — an audit-subsystem change, not a section build.

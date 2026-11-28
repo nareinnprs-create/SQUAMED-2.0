@@ -11,6 +11,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 class WebConfig(
   @Value("\${squamed.cors.allowed-origins}") private val allowedOrigins: String,
   private val tenantInterceptor: TenantInterceptor,
+  private val entitlementInterceptor: com.squamed.core.entitlement.api.EntitlementInterceptor,
 ) : WebMvcConfigurer {
   override fun addCorsMappings(registry: CorsRegistry) {
     registry
@@ -24,5 +25,7 @@ class WebConfig(
 
   override fun addInterceptors(registry: InterceptorRegistry) {
     registry.addInterceptor(tenantInterceptor).addPathPatterns("/api/v1/hospital-config/hospitals/**")
+    // 01.10: module gates. Runs for every API call; a handler without @RequiresFeature passes through.
+    registry.addInterceptor(entitlementInterceptor).addPathPatterns("/api/**")
   }
 }

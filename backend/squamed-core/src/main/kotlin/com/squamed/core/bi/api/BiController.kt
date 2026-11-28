@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/api/v1/bi")
+@com.squamed.core.entitlement.api.RequiresFeature("bi")
 class BiController(
   private val service: BiService,
   private val tenantResolver: TenantResolver,

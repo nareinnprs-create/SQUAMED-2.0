@@ -4420,6 +4420,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/entitlements/subscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["subscribe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/encounters": {
         parameters: {
             query?: never;
@@ -9004,6 +9020,54 @@ export interface paths {
             cookie?: never;
         };
         get: operations["summary_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["current"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entitlements/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["plans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entitlements/brand": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["brand"];
         put?: never;
         post?: never;
         delete?: never;
@@ -14745,6 +14809,30 @@ export interface components {
             metricType: string;
             value: number;
         };
+        SubscribeRequest: {
+            planCode: string;
+            /** Format: date */
+            validTo?: string;
+        };
+        ApiResponseEntitlementView: {
+            data?: components["schemas"]["EntitlementView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        EntitlementView: {
+            /** Format: uuid */
+            hospitalId: string;
+            managed: boolean;
+            planCode?: string;
+            status: string;
+            /** Format: date */
+            validFrom?: string;
+            /** Format: date */
+            validTo?: string;
+            features: string[];
+        };
         StartEncounterDto: {
             /** Format: uuid */
             patientId: string;
@@ -18638,6 +18726,37 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ApiResponseListPlanView: {
+            data?: components["schemas"]["PlanView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        PlanView: {
+            code: string;
+            name: string;
+            description?: string;
+            features: string[];
+            active: boolean;
+        };
+        ApiResponseBrandView: {
+            data?: components["schemas"]["BrandView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        BrandView: {
+            hospitalName: string;
+            legalName?: string;
+            address?: string;
+            phone?: string;
+            email?: string;
+            licenseNumber?: string;
+            timezone: string;
+            currency: string;
         };
         ApiResponseEncounterDetailView: {
             data?: components["schemas"]["EncounterDetailView"];
@@ -28828,6 +28947,30 @@ export interface operations {
             };
         };
     };
+    subscribe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscribeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEntitlementView"];
+                };
+            };
+        };
+    };
     startEncounter: {
         parameters: {
             query?: never;
@@ -36654,6 +36797,66 @@ export interface operations {
             };
         };
     };
+    current: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEntitlementView"];
+                };
+            };
+        };
+    };
+    plans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPlanView"];
+                };
+            };
+        };
+    };
+    brand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseBrandView"];
+                };
+            };
+        };
+    };
     getEncounterDetail: {
         parameters: {
             query?: never;
@@ -37862,4 +38065,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 1efca3a87f1209bed2c5f371409f39af4438dcaba929e0e30ccc736b85bd9780
+// openapi snapshot sha256: 0658daad15c7c57674afd128a8448059e2a425792bdd3634d2f2be329a72cb1f

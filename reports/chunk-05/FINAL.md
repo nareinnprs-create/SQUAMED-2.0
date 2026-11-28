@@ -3,7 +3,7 @@
 ## 1. Scope
 Chunk-5 exit per `chunk-05-ai-intelligence.md` EXIT CRITERIA (L54), TESTS (L45-52), SAFETY (L39-43), ROLLOUT/ROLLBACK (L57-59) and `03-BUILD-PROTOCOL.md` §7. **05.08 carries zero feature code by design.**
 
-**Honest chunk state at exit:** 5 of the buildable sections COMPLETE (05.01, 05.03, 05.04, 05.06, 05.07). **05.02 Eval framework remains PLANNED - externally gated `exp:E8`** (gold sets are human-paced), and **05.05 AI Scribe remains IN PROGRESS - gated `exp:E8`** (STT/LLM provider contracts + eval set), so the scribe leg of the exit scenario is owed and reported, never faked. **05.08 lands at SECTION REVIEW**: the 2-week per-doctor pilot and the provider procurement are deployment activities.
+**Honest chunk state at exit:** 5 of the buildable sections COMPLETE (05.01, 05.03, 05.04, 05.06, 05.07). **05.02 Eval framework landed SECTION REVIEW 2026-11-28** (harness, datasets, gates, leak suite and 500-sim built; the 200 recorded consults remain `exp:E8`) (gold sets are human-paced), and **05.05 AI Scribe remains IN PROGRESS - gated `exp:E8`** (STT/LLM provider contracts + eval set), so the scribe leg of the exit scenario is owed and reported, never faked. **05.08 lands at SECTION REVIEW**: the 2-week per-doctor pilot and the provider procurement are deployment activities.
 
 ## 2. Built (this docs batch)
 - `scripts/demo-05.08-chunk5-exit.ps1` - 24-check live exit walk (everything except the scribe leg).
@@ -14,7 +14,7 @@ Chunk-5 exit per `chunk-05-ai-intelligence.md` EXIT CRITERIA (L54), TESTS (L45-5
 | Section | Status | Report |
 |---|---|---|
 | 05.01 AI gateway | COMPLETE (PR #103) | `reports/chunk-05/section-05.01.md` |
-| 05.02 Eval framework | **PLANNED - externally gated `exp:E8`** | - |
+| 05.02 Eval framework | **SECTION REVIEW** (harness built 2026-11-28; gold set owed `exp:E8`) | `reports/chunk-05/section-05.02.md` |
 | 05.03 Command bar | COMPLETE (PR #104) | `reports/chunk-05/section-05.03.md` |
 | 05.04 Intelligence rail | COMPLETE (PR #106) | `reports/chunk-05/section-05.04.md` |
 | 05.05 AI Scribe + report drafting | **IN PROGRESS - gated `exp:E8`** | `reports/chunk-05/section-05.05.md` |
@@ -29,7 +29,7 @@ Chunk-5 exit per `chunk-05-ai-intelligence.md` EXIT CRITERIA (L54), TESTS (L45-5
 | Contract test | Evidence |
 |---|---|
 | Scribe eval: >=95% gold facts, 0 critical-field fabrications | **Owed to 05.05** (`exp:E8`): no scribe eval set yet |
-| Command bar permission-leak suite (cross-dept/tenant/agent-impersonation), citations >=95% | Permission enforcement: `aiCommandBarGroundingCoverage` (scope denial), `aiGatewayGovernanceCoverage` (tenant caps/kill switch), `aiProductionAgentsCoverage` (persona boundaries); a formal adversarial permission-leak suite is owed to 05.02 |
+| Command bar permission-leak suite (cross-dept/tenant/agent-impersonation), citations >=95% | Permission enforcement: `aiCommandBarGroundingCoverage` (scope denial), `aiGatewayGovernanceCoverage` (tenant caps/kill switch), `aiProductionAgentsCoverage` (persona boundaries); the adversarial permission-leak suite now runs in 05.02 (`aiEvalFrameworkCoverage`: DENY/ALLOW probes, cross-tenant forbidden-token probe, all-skipped suite fails) |
 | Agents: unauthorized-action rate 0, proposal expiry | `aiProductionAgentsCoverage` (persona boundaries, disabled agents), `aiCommandBarGroundingCoverage` (approval permission, decided-draft 409); expiry is code-enforced, a 500-sim is owed |
 | Cost caps: simulated spike -> cap -> capability off -> audited | `aiGatewayGovernanceCoverage` (cap 1 -> 409) + the exit demo |
 | Kill-switch drill <60 s, staging, timed | Exit demo: 0.2 s end to end |
@@ -48,8 +48,8 @@ Chunk-5 exit per `chunk-05-ai-intelligence.md` EXIT CRITERIA (L54), TESTS (L45-5
 |---|---|---|
 | Eval framework + gold sets (05.02) | Clinical + product | `exp:E8`; human-paced recording |
 | AI Scribe + report drafting (05.05) | Product + provider contracts | `exp:E8`; STT/LLM provider + eval set |
-| Adversarial permission-leak suite | 05.02 | Needs the eval harness |
-| 500-sim agent unauthorized-action rate | 05.02 | Needs the sim harness |
+| Adversarial permission-leak suite | 05.02 | Harness built 2026-11-28 (`aiEvalFrameworkCoverage`) |
+| 500-sim agent unauthorized-action rate | 05.02 | Harness built 2026-11-28 - 500 scenarios, unauthorized 0 |
 | Provider contracts (India-region/zero-retention) | Procurement | External |
 | Recording hardware/mic standard | Operations | External |
 | 2-week per-doctor pilot + general enable | Clinical lead | Deployment activity (runbook ready) |

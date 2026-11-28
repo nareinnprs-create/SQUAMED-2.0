@@ -2,8 +2,8 @@
 # sections cover - a second hospital added to a group with inherited config (no code), the
 # consent-gated cross-hospital share adversarial pass, a group referral, degraded mode with the
 # offline whitelist and an idempotent replay, retention/erasure, sandbox seeding, the patient
-# portal, procurement -> stock, and a workforce roster. The 1,500-user load test and the planned
-# datacenter-kill drill are OWED (they need load/DR infrastructure) and are reported, not faked.
+# portal, procurement -> stock, and a workforce roster. The 1,500-user load test has been run (NFR
+# unverified - host-dominated), and the datacenter-kill drill is still OWED (needs a second region).
 # Runs against the app on port 8080 (pwsh). ASCII only.
 param([string]$Base = 'http://localhost:8080')
 $ErrorActionPreference = 'Stop'
@@ -160,9 +160,9 @@ $outbox = (Api GET '/api/v1/admin/events/outbox?limit=300' $null $admin).data
 Check 'share/referral/erasure events emitted' ((@($outbox | Where-Object { $_.eventType -in @('record.shared_consented', 'group.referral_accepted', 'governance.erasure_completed') })).Count -ge 3)
 
 # 11 owed (infrastructure) - reported, never faked
-Write-Output 'OWED 1,500-user load test (needs the load harness + staging)'
-Write-Output 'OWED planned datacenter-kill drill: 20 min degraded ward -> failover, RTO/RPO evidence pack'
-Write-Output 'OWED telemedicine (06.02 video SDK), BI/ClickHouse (06.06), outbound FHIR/HAPI (06.07)'
+Write-Output 'OWED datacenter-kill drill: 20 min degraded ward -> failover, RTO/RPO evidence pack (needs a second region)'
+Write-Output 'OWED 06.02 video SDK + payment link, 06.07 ABDM flows (guideline rules, BI and outbound FHIR are built)'
+
 
 Write-Output "== result: $script:pass passed, $script:fail failed =="
 if ($script:fail -gt 0) { exit 1 }

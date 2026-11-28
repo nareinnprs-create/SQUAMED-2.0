@@ -166,6 +166,8 @@ Format per `03-BUILD-PROTOCOL.md` §3. **Statuses:** `PLANNED → IN PROGRESS �
 - Request list issued (day 1): E1 ABDM sandbox, E2 DLT/WABA + BSP, E3 SMS/email provider, E4 payment gateway; reminder B2 (clinical lead) is the hard pre-build human gate; E10 hardware purchase list flagged early (TV box, thermal printer, kiosk tablet, barcode scanner).
 - Aging report (2026-11-14, week 1): E1–E3 open since day 1, all bound to **chunk 0 week 1** (E1→00.07 ABHA flows, E2/E3→00.12 channels) — already at escalation thresholds per register (E1 >10 working days → ABDM support; E2 >3 wk → swap BSP candidate); E4 open, due **chunk 3 week 1** (03.06, >2 wk → alternate PSP); B2 (clinical lead sign-off) still the hard pre-chunk-0 human gate; B1/B3–B8 not yet due per register `23`; E10 hardware list: procurement window opens with chunk-6 hardware pilot.
 
+- Open-items handover (2026-11-28): `reports/OPEN-ITEMS-HANDOVER.md` is the single list of the 6 remaining blockers (07.10 pack contents, 07.11 counsel opinion, 07.06 vendor format, 06.07 ABDM, 05.05 provider half, 06.09 DR drill) — each with what is already built and the acceptance check to run when the input arrives.
+
 ## Wiring-window `--admin` merge log (SC-8 — every bypass merge logged here)
 | Date | PR | Commit | Gates at merge | Reason |
 |---|---|---|---|---|

@@ -74,3 +74,11 @@ Named PIT **`entitlementGatingCoverage`** (full chain: 118 PIT + 57 unit, 0 fail
 `POST /api/v1/audit/verify` re-hashes every chained audit row for every tenant inside one request. That was invisible while the dev database was small; after roughly thirty full-suite runs it held **209,905 audit rows across 2,364 chain heads**, and the call exceeded the test client's read timeout (one chain run died mid-suite with the test JVM gone). The local audit tables were truncated so the local chain reflects a representative database — CI starts from a fresh one and never hit this.
 
 The real fix is incremental verification from each chain head's last verified sequence, or an async sweep that reports its result, instead of a full re-hash per request. That belongs to the audit subsystem (00.10/ADR-9), not to 01.10, and is recorded rather than rushed into this PR.
+## 9. Follow-up landed the same day: the shell now hides what the API refuses
+
+The first cut gated only AI and BI, while the seeded plans also listed `scribe`, `telemedicine`, `portal`, `kiosk`, `fhir`, `twin` and `packs` as excluded. A plan that names a feature it does not gate is worse than no plan, so:
+
+- `@RequiresFeature("scribe")` and `@RequiresFeature("telemedicine")` were added to those controllers.
+- The web shell fetches `/api/v1/entitlements` and filters nav entries through `visibleNavItems`, with three deliberate behaviours: unmanaged shows everything (matching the API), a failed entitlement call shows everything (an outage must not empty the menu), and an unmapped nav item is never hidden.
+
+Covered by `entitlementGatingCoverage` (CORE refuses scribe + telemedicine, FULL restores them) and `nav-entitlements.test.ts`.

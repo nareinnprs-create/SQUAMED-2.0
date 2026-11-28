@@ -93,6 +93,7 @@ class EncounterService(
     chiefComplaint: String? = null,
     hospitalId: UUID,
     principal: SquamedPrincipal,
+    encounterType: String = "outpatient",
   ): EncounterView {
     // SAFETY L40 ABAC: the owner is the session doctor; a DOCTOR cannot assign the encounter to someone else.
     val ownerDoctorId =
@@ -114,6 +115,7 @@ class EncounterService(
           chiefComplaint = chiefComplaint,
           status = "in-progress",
           startedAt = Instant.now(),
+          encounterType = encounterType,
         ),
       )
     eventPublisher.publish(

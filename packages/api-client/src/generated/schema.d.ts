@@ -548,6 +548,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telemedicine/consults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list"];
+        put?: never;
+        post: operations["schedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemedicine/consults/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemedicine/consults/{id}/escape": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["escape"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemedicine/consults/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["complete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemedicine/consults/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks": {
         parameters: {
             query?: never;
@@ -811,7 +891,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list"];
+        get: operations["list_1"];
         put?: never;
         post: operations["create"];
         delete?: never;
@@ -3547,7 +3627,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_1"];
+        get: operations["list_2"];
         put?: never;
         post: operations["create_4"];
         delete?: never;
@@ -5741,7 +5821,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["start"];
+        post: operations["start_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5789,7 +5869,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["schedule"];
+        post: operations["schedule_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5805,7 +5885,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["complete"];
+        post: operations["complete_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6433,7 +6513,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["complete_1"];
+        patch: operations["complete_2"];
         trace?: never;
     };
     "/api/v1/reception/visits/{id}/check-in": {
@@ -6513,7 +6593,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["start_1"];
+        patch: operations["start_2"];
         trace?: never;
     };
     "/api/v1/queue/entries/{queueType}/{tokenNumber}/skip": {
@@ -6577,7 +6657,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch: operations["complete_2"];
+        patch: operations["complete_3"];
         trace?: never;
     };
     "/api/v1/queue/entries/{queueType}/{tokenNumber}/call": {
@@ -7180,6 +7260,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["reconcile_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telemedicine/consults/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10955,6 +11051,54 @@ export interface components {
         CapacityRequest: {
             /** Format: int32 */
             additionalAdmissions: number;
+        };
+        ScheduleConsultRequest: {
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            doctorUserId: string;
+            /** Format: uuid */
+            rmpEmployeeId: string;
+            consultType: string;
+            mode: string;
+            /** Format: date-time */
+            scheduledAt: string;
+            meetingRef?: string;
+        };
+        ApiResponseConsultView: {
+            data?: components["schemas"]["ConsultView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ConsultView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            hospitalId: string;
+            /** Format: uuid */
+            patientId: string;
+            /** Format: uuid */
+            doctorUserId: string;
+            /** Format: uuid */
+            rmpEmployeeId: string;
+            consultType: string;
+            mode: string;
+            status: string;
+            /** Format: date-time */
+            scheduledAt: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            endedAt?: string;
+            /** Format: uuid */
+            encounterId?: string;
+            meetingRef?: string;
+            escapeReason?: string;
+        };
+        ConsultEscapeRequest: {
+            reason: string;
         };
         TaskCreateDto: {
             /** Format: uuid */
@@ -17287,6 +17431,13 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
+        ApiResponseListConsultView: {
+            data?: components["schemas"]["ConsultView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         ApiResponseListTaskView: {
             data?: components["schemas"]["TaskView"][];
             success: boolean;
@@ -20707,6 +20858,142 @@ export interface operations {
             };
         };
     };
+    list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListConsultView"];
+                };
+            };
+        };
+    };
+    schedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduleConsultRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConsultView"];
+                };
+            };
+        };
+    };
+    start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConsultView"];
+                };
+            };
+        };
+    };
+    escape: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsultEscapeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConsultView"];
+                };
+            };
+        };
+    };
+    complete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConsultView"];
+                };
+            };
+        };
+    };
+    cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConsultView"];
+                };
+            };
+        };
+    };
     listTasks: {
         parameters: {
             query?: {
@@ -21329,7 +21616,7 @@ export interface operations {
             };
         };
     };
-    list: {
+    list_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -27048,7 +27335,7 @@ export interface operations {
             };
         };
     };
-    list_1: {
+    list_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -31870,7 +32157,7 @@ export interface operations {
             };
         };
     };
-    start: {
+    start_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -31941,7 +32228,7 @@ export interface operations {
             };
         };
     };
-    schedule: {
+    schedule_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -31967,7 +32254,7 @@ export interface operations {
             };
         };
     };
-    complete: {
+    complete_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -33110,7 +33397,7 @@ export interface operations {
             };
         };
     };
-    complete_1: {
+    complete_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -33224,7 +33511,7 @@ export interface operations {
             };
         };
     };
-    start_1: {
+    start_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -33320,7 +33607,7 @@ export interface operations {
             };
         };
     };
-    complete_2: {
+    complete_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -34283,6 +34570,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseObject"];
+                };
+            };
+        };
+    };
+    get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseConsultView"];
                 };
             };
         };
@@ -38065,4 +38374,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 0658daad15c7c57674afd128a8448059e2a425792bdd3634d2f2be329a72cb1f
+// openapi snapshot sha256: 33a0157a5b62f1e4b9fc157d283d6016f13c8aac549bc6e62ccb53c0931e9990

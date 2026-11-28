@@ -3,7 +3,7 @@
 ## 1. Scope
 Chunk-6 exit per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SECTIONS.md` 06.09: the second-hospital demo, the consent-gate adversarial pass, the load test, the planned datacenter-kill drill and the evidence pack. **06.09 carries zero feature code by design.**
 
-**Honest chunk state at exit:** 6 buildable sections COMPLETE (06.01, 06.03, 06.04, 06.05, 06.08 + the already-closed chunk-0/1 work this depends on). **06.02 Telemedicine remains PLANNED - externally gated on the video SDK**; **06.06 BI and 06.07 outbound FHIR remain IN PROGRESS** because they need ClickHouse and a HAPI server. The 1,500-user load test and the datacenter-kill drill are OWED to load/DR infrastructure. **06.09 lands at SECTION REVIEW.**
+**Honest chunk state at exit:** 6 buildable sections COMPLETE (06.01, 06.03, 06.04, 06.05, 06.08 + the already-closed chunk-0/1 work this depends on). **06.02 Telemedicine landed SECTION REVIEW 2026-11-28** (guideline rules built; video SDK `exp:E9` and payment link `exp:E4` remain external).**; **06.06 BI and 06.07 outbound FHIR remain IN PROGRESS** because they need ClickHouse and a HAPI server. The 1,500-user load test and the datacenter-kill drill are OWED to load/DR infrastructure. **06.09 lands at SECTION REVIEW.**
 
 ## 2. Built (this docs batch)
 - `scripts/demo-06.09-chunk6-exit.ps1` - 28-check live exit walk.
@@ -14,7 +14,7 @@ Chunk-6 exit per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SEC
 | Section | Status | Report |
 |---|---|---|
 | 06.01 Multi-hospital group | COMPLETE (PR #110) | `reports/chunk-06/section-06.01.md` |
-| 06.02 Telemedicine | **PLANNED - externally gated (video SDK)** | - |
+| 06.02 Telemedicine | **SECTION REVIEW** (guideline rules built 2026-11-28; video SDK + payment link owed) | `reports/chunk-06/section-06.02.md` |
 | 06.03 Patient portal v2 | COMPLETE (PR #115; Web Push delivery + UI owed, SC-5 open) | `reports/chunk-06/section-06.03.md` |
 | 06.04 Workforce / HR-lite | COMPLETE (PR #111) | `reports/chunk-06/section-06.04.md` |
 | 06.05 Ops modules | COMPLETE (PR #113) | `reports/chunk-06/section-06.05.md` |
@@ -40,7 +40,7 @@ Chunk-6 exit per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SEC
 - Degraded mode blocks identity/financial writes and queues clinical appends; replay is idempotent - 06.08.
 - Erasure is blocked for clinical data and by legal holds; erasure emits an event - 06.08.
 - Sandbox hospitals are flagged and seeded with synthetic patients only - 06.08.
-- Telemedicine guideline checklist is 06.02 (gated).
+- Telemedicine guideline checklist is built in 06.02 (RMP licence, first-consult-video, encounter documentation, support escape).
 
 ## 7. Owed / tracked (not skipped)
 | Item | Owner | Why it is not CI evidence |
@@ -57,7 +57,7 @@ Chunk-6 exit per `chunk-06-enterprise-scale.md` EXIT CRITERIA and `19-CHUNK6-SEC
 | AI Scribe + eval harness (05.05/05.02) | Product | `exp:E8` |
 
 ## 8. Gate 12 disposition
-Chunk-6 GATE-12: **PASS (partial)** - all buildable sections carry CI evidence on merged main; 06.02 is externally gated; 06.06/06.07 need their infrastructure; 06.09 is docs + a 28/28 live demo with the load/DR drills owed.
+Chunk-6 GATE-12: **PASS (partial)** - all buildable sections carry CI evidence on merged main; 06.02 guideline rules built (video SDK/payment link externally gated); 06.06/06.07 need their infrastructure; 06.09 is docs + a 28/28 live demo with the DR drill owed
 
 ## 9. Sign-off
 | Role | Name | Date | Verdict |

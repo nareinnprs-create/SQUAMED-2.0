@@ -82,6 +82,21 @@ data class AiEvalRequest(
   val notes: String? = null,
 )
 
+data class EvalCaseDto(
+  val input: String,
+  val expected: String,
+  val forbiddenToken: String? = null,
+  val relatedType: String? = null,
+  val critical: Boolean = false,
+)
+
+data class EvalDatasetRequest(
+  val code: String,
+  val capability: String,
+  val description: String? = null,
+  val cases: List<EvalCaseDto>,
+)
+
 data class AiIncidentRequest(
   val capability: String,
   val severity: String,
@@ -101,6 +116,7 @@ class AiController(
   private val governanceService: com.squamed.core.ai.service.AiGovernanceService,
   private val actionService: com.squamed.core.ai.service.AiActionService,
   private val railService: com.squamed.core.ai.service.AiRailService,
+  private val evalFramework: com.squamed.core.ai.service.AiEvalFramework,
   private val tenantResolver: TenantResolver,
 ) {
   @GetMapping("/models")
@@ -386,6 +402,89 @@ class AiController(
     @RequestParam(name = "subject", required = false) subject: String?,
     @AuthenticationPrincipal principal: SquamedPrincipal,
   ): ApiResponse<List<com.squamed.core.ai.service.EvalRunView>> = ApiResponse.ok(governanceService.evals(tenantResolver.pinOrDefault(principal, null), subject))
+
+  // 05.02 eval framework: datasets, runs through the real path, and the 500-sim agent harness.
+  @PostMapping("/evals/datasets")
+  @RequiresPermission("ai:manage:agent")
+  fun ingestEvalDataset(
+    @RequestBody req: EvalDatasetRequest,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.EvalDatasetView> =
+    ApiResponse.ok(
+      evalFramework.ingest(
+        tenantResolver.pinOrDefault(principal, null),
+        req.code,
+        req.capability,
+        req.description,
+        req.cases.map {
+          com.squamed.core.ai.service
+            .EvalCaseInput(it.input, it.expected, it.forbiddenToken, it.relatedType, it.critical)
+        },
+        "MANUAL",
+        principal.userId,
+      ),
+    )
+
+  @GetMapping("/evals/datasets")
+  @RequiresPermission("ai:read:agent")
+  fun evalDatasets(
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<List<com.squamed.core.ai.service.EvalDatasetView>> = ApiResponse.ok(evalFramework.datasets(tenantResolver.pinOrDefault(principal, null)))
+
+  @PostMapping("/evals/datasets/{code}/run")
+  @RequiresPermission("ai:manage:agent")
+  fun runEvalDataset(
+    @PathVariable code: String,
+    @RequestParam(name = "k", required = false, defaultValue = "1") k: Int,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.EvalSuiteResult> =
+    ApiResponse.ok(
+      evalFramework.run(
+        tenantResolver.pinOrDefault(principal, null),
+        code,
+        principal,
+        k,
+        principal.userId,
+      ),
+    )
+
+  @PostMapping("/evals/datasets/scribe-corrections/ingest")
+  @RequiresPermission("ai:manage:agent")
+  fun ingestScribeCorrections(
+    @RequestParam(name = "limit", required = false, defaultValue = "200") limit: Int,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.EvalDatasetView> =
+    ApiResponse.ok(
+      evalFramework.ingestScribeCorrections(
+        tenantResolver.pinOrDefault(principal, null),
+        limit,
+        principal.userId,
+      ),
+    )
+
+  @GetMapping("/evals/gates")
+  @RequiresPermission("ai:read:agent")
+  fun evalGates(
+    @RequestParam(name = "capability", required = false) capability: String?,
+  ): ApiResponse<List<com.squamed.core.ai.service.EvalGate>> =
+    ApiResponse.ok(
+      com.squamed.core.ai.service.AiEvalFramework
+        .gates(capability),
+    )
+
+  @PostMapping("/evals/agents/simulate")
+  @RequiresPermission("ai:manage:agent")
+  fun simulateAgents(
+    @RequestParam(name = "count", required = false, defaultValue = "500") count: Int,
+    @AuthenticationPrincipal principal: SquamedPrincipal,
+  ): ApiResponse<com.squamed.core.ai.service.AgentSimulationView> =
+    ApiResponse.ok(
+      evalFramework.simulateAgents(
+        tenantResolver.pinOrDefault(principal, null),
+        count,
+        principal.userId,
+      ),
+    )
 
   @PostMapping("/governance/incidents")
   @RequiresPermission("ai:chat:agent")

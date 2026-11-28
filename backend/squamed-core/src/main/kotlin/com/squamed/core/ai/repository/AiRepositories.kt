@@ -166,3 +166,25 @@ interface AttentionItemRepository : JpaRepository<com.squamed.core.ai.domain.Att
     status: String,
   ): List<com.squamed.core.ai.domain.AttentionItem>
 }
+
+// 05.02 eval framework: datasets and their cases.
+interface EvalDatasetRepository : JpaRepository<com.squamed.core.ai.domain.EvalDataset, UUID> {
+  fun findByHospitalIdOrderByCreatedAtDesc(hospitalId: UUID): List<com.squamed.core.ai.domain.EvalDataset>
+
+  fun findByHospitalIdAndCodeAndDatasetVersion(
+    hospitalId: UUID,
+    code: String,
+    datasetVersion: Int,
+  ): com.squamed.core.ai.domain.EvalDataset?
+
+  fun findFirstByHospitalIdAndCodeOrderByDatasetVersionDesc(
+    hospitalId: UUID,
+    code: String,
+  ): com.squamed.core.ai.domain.EvalDataset?
+}
+
+interface EvalCaseRepository : JpaRepository<com.squamed.core.ai.domain.EvalCase, UUID> {
+  fun findByDatasetIdOrderByOrdinalAsc(datasetId: UUID): List<com.squamed.core.ai.domain.EvalCase>
+
+  fun deleteByDatasetId(datasetId: UUID)
+}

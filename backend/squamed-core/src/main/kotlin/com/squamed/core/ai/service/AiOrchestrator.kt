@@ -185,21 +185,7 @@ class AiOrchestratorService(
     agentCode: String,
     actionType: String,
     relatedType: String?,
-  ): Boolean {
-    val type = actionType.trim().lowercase()
-    return when (agentCode.lowercase()) {
-      "ops" -> type in setOf("create_task", "plan_discharge")
-      "revenue" -> type == "create_task" && relatedType == "REVENUE"
-      "patient_comms" -> type == "create_task" && relatedType == "PATIENT_COMMS"
-      "clinical" -> type == "create_task" && relatedType == "CLINICAL"
-      "pharmacy" -> type == "create_task" && relatedType == "PHARMACY"
-      "facilities" -> type == "create_task" && relatedType == "FACILITIES"
-      "procurement" -> type == "create_task" && relatedType == "PROCUREMENT"
-      "security" -> type == "create_task" && relatedType == "SECURITY"
-      "executive" -> type == "create_task" && relatedType == "EXECUTIVE"
-      else -> false
-    }
-  }
+  ): Boolean = AgentPersonas.expectedAllowed(agentCode, actionType, relatedType)
 
   private fun diagnose(
     agentCode: String,

@@ -5924,6 +5924,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/evals/datasets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["evalDatasets"];
+        put?: never;
+        post: operations["ingestEvalDataset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/evals/datasets/{code}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["runEvalDataset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/evals/datasets/scribe-corrections/ingest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ingestScribeCorrections"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/evals/agents/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["simulateAgents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/command": {
         parameters: {
             query?: never;
@@ -9548,6 +9612,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["costs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/evals/gates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["evalGates"];
         put?: never;
         post?: never;
         delete?: never;
@@ -16642,6 +16722,90 @@ export interface components {
             /** Format: date-time */
             recordedAt: string;
         };
+        EvalCaseDto: {
+            input: string;
+            expected: string;
+            forbiddenToken?: string;
+            relatedType?: string;
+            critical: boolean;
+        };
+        EvalDatasetRequest: {
+            code: string;
+            capability: string;
+            description?: string;
+            cases: components["schemas"]["EvalCaseDto"][];
+        };
+        ApiResponseEvalDatasetView: {
+            data?: components["schemas"]["EvalDatasetView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        EvalDatasetView: {
+            /** Format: uuid */
+            id?: string;
+            code: string;
+            capability: string;
+            /** Format: int32 */
+            datasetVersion: number;
+            description?: string;
+            /** Format: int32 */
+            caseCount: number;
+            source: string;
+        };
+        ApiResponseEvalSuiteResult: {
+            data?: components["schemas"]["EvalSuiteResult"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        EvalSuiteResult: {
+            /** Format: uuid */
+            runId?: string;
+            code: string;
+            capability: string;
+            /** Format: int32 */
+            casesPassed: number;
+            /** Format: int32 */
+            casesTotal: number;
+            /** Format: int32 */
+            casesSkipped: number;
+            score: number;
+            passAtK: number;
+            /** Format: int32 */
+            k: number;
+            /** Format: int32 */
+            leaks: number;
+            /** Format: int32 */
+            ungrounded: number;
+            /** Format: int32 */
+            criticalErrors: number;
+            verdict: string;
+            gatePassed: boolean;
+            gateNotes: string;
+            detail: string;
+        };
+        AgentSimulationView: {
+            /** Format: int32 */
+            scenarios: number;
+            /** Format: int32 */
+            unauthorized: number;
+            /** Format: int32 */
+            denied: number;
+            agents: string[];
+            verdict: string;
+            /** Format: uuid */
+            evalRunId?: string;
+        };
+        ApiResponseAgentSimulationView: {
+            data?: components["schemas"]["AgentSimulationView"];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         AiCommandRequest: {
             query: string;
             agentCode?: string;
@@ -19191,6 +19355,28 @@ export interface components {
             /** Format: int64 */
             tokens: number;
             costUsd: number;
+        };
+        ApiResponseListEvalGate: {
+            data?: components["schemas"]["EvalGate"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        EvalGate: {
+            capability: string;
+            metric: string;
+            threshold: number;
+            zeroTolerance: boolean;
+            enforced: boolean;
+            note: string;
+        };
+        ApiResponseListEvalDatasetView: {
+            data?: components["schemas"]["EvalDatasetView"][];
+            success: boolean;
+            meta: {
+                [key: string]: unknown;
+            };
         };
         ApiResponseListActionDraftView: {
             data?: components["schemas"]["ActionDraftView"][];
@@ -31942,6 +32128,118 @@ export interface operations {
             };
         };
     };
+    evalDatasets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListEvalDatasetView"];
+                };
+            };
+        };
+    };
+    ingestEvalDataset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvalDatasetRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEvalDatasetView"];
+                };
+            };
+        };
+    };
+    runEvalDataset: {
+        parameters: {
+            query?: {
+                k?: number;
+            };
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEvalSuiteResult"];
+                };
+            };
+        };
+    };
+    ingestScribeCorrections: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseEvalDatasetView"];
+                };
+            };
+        };
+    };
+    simulateAgents: {
+        parameters: {
+            query?: {
+                count?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAgentSimulationView"];
+                };
+            };
+        };
+    };
     command_1: {
         parameters: {
             query?: never;
@@ -37159,6 +37457,28 @@ export interface operations {
             };
         };
     };
+    evalGates: {
+        parameters: {
+            query?: {
+                capability?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListEvalGate"];
+                };
+            };
+        };
+    };
     actions: {
         parameters: {
             query?: {
@@ -37542,4 +37862,4 @@ export interface operations {
         };
     };
 }
-// openapi snapshot sha256: 873fc0a59001de40154e641fc09a5d19f2510ccb70ae41ee7b16c3c9b6c78710
+// openapi snapshot sha256: 1efca3a87f1209bed2c5f371409f39af4438dcaba929e0e30ccc736b85bd9780

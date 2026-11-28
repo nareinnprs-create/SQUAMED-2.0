@@ -178,6 +178,14 @@ class EvalRun(
   var recordedBy: UUID? = null,
   @Column(name = "recorded_at", nullable = false)
   var recordedAt: java.time.Instant = java.time.Instant.now(),
+  @Column(name = "dataset_id")
+  var datasetId: UUID? = null,
+  @Column(name = "pass_at_k")
+  var passAtK: java.math.BigDecimal? = null,
+  @Column(name = "k")
+  var k: Int? = null,
+  @Column(name = "detail", columnDefinition = "TEXT")
+  var detail: String? = null,
 ) : BaseEntity()
 
 // 05.07 governance: the AI incident register.
@@ -234,4 +242,44 @@ class AttentionItem(
   var clearedAt: java.time.Instant? = null,
   @Column(name = "dismissal_reason", length = 300)
   var dismissalReason: String? = null,
+) : BaseEntity()
+
+// 05.02 eval framework: a versioned case set per capability. Gate thresholds are code constants,
+// so the dataset carries only the cases and where they came from.
+@Entity
+@Table(name = "eval_dataset", schema = "ai")
+class EvalDataset(
+  @Column(name = "hospital_id", nullable = false)
+  var hospitalId: UUID,
+  @Column(name = "code", nullable = false, length = 60)
+  var code: String,
+  @Column(name = "capability", nullable = false, length = 30)
+  var capability: String,
+  @Column(name = "dataset_version", nullable = false)
+  var datasetVersion: Int = 1,
+  @Column(name = "description", length = 300)
+  var description: String? = null,
+  @Column(name = "case_count", nullable = false)
+  var caseCount: Int = 0,
+  @Column(name = "source", nullable = false, length = 30)
+  var source: String = "MANUAL",
+) : BaseEntity()
+
+@Entity
+@Table(name = "eval_case", schema = "ai")
+class EvalCase(
+  @Column(name = "dataset_id", nullable = false)
+  var datasetId: UUID,
+  @Column(name = "ordinal", nullable = false)
+  var ordinal: Int,
+  @Column(name = "input_text", nullable = false, columnDefinition = "TEXT")
+  var inputText: String,
+  @Column(name = "expected", nullable = false, columnDefinition = "TEXT")
+  var expected: String,
+  @Column(name = "forbidden_token", length = 200)
+  var forbiddenToken: String? = null,
+  @Column(name = "related_type", length = 60)
+  var relatedType: String? = null,
+  @Column(name = "critical", nullable = false)
+  var critical: Boolean = false,
 ) : BaseEntity()

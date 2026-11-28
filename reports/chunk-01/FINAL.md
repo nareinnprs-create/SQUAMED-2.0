@@ -3,7 +3,7 @@
 ## 1. Scope
 Chunk-1 exit per `chunk-01-opd-front-office.md` EXIT CRITERIA (L60-61), SAFETY (L47-52), TESTS (L57-58) and `03-BUILD-PROTOCOL.md` §7/§7.6: the full walk-in-to-Patient-360 demo live at pilot-ready state, kiosk 50/hr soak, TV soak, 30-min downtime drill (SAFETY L52), dual clinical-write review (13-AI-BUILD-WORKFORCE §5), blind re-verification of 20% of completed sections (§7.6), this report, and the sign-off block. **01.12 carries zero feature code by design** — it is the exit protocol section.
 
-**Honest chunk state at exit:** 10 of 12 sections COMPLETE (01.01-01.09, 01.11). **01.10 Entitlement & tenant brand remains PLANNED / externally blocked** (`exp:E2,E5` — DLT/WABA + BSP brand contract; entitlement service) — tracked, not skipped, per protocol L28-30. **01.12 lands at SECTION REVIEW, never COMPLETE**: the dual-review FAIL hardening has since LANDED (PR #63, §7 disposition) — but hardware soak evidence is still owed to `exp:E10` and clinical sign-off (B2) is the owner's human gate; hardening landing does not self-certify.
+**Honest chunk state at exit:** 10 of 12 sections COMPLETE (01.01-01.09, 01.11). **01.10 Entitlement & tenant brand landed SECTION REVIEW 2026-11-28** (plans, subscriptions and module gates built; the DLT/WABA sender and eSign certs remain `exp:E2,E5` — DLT/WABA + BSP brand contract; entitlement service) — tracked, not skipped, per protocol L28-30. **01.12 lands at SECTION REVIEW, never COMPLETE**: the dual-review FAIL hardening has since LANDED (PR #63, §7 disposition) — but hardware soak evidence is still owed to `exp:E10` and clinical sign-off (B2) is the owner's human gate; hardening landing does not self-certify.
 
 ## 2. Built (this docs batch)
 - `scripts/demo-01.12-chunk1-exit.ps1` — 30-step exit demo (full L61 scenario).
@@ -24,7 +24,7 @@ Chunk-1 exit per `chunk-01-opd-front-office.md` EXIT CRITERIA (L60-61), SAFETY (
 | 01.07 Voice announcements | COMPLETE (PR #52) | `reports/chunk-01/section-01.07.md` |
 | 01.08 Kiosk-lite | COMPLETE (PR #56; hardware soak + paper-out owed `exp:E10`) | `reports/chunk-01/section-01.08.md` |
 | 01.09 Emergency fast-path + downtime pack | COMPLETE (PR #58) | `reports/chunk-01/section-01.09.md` |
-| 01.10 Entitlement & tenant brand | **PLANNED — externally blocked `exp:E2,E5`** | - |
+| 01.10 Entitlement & tenant brand | **SECTION REVIEW** (built 2026-11-28; DLT/WABA + eSign certs owed `exp:E2,E5`) | `reports/chunk-01/section-01.10.md` |
 | 01.11 Analytics mini + shadow-run prep | COMPLETE (PR #60) | `reports/chunk-01/section-01.11.md` |
 | 01.12 Chunk exit | **SECTION REVIEW** (`exp:E10` + clinical sign-off B2; dual-review hardening landed PR #63) | `reports/chunk-01/section-01.12.md` |
 

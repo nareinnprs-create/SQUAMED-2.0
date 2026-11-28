@@ -111,6 +111,7 @@ data class AiIncidentUpdateRequest(
 
 @RestController
 @RequestMapping("/api/v1/ai")
+@com.squamed.core.entitlement.api.RequiresFeature("ai")
 class AiController(
   private val aiService: AiService,
   private val governanceService: com.squamed.core.ai.service.AiGovernanceService,

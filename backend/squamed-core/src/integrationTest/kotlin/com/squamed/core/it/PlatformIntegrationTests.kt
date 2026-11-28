@@ -20012,4 +20012,97 @@ class PlatformIntegrationTests {
       assertTrue(runs.any { it["subject"].asText() == "$leakCode@1" }, "leak run recorded against dataset v1")
     }
   }
+
+  // 01.10: a plan decides which modules answer, and a hospital with no subscription is untouched.
+  @Nested
+  inner class EntitlementTests {
+    @Test
+    fun entitlementGatingCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+
+      fun hospital(tag: String): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Ent $tag $s", "code" to "EN$tag-$s", "country" to "Qatar"),
+            admin,
+          ),
+        )["id"].asText()
+
+      fun adminOf(
+        tag: String,
+        hospitalId: String,
+      ): String {
+        val email = "ent${tag.lowercase()}.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to "Ent$tag",
+              "lastName" to "Admin$s",
+              "roles" to listOf("SYSTEM_ADMIN"),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register entitlement admin $tag",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))[
+          "accessToken",
+        ].asText()
+      }
+
+      val hospitalA = hospital("A")
+      val sys = adminOf("A", hospitalA)
+      val hospitalB = hospital("B")
+      val sysB = adminOf("B", hospitalB)
+
+      // 1. No subscription: UNMANAGED, and the AI module answers as before.
+      val unmanaged = `data`(api(HttpMethod.GET, "/api/v1/entitlements", token = sys))
+      assertEquals(false, unmanaged["managed"].asBoolean(), "no subscription is unmanaged")
+      assertEquals("UNMANAGED", unmanaged["status"].asText(), "status named, not guessed")
+      assert2xx(api(HttpMethod.GET, "/api/v1/ai/models", token = sys), "unmanaged hospital keeps the AI module")
+
+      // 2. The two plans differ exactly on the modules the section names.
+      val plans = `data`(api(HttpMethod.GET, "/api/v1/entitlements/plans", token = sys))
+      assertEquals(2, plans.size(), "two plans seeded")
+      val core = plans.first { it["code"].asText() == "CORE" }
+      val full = plans.first { it["code"].asText() == "FULL" }
+      assertFalse(core["features"].any { it.asText() == "ai" }, "CORE hides the AI module")
+      assertTrue(full["features"].any { it.asText() == "ai" }, "FULL includes the AI module")
+
+      // 3. CORE: the AI and BI modules refuse with a distinguishable code.
+      val subscribed = `data`(api(HttpMethod.POST, "/api/v1/entitlements/subscribe", json("planCode" to "CORE"), sys))
+      assertEquals(true, subscribed["managed"].asBoolean(), "subscription is managed")
+      assertEquals("CORE", subscribed["planCode"].asText(), "CORE recorded")
+      val aiDenied = api(HttpMethod.GET, "/api/v1/ai/models", token = sys)
+      assertEquals(403, aiDenied.status, "CORE refuses the AI module")
+      assertTrue(aiDenied.body.contains("ENTITLEMENT_REQUIRED"), "entitlement code, not a permission code")
+      val biDenied = api(HttpMethod.GET, "/api/v1/bi/kpis?period=2026-11", token = sys)
+      assertEquals(403, biDenied.status, "CORE refuses the BI module")
+
+      // 4. Upgrade to FULL: the modules answer again, and the previous subscription is superseded.
+      val upgraded = `data`(api(HttpMethod.POST, "/api/v1/entitlements/subscribe", json("planCode" to "FULL"), sys))
+      assertEquals("FULL", upgraded["planCode"].asText(), "FULL recorded")
+      assert2xx(api(HttpMethod.GET, "/api/v1/ai/models", token = sys), "FULL restores the AI module")
+      assert2xx(api(HttpMethod.GET, "/api/v1/bi/kpis?period=2026-11", token = sys), "FULL restores the BI module")
+
+      // 5. Tenant isolation: hospital A's plan does not gate hospital B.
+      assert2xx(api(HttpMethod.GET, "/api/v1/ai/models", token = sysB), "B is unmanaged and unaffected")
+
+      // 6. Brand payload for printed receipts comes from the hospital record.
+      val brand = `data`(api(HttpMethod.GET, "/api/v1/entitlements/brand", token = sys))
+      assertEquals("Ent A $s", brand["hospitalName"].asText(), "receipt header is the tenant name")
+      assertTrue(brand["currency"].asText().isNotBlank(), "currency carried for receipts")
+
+      // 7. An unknown plan is a 400, not a silent no-op.
+      val bad = api(HttpMethod.POST, "/api/v1/entitlements/subscribe", json("planCode" to "NOPE-$s"), sys)
+      assertEquals(400, bad.status, "unknown plan rejected")
+      assertTrue(bad.body.contains("ENTITLEMENT_PLAN_NOT_FOUND"), "unknown plan code")
+    }
+  }
 }

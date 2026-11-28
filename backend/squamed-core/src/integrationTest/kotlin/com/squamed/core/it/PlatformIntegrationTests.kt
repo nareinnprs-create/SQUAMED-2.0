@@ -20105,4 +20105,165 @@ class PlatformIntegrationTests {
       assertTrue(bad.body.contains("ENTITLEMENT_PLAN_NOT_FOUND"), "unknown plan code")
     }
   }
+
+  // 06.02: the Telemedicine Guidelines 2020 rules the platform can enforce without a vendor SDK.
+  @Nested
+  inner class TelemedicineTests {
+    @Test
+    fun telemedicineGuidelineCoverage() {
+      val admin = adminToken()
+      val s = suffix()
+
+      fun hospital(tag: String): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/hospital-config/hospitals",
+            json("name" to "Tele $tag $s", "code" to "TL$tag-$s", "country" to "India"),
+            admin,
+          ),
+        )["id"].asText()
+
+      fun adminOf(
+        tag: String,
+        hospitalId: String,
+      ): String {
+        val email = "tele${tag.lowercase()}.$s@squamed.local"
+        assert2xx(
+          api(
+            HttpMethod.POST,
+            "/api/v1/auth/register",
+            json(
+              "email" to email,
+              "password" to "Passw0rd!123",
+              "firstName" to "Tele$tag",
+              "lastName" to "Admin$s",
+              "roles" to listOf("SYSTEM_ADMIN"),
+              "hospitalId" to hospitalId,
+            ),
+          ),
+          "register telemedicine admin $tag",
+        )
+        return `data`(api(HttpMethod.POST, "/api/v1/auth/login", json("username" to email, "password" to "Passw0rd!123")))[
+          "accessToken",
+        ].asText()
+      }
+
+      fun employee(
+        hospitalId: String,
+        code: String,
+        licence: String?,
+        token: String,
+      ): String =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/master-data/employees",
+            json(
+              "hospitalId" to hospitalId,
+              "code" to code,
+              "firstName" to "Rmp$s",
+              "lastName" to "Doctor",
+              "designation" to "Consultant",
+              "licenseNumber" to licence,
+            ),
+            token,
+          ),
+        )["id"].asText()
+
+      val hospitalA = hospital("A")
+      val sys = adminOf("A", hospitalA)
+      val hospitalB = hospital("B")
+      val sysB = adminOf("B", hospitalB)
+
+      val patientId =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/patients",
+            json(
+              "firstName" to "Tele$s",
+              "lastName" to "Patient",
+              "gender" to "male",
+              "dateOfBirth" to "1988-08-08",
+              "phone" to "73$s".take(11),
+              "qid" to "TL$s".take(11),
+              "nationality" to "IN",
+              "city" to "Pune",
+              "hospitalId" to hospitalA,
+            ),
+            sys,
+          ),
+        )["patient"]["id"].asText()
+
+      val doctorId = `data`(api(HttpMethod.GET, "/api/v1/auth/me", token = sys))["userId"].asText()
+      val unlicensed = employee(hospitalA, "RMP-U-$s", null, sys)
+      val licensed = employee(hospitalA, "RMP-L-$s", "MCI-$s", sys)
+
+      fun schedule(
+        rmp: String,
+        type: String,
+        mode: String,
+        token: String,
+      ) = api(
+        HttpMethod.POST,
+        "/api/v1/telemedicine/consults",
+        json(
+          "patientId" to patientId,
+          "doctorUserId" to doctorId,
+          "rmpEmployeeId" to rmp,
+          "consultType" to type,
+          "mode" to mode,
+          "scheduledAt" to "2026-12-01T10:00:00Z",
+          "meetingRef" to "room-$s",
+        ),
+        token,
+      )
+
+      // 1. An employee without a registration number cannot be the RMP.
+      val unverified = schedule(unlicensed, "FIRST_CONSULT", "VIDEO", sys)
+      assertEquals(400, unverified.status, "unlicensed RMP blocked")
+      assertTrue(unverified.body.contains("TELEMEDICINE_RMP_UNVERIFIED"), "unverified RMP code")
+
+      // 2. A first consult must be video; audio is a follow-up-only mode.
+      val audioFirst = schedule(licensed, "FIRST_CONSULT", "AUDIO", sys)
+      assertEquals(400, audioFirst.status, "first consult cannot be audio")
+      assertTrue(audioFirst.body.contains("TELEMEDICINE_FIRST_CONSULT_REQUIRES_VIDEO"), "video rule code")
+
+      // 3. The compliant first consult schedules, starts, and documents a telemedicine encounter.
+      val first = `data`(schedule(licensed, "FIRST_CONSULT", "VIDEO", sys))
+      assertEquals("SCHEDULED", first["status"].asText(), "consult scheduled")
+      assertEquals("VIDEO", first["mode"].asText(), "video recorded")
+      val consultId = first["id"].asText()
+      val started = `data`(api(HttpMethod.POST, "/api/v1/telemedicine/consults/$consultId/start", json(), sys))
+      assertEquals("IN_PROGRESS", started["status"].asText(), "consult in progress")
+      val encounterId = started["encounterId"].asText()
+      assertTrue(encounterId.isNotEmpty(), "documentation lands in a real encounter")
+      val encounter = `data`(api(HttpMethod.GET, "/api/v1/encounters/$encounterId", token = sys))
+      assertEquals("telemedicine", encounter["encounter"]["encounterType"].asText(), "encounter typed telemedicine")
+      val completed = `data`(api(HttpMethod.POST, "/api/v1/telemedicine/consults/$consultId/complete", json(), sys))
+      assertEquals("COMPLETED", completed["status"].asText(), "consult completed")
+
+      // 4. A follow-up may be audio, and the tech-support escape path closes it with a reason.
+      val followUp = `data`(schedule(licensed, "FOLLOW_UP", "AUDIO", sys))
+      assertEquals("AUDIO", followUp["mode"].asText(), "follow-up may be audio")
+      val followUpId = followUp["id"].asText()
+      assert2xx(api(HttpMethod.POST, "/api/v1/telemedicine/consults/$followUpId/start", json(), sys), "follow-up starts")
+      val escaped =
+        `data`(
+          api(
+            HttpMethod.POST,
+            "/api/v1/telemedicine/consults/$followUpId/escape",
+            json("reason" to "video transport failed"),
+            sys,
+          ),
+        )
+      assertEquals("SUPPORT_ESCAPE", escaped["status"].asText(), "escape path recorded")
+      assertEquals("video transport failed", escaped["escapeReason"].asText(), "escape reason kept")
+
+      // 5. Tenant isolation: hospital B cannot read hospital A's consult.
+      val foreign = api(HttpMethod.GET, "/api/v1/telemedicine/consults/$consultId", token = sysB)
+      assertTrue(foreign.status in 400..404, "cross-tenant consult denied (${foreign.status})")
+    }
+  }
 }

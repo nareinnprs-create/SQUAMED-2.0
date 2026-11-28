@@ -49,6 +49,7 @@ data class ScribeDraftRequest(
 
 @RestController
 @RequestMapping("/api/v1/scribe")
+@com.squamed.core.entitlement.api.RequiresFeature("scribe")
 class ScribeController(
   private val scribeService: ScribeService,
   private val segmentCodec: SegmentJsonCodec,

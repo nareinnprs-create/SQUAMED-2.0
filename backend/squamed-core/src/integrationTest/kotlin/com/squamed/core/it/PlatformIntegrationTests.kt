@@ -20118,12 +20118,20 @@ class PlatformIntegrationTests {
       assertTrue(aiDenied.body.contains("ENTITLEMENT_REQUIRED"), "entitlement code, not a permission code")
       val biDenied = api(HttpMethod.GET, "/api/v1/bi/kpis?period=2026-11", token = sys)
       assertEquals(403, biDenied.status, "CORE refuses the BI module")
+      assertEquals(403, api(HttpMethod.GET, "/api/v1/scribe/sessions", token = sys).status, "CORE refuses the scribe module")
+      assertEquals(
+        403,
+        api(HttpMethod.GET, "/api/v1/telemedicine/consults", token = sys).status,
+        "CORE refuses the telemedicine module",
+      )
 
       // 4. Upgrade to FULL: the modules answer again, and the previous subscription is superseded.
       val upgraded = `data`(api(HttpMethod.POST, "/api/v1/entitlements/subscribe", json("planCode" to "FULL"), sys))
       assertEquals("FULL", upgraded["planCode"].asText(), "FULL recorded")
       assert2xx(api(HttpMethod.GET, "/api/v1/ai/models", token = sys), "FULL restores the AI module")
       assert2xx(api(HttpMethod.GET, "/api/v1/bi/kpis?period=2026-11", token = sys), "FULL restores the BI module")
+      assert2xx(api(HttpMethod.GET, "/api/v1/scribe/sessions", token = sys), "FULL restores the scribe module")
+      assert2xx(api(HttpMethod.GET, "/api/v1/telemedicine/consults", token = sys), "FULL restores the telemedicine module")
 
       // 5. Tenant isolation: hospital A's plan does not gate hospital B.
       assert2xx(api(HttpMethod.GET, "/api/v1/ai/models", token = sysB), "B is unmanaged and unaffected")

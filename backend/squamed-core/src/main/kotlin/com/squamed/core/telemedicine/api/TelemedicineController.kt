@@ -32,6 +32,7 @@ data class ConsultEscapeRequest(
 
 @RestController
 @RequestMapping("/api/v1/telemedicine/consults")
+@com.squamed.core.entitlement.api.RequiresFeature("telemedicine")
 class TelemedicineController(
   private val telemedicineService: TelemedicineService,
   private val tenantResolver: TenantResolver,

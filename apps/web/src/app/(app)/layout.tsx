@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, usePathname } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppShell, t } from '@squamed/ui';
 import { useAuth } from '@squamed/auth';
 import type { SidebarItem } from '@squamed/ui';
@@ -11,6 +11,8 @@ import { UserMenu } from '@/components/shell/user-menu';
 import { PatientContextBar } from '@/components/shell/patient-context-bar';
 import { NotificationBell } from '@/components/shell/notification-bell';
 import { CommandBar } from '@/components/ai/command-bar';
+import { useApi } from '@/lib/use-api';
+import { visibleNavItems } from '@/lib/nav-entitlements';
 
 // Labels are data (nav model), not rendered literals; each id maps to its route.
 const navItems: SidebarItem[] = [
@@ -44,6 +46,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname() ?? '';
   const { isAuthenticated, isLoading, refreshSession } = useAuth();
+  const { apiFetch, isReady } = useApi();
+  // 01.10: null = unmanaged or not yet known, which shows every module.
+  const [features, setFeatures] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    if (!isReady) return;
+    let cancelled = false;
+    void apiFetch<{ managed: boolean; features: string[] }>('/entitlements')
+      .then((entitlement) => {
+        if (!cancelled) setFeatures(entitlement.managed ? entitlement.features : null);
+      })
+      // Fail open: an entitlement outage must not empty the menu.
+      .catch(() => {
+        if (!cancelled) setFeatures(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiFetch, isReady]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -67,7 +88,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   const activeNavId = pathname.split('/')[1] || 'dashboard';
-  const navWithSpaNav = navItems.map((item) => ({
+  const navWithSpaNav = visibleNavItems(navItems, features).map((item) => ({
     ...item,
     onClick: () => router.push(`/${item.id}`),
   }));
